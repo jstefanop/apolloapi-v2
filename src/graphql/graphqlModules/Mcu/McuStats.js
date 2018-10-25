@@ -13,11 +13,33 @@ module.exports.typeDefs = `
   }
 
   type McuStats {
-    totalMemoryBytes: String!
-    freeMemoryBytes: String!
-    cpuUsagePercent: Float!
-    freeDiskBytes: String!
-    totalDiskBytes: String!
+    hostname: String,
+    operatingSystem: String
+    uptime: String
+    loadAverage: String,
+    architecture: String
+    temperature: String
+    memory: MemoryStats
+    cpu: CpuStats
+    disks: [DiskStats!]
+  }
+
+  type MemoryStats {
+    total: Float
+    used: Float
+    cache: Float
+    swap: Float
+  }
+
+  type CpuStats {
+    threads: Int
+    usedPercent: Float
+  }
+
+  type DiskStats {
+    total: Float
+    used: Float
+    mountPoint: String
   }
 `
 

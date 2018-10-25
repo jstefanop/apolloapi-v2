@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Collects system performance statistics such as CPU, memory, and disk
+# usage as well as top processes ran by users.
+#
+# All size values are in KiB (memory, disk, etc).
+
+# EXAMPLE USAGE:
+# ./os_stats.sh
+
+# Debugging and error handling
+# Stop this script on any error. Unless you want to get data by any means
+# this is a good option.
+set -e
+# Debugging options:
+# set -x
+# set -v
+
+# Validate command line arguments
+if [[ "$#" == 1 || "$#" > 2 ]]; then
+  echo "Wrong number of arguments supplied. Expects 2 arguments: <cpu>, <mem>, or none."
+  exit 1
+fi
+
+# General OS props
+HOST=$HOSTNAME
+#OS=$(uname -a)
+OS=$(lsb_release -s -i -c -r | sed ':a;N;$!ba;s/\n/ /g')
+UPTIME=$(uptime -s)
+LOADAVG=$(cat /proc/loadavg)
+ARCHITECTURE=$(uname -m)
+TEMP=$(cat /sys/class/thermal/thermal_zone*/temp)
+
+# Memory
+memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
+memFree=$(egrep '^MemFree:' /proc/meminfo | awk '{print $2}')
+memCached=$(egrep '^Cached:' /proc/meminfo | awk '{print $2}')
+memAvailable=$(expr "$memFree" + "$memCached")
+memUsed=$(($memTotal - $memFree))
+swapTotal=$(egrep '^SwapTotal:' /proc/meminfo | awk '{print $2}')
+swapFree=$(egrep '^SwapFree:' /proc/meminfo | awk '{print $2}')
+swapUsed=$(($swapTotal - $swapFree))
+
+# CPU
+cpuThreads=$(grep processor /proc/cpuinfo | wc -l)
+#cpuUtilization=$(top -bn3 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}' | tail -1)
+cpuUtilization=$((100 - $(vmstat 1 2 | tail -1 | awk '{print $15}' | sed 's/%//')))
+
+# Disk
+disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T | tail -n+2 | awk '{print "{" "\"total\":" $3 ", \"used\":" $4 ", \"mountPoint\":" "\""$7"\"" "},"}'); do echo $d; done | sed '$s/.$//')
+
+# Processes
+
+# Final result in JSON
+JSON="{
+  \"hostname\": \"$HOST\",
+  \"operatingSystem\": \"$OS\",
+  \"uptime\": \"$UPTIME\",
+  \"loadAverage\": \"$LOADAVG\",
+  \"architecture\": \"$ARCHITECTURE\",
+  \"temperature\": \"$TEMP\",
+  \"memory\":
+  {
+    \"total\": $memTotal,
+    \"used\": $memUsed,
+    \"cache\": $memCached,
+    \"swap\": $swapUsed
+  },
+  \"cpu\":
+  {
+    \"threads\": $cpuThreads,
+    \"usedPercent\": $cpuUtilization
+  },
+  \"disks\": [
+    $disksJson
+  ]
+}"
+
+echo "$JSON"
+
+# Result output: STDOUT or HTTP
+#if [ -z "$3" ]; then
+#  echo "$JSON"
+#else
+#  curl -X POST -H "Content-Type: application/json" -d "$JSON" "$3"
+#fi
