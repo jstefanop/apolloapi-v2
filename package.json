@@ -11,7 +11,8 @@
   },
   "scripts": {
     "dev": "node src/init.js",
-    "build": "pkg . --targets node8-linux-armv7 --no-bytecode"
+    "build": "pkg . --targets node8-linux-armv7 --no-bytecode",
+    "run-container": "docker run --rm -it -v \"$(pwd)\":/hostdir --entrypoint=/bin/bash orange"
   },
   "dependencies": {
     "backend-helpers": "^0.5.0",
