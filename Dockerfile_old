@@ -1,0 +1,16 @@
+FROM armv7/armhf-ubuntu:xenial
+WORKDIR /app
+ENV NODE_VERSION 8.10.0
+SHELL ["/bin/bash", "-c"]
+RUN apt-get update && \
+  apt-get -y install build-essential
+RUN apt-get -y install python curl && \
+  curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.11/install.sh | bash && \
+  export NVM_DIR="$HOME/.nvm" && \
+  [ -s "$NVM_DIR/nvm.sh" ] && \
+  . "$NVM_DIR/nvm.sh" && \
+  [ -s "$NVM_DIR/bash_completion" ] && \
+  . "$NVM_DIR/bash_completion" && \
+  nvm install $NODE_VERSION && \
+  npm install -g yarn
+COPY . /app
