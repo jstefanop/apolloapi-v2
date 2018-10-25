@@ -8,4 +8,3 @@ ENV NODE_ENV=production
 RUN ./node_modules/.bin/yarn --production
 COPY . /app
 RUN tar -zcvf futurebit.tar.gz .
-RUN ls -al | grep futurebit

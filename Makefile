@@ -1,5 +1,5 @@
-.PHONY: configure
-configure:
-	./scripts/configure
+.PHONY: build install
+build:
+	./scripts/build
 install:
-	yarn
+	./scripts/install

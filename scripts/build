@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
+APP_PATH="$SCRIPT_PATH/.."
+
+mkdir -p "$APP_PATH/build" && \
+docker build $APP_PATH -t orange && \
+docker run --rm -v "${APP_PATH}":/hostdir orange /bin/bash -c "cp ./futurebit.tar.gz /hostdir/build"
