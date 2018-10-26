@@ -11,13 +11,19 @@ const updateFields = {
 }
 
 module.exports = ({ define }) => {
-  define('update', async (update = {}, { knex, errors, utils }) => {
-    const updateData = {}
-    Object.keys(update).forEach(key => {
-      if (updateFields[key]) {
-        updateData[updateFields[key]] = update[key]
-      }
+  define('update', async (update = {}, { dispatch, knex, errors, utils }) => {
+    const newData = await dispatch('api/settings/collection/read')
+    const insertData = {}
+    Object.keys(update).forEach(key => newData[key] = update[key])
+    Object.keys(newData).forEach(key => {
+      insertData[updateFields[key]] = newData[key]
     })
-    await knex('settings').update(updateData)
+    await knex('settings').insert(insertData)
+    const last100 = knex('settings')
+      .select('id')
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(100)
+    await knex('settings').delete().where('id', 'not in', last100)
   })
 }

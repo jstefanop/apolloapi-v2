@@ -10,7 +10,10 @@ module.exports = ({ define }) => {
       'left_sidebar_extended as leftSidebarExtended',
       'right_sidebar_visibility as rightSidebarVisibility',
       'temperature_unit as temperatureUnit',
-    ]).limit(1)
+    ])
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
     return settings
   })
 }
