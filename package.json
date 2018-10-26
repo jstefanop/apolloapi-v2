@@ -10,7 +10,7 @@
     "node": ">= 8.x"
   },
   "scripts": {
-    "dev": "node src/init.js",
+    "dev": "node src/init.js | ./node_modules/.bin/bunyan",
     "build": "pkg . --targets node8-linux-armv7 --no-bytecode",
     "run-container": "docker run --rm -it -v \"$(pwd)\":/hostdir --entrypoint=/bin/bash orange"
   },

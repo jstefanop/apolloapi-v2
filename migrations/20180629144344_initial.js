@@ -33,6 +33,18 @@ exports.up = async function (knex) {
     right_sidebar_visibility: false,
     temperature_unit: 'f'
   })
+
+  // pools
+  await knex.schema.createTable('pools', table => {
+    table.increments('id')
+    table.timestamps(false, true)
+    table.boolean('enabled').notNullable()
+    table.text('url').notNullable()
+    table.text('username')
+    table.text('password')
+    table.text('proxy')
+    table.integer('index').notNullable()
+  })
 }
 
 exports.down = async function (knex) {
