@@ -13,6 +13,7 @@ module.exports.typeDefs = `
   }
 
   type McuStats {
+    timestamp: String!
     hostname: String,
     operatingSystem: String
     uptime: String

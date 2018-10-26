@@ -1,4 +1,6 @@
 const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const config = require('config')
 
 module.exports.auth = {
   hashPassword (password) {
@@ -10,5 +12,15 @@ module.exports.auth = {
       return false
     }
     return bcrypt.compare(password, hash)
-  }
+  },
+
+  generateAccessToken () {
+    const accessToken = jwt.sign({}, config.get('server.secret'), {
+      subject: 'apollouser',
+      audience: 'auth'
+    })
+    return {
+      accessToken
+    }
+  },
 }

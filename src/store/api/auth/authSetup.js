@@ -6,7 +6,7 @@ module.exports = ({ define }) => {
       throw new errors.AuthorizationError('Setup already done')
     }
     await knex('setup').insert({
-      password: utils.hashPassword(password)
+      password: await utils.auth.hashPassword(password)
     })
   })
 }

@@ -4,7 +4,10 @@ const { exec } = require('child_process')
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
     const stats = await getOsStats()
+    stats.timestamp = new Date().toISOString()
     return { stats }
+  }, {
+    auth: true
   })
 }
 
