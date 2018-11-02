@@ -21,6 +21,12 @@ function getMinerStats () {
    client.socket.on('data', (data) => {
     let received = data.toString('utf8').trim();
     try {
+      received = received
+        .replace(/\-nan/g, '0')
+        .replace(/[^\x00-\x7F]/g, '')
+        .replace('}{', '},{')
+        .replace(String.fromCharCode(0), '')
+        .replace(/[^\}]+$/, '')
       received = JSON.parse(received);
       const summary = (received.summary && received.summary[0]) ? received.summary[0] : null;
       const devs = (received.devs && received.devs[0]) ? received.devs[0] : null;
