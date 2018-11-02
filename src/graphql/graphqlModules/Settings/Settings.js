@@ -7,9 +7,11 @@ module.exports.typeDefs = `
   enum TemperatureUnit { f, c }
 
   type Settings {
+    id: Int!
+    createdAt: String!
     minerMode: MinerMode!
-    voltage: Float!,
-    frequency: Int!,
+    voltage: Float!
+    frequency: Int!
     fan: Int!
     connectedWifi: String
     leftSidebarVisibility: Boolean!

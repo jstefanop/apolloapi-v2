@@ -24,6 +24,7 @@
     "express": "^4.16.4",
     "knex": "^0.15.2",
     "luxon": "^1.4.4",
+    "normalize-object": "^1.1.5",
     "sqlite3": "^4.0.3"
   },
   "devDependencies": {
