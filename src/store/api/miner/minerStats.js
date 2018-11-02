@@ -27,7 +27,9 @@ function getMinerStats () {
         .replace('}{', '},{')
         .replace(String.fromCharCode(0), '')
         .replace(/[^\}]+$/, '')
+
       received = JSON.parse(received);
+
       const summary = (received.summary && received.summary[0]) ? received.summary[0] : null;
       const devs = (received.devs && received.devs[0]) ? received.devs[0] : null;
       const pools = (received.pools && received.pools[0]) ? received.pools[0] : null;
