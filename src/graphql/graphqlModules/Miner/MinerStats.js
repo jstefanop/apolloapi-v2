@@ -25,12 +25,12 @@ module.exports.typeDefs = `
 
   type MinerStatsDevs {
     status: MinerStatsStatus
-    data: MinerStatsDevsData
+    data: [MinerStatsDevsData]
   }
 
   type MinerStatsPools {
     status: MinerStatsStatus
-    data: MinerStatsPoolsData
+    data: [MinerStatsPoolsData]
   }
 
   type MinerStatsStatus {
