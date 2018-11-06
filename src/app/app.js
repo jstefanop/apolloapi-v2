@@ -1,9 +1,13 @@
+const path = require('path')
 const express = require('express')
 const config = require('config')
 const graphqlApp = require('./graphqlApp')
+const buildPath = path.join(__dirname, '../../apolloui/build');
 
 const app = express()
 
-app.use('/graphql', graphqlApp)
+app.use('/api/graphql', graphqlApp)
+
+if (process.env.NODE_ENV === 'production') app.use(express.static(buildPath));
 
 module.exports = app
