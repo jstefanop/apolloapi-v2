@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Collects wifi networks informations such as SSID, rate, 
+# signal etc.
+
+# EXAMPLE USAGE:
+# ./wifi_scan.sh
+
+set -e
+# Debugging options:
+# set -x
+# set -v
+
+# always try to rescan
+nmcli device wifi rescan || true
+# list connections
+nmcli_output=$(nmcli -f ssid,mode,chan,rate,signal,security,in-use -t dev wifi)
+
+# generate json
+echo "[" > /tmp/.nmcli_gen_json
+
+# make newlines the only separator
+IFS=$'\n'
+for line in $nmcli_output ; do
+  IFS=':' read -r -a array <<< "$line"
+
+  # remove "Mbit/s"
+  rate=$(echo "${array[3]}" | sed "s/ Mbit\/s$//")
+  # change in-use string to Boolean
+  if [ "${array[6]}" = "*" ]; then
+    inuse="true"
+  else
+    inuse="false"
+  fi
+
+  # parse into json
+  json="{
+    \"ssid\": \"${array[0]}\",
+    \"mode\": \"${array[1]}\",
+    \"channel\": ${array[2]},
+    \"rate\": ${rate},
+    \"signal\": ${array[4]},
+    \"security\": \"${array[5]}\",
+    \"inuse\": ${inuse}
+  }"
+  echo "$json", >> /tmp/.nmcli_gen_json
+done
+
+# remove last comma, change later?
+perl -0777 -pi -e 's/(.*),(.*?)/\1\2/s' /tmp/.nmcli_gen_json
+echo "]" >> /tmp/.nmcli_gen_json
+
+# output json
+cat /tmp/.nmcli_gen_json
+rm /tmp/.nmcli_gen_json
