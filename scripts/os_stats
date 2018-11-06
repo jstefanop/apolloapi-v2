@@ -62,6 +62,7 @@ JSON="{
   \"memory\":
   {
     \"total\": $memTotal,
+    \"available\": $memAvailable,
     \"used\": $memUsed,
     \"cache\": $memCached,
     \"swap\": $swapUsed

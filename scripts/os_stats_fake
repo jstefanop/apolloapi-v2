@@ -1,0 +1,33 @@
+#!/bin/bash
+
+cat << EOF
+{
+  "hostname": "orangepizero",
+  "operatingSystem": "Ubuntu 18.04 bionic",
+  "uptime": "2018-11-06 14:01:22",
+  "loadAverage": "0.00 0.00 0.00 1/120 2859",
+  "architecture": "armv7l",
+  "temperature": "40656",
+  "memory":
+  {
+    "total": 245760,
+    "available": 127384,
+    "used": 207276,
+    "cache": 90348,
+    "swap": 256
+  },
+  "cpu":
+  {
+    "threads": 4,
+    "usedPercent": 0
+  },
+  "disks": [
+    {"total":7678936,
+"used":1468092,
+"mountPoint":"/"},
+{"total":49584,
+"used":4312,
+"mountPoint":"/var/log"}
+  ]
+}
+EOF

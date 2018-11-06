@@ -27,6 +27,7 @@ module.exports.typeDefs = `
 
   type MemoryStats {
     total: Float
+    available: Float
     used: Float
     cache: Float
     swap: Float

@@ -2,7 +2,8 @@ const { exec } = require('child_process')
 
 module.exports = ({ define }) => {
   define('shutdown', async (payload, { knex, errors, utils }) => {
-    exec('sudo shutdown now')
+    if (process.env.NODE_ENV === 'production') return exec('sudo shutdown now')
+    return;
   }, {
     auth: true
   })
