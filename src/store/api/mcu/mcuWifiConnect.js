@@ -12,12 +12,9 @@ module.exports = ({ define }) => {
 
 function wifiConnect(ssid, passphrase, errors) {
   return new Promise((resolve, reject) => {
-    if (passphrase) {
-      command = 'sudo nmcli dev wifi connect ' + ssid + ' password '  + passphrase
-    }
-    else {
-      command = 'sudo nmcli dev wifi connect ' + ssid
-    }
+    let command = 'sudo nmcli dev wifi connect ' + ssid;
+    if (passphrase) command += ' password ' + passphrase;
+    if (process.env.NODE_ENV !== 'production') command = 'echo true';
 
     exec(command, {}, (err, stdout) => {
       if (err) {
@@ -38,6 +35,8 @@ function wifiConnect(ssid, passphrase, errors) {
 function getIpAddress() {
   return new Promise((resolve, reject) => {
     command = "ip -4 addr list wlan0 | grep inet | cut -d' ' -f6 | cut -d/ -f1"
+    if (process.env.NODE_ENV !== 'production') command = 'echo "127.0.0.1"';
+
     exec(command, {}, (err, stdout) => {
       if (err) {
         reject(err)
