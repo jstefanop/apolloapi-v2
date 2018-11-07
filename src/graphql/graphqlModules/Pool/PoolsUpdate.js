@@ -1,15 +1,19 @@
 module.exports.typeDefs = `
   type PoolActions {
-    updateAll (input: [PoolsUpdateInput!]!): PoolsUpdateOutput!
+    updateAll (input: PoolUpdateAllInput!): PoolsUpdateOutput!
   }
 
-  input PoolsUpdateInput {
+  input PoolUpdateAllInputItem {
     index: Int!
     enabled: Boolean!
     url: String!
     username: String
     password: String
     proxy: String
+  }
+
+  input PoolUpdateAllInput {
+    pools: [PoolUpdateAllInputItem!]!
   }
 
   type PoolsUpdateOutput {
@@ -25,7 +29,7 @@ module.exports.typeDefs = `
 module.exports.resolvers = {
   PoolActions: {
     updateAll (root, args, { dispatch }) {
-      return dispatch('api/pools/updateAll', args.input)
+      return dispatch('api/pools/updateAll', args.input.pools)
     }
   }
 }
