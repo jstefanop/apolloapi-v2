@@ -9,7 +9,12 @@ module.exports.typeDefs = `
   }
 
   type McuWifiConnectOutput {
+    result: McuWifiConnectResult
     error: Error
+  }
+
+  type McuWifiConnectResult {
+    address: String!
   }
 `
 
