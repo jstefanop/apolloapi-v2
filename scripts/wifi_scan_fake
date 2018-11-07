@@ -1,0 +1,50 @@
+#!/bin/bash
+sleep 1
+cat << EOF
+[{
+    "ssid": "befree",
+    "mode": "Infra",
+    "channel": 11,
+    "rate": 195,
+    "signal": 74,
+    "security": "WPA1 WPA2",
+    "inuse": false
+  },
+{
+    "ssid": "Telecom-32949531",
+    "mode": "Infra",
+    "channel": 1,
+    "rate": 270,
+    "signal": 67,
+    "security": "WPA1 WPA2",
+    "inuse": false
+  },
+{
+    "ssid": "Vodafone-WiFi",
+    "mode": "Infra",
+    "channel": 13,
+    "rate": 130,
+    "signal": 44,
+    "security": "",
+    "inuse": false
+  },
+{
+    "ssid": "Vodafone-33516851",
+    "mode": "Infra",
+    "channel": 13,
+    "rate": 130,
+    "signal": 44,
+    "security": "WPA2",
+    "inuse": false
+  },
+{
+    "ssid": "TeleTu_f0842f8dbef1",
+    "mode": "Infra",
+    "channel": 11,
+    "rate": 130,
+    "signal": 39,
+    "security": "WPA1 WPA2",
+    "inuse": false
+  }
+]
+EOF
