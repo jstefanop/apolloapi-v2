@@ -31,7 +31,7 @@ exports.up = async function (knex) {
     left_sidebar_visibility: true,
     left_sidebar_extended: true,
     right_sidebar_visibility: false,
-    temperature_unit: 'f'
+    temperature_unit: 'c'
   })
 
   // pools
