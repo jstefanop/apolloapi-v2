@@ -20,6 +20,7 @@ module.exports.typeDefs = `
     loadAverage: String,
     architecture: String
     temperature: String
+    activeWifi: String
     memory: MemoryStats
     cpu: CpuStats
     disks: [DiskStats!]
