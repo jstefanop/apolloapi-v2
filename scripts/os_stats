@@ -30,6 +30,7 @@ UPTIME=$(uptime -s)
 LOADAVG=$(cat /proc/loadavg)
 ARCHITECTURE=$(uname -m)
 TEMP=$(cat /sys/class/thermal/thermal_zone*/temp)
+ACTIVE_WIFI=$(nmcli -t c show --active | grep wireless | cut -d":" -f1)
 
 # Memory
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
@@ -59,6 +60,7 @@ JSON="{
   \"loadAverage\": \"$LOADAVG\",
   \"architecture\": \"$ARCHITECTURE\",
   \"temperature\": \"$TEMP\",
+  \"activeWifi\": \"$ACTIVE_WIFI\",
   \"memory\":
   {
     \"total\": $memTotal,

@@ -8,6 +8,7 @@ cat << EOF
   "loadAverage": "0.00 0.00 0.00 1/120 2859",
   "architecture": "armv7l",
   "temperature": "40656",
+  "activeWifi": "befree",
   "memory":
   {
     "total": 245760,

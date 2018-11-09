@@ -14,7 +14,7 @@ function wifiConnect(ssid, passphrase, errors) {
   return new Promise((resolve, reject) => {
     let command = 'sudo nmcli dev wifi connect ' + ssid;
     if (passphrase) command += ' password ' + passphrase;
-    if (process.env.NODE_ENV !== 'production') command = 'echo true';
+    if (process.env.NODE_ENV !== 'production') command = 'sleep 2 && nmcli dev wifi connect ' + ssid;
 
     exec(command, {}, (err, stdout) => {
       if (err) {
