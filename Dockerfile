@@ -6,5 +6,5 @@ COPY ./package.json /app/package.json
 COPY ./yarn.lock /app/yarn.lock
 ENV NODE_ENV=production
 RUN ./node_modules/.bin/yarn --production
-COPY . /app
-RUN tar -zcvf futurebit.tar.gz .
+RUN rm ./*.json ./yarn.lock
+RUN tar -zcf ../futurebit.tar.gz .

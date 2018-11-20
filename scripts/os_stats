@@ -31,6 +31,8 @@ LOADAVG=$(cat /proc/loadavg)
 ARCHITECTURE=$(uname -m)
 TEMP=$(cat /sys/class/thermal/thermal_zone*/temp)
 ACTIVE_WIFI=$(nmcli -t c show --active | grep wireless | cut -d":" -f1)
+MINER_TEMP=$(cat /var/local/apollo/hwmon/pcb_temp)
+MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_speed)
 
 # Memory
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
@@ -60,6 +62,8 @@ JSON="{
   \"loadAverage\": \"$LOADAVG\",
   \"architecture\": \"$ARCHITECTURE\",
   \"temperature\": \"$TEMP\",
+  \"minerTemperature\": \"MINER_TEMP\",
+  \"minerFanSpeed\": \"MINER_FAN_SPEED\",
   \"activeWifi\": \"$ACTIVE_WIFI\",
   \"memory\":
   {

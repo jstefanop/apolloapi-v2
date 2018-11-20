@@ -8,6 +8,7 @@ module.exports.typeDefs = `
     voltage: Float,
     frequency: Int,
     fan: Int
+    customApproval: Boolean
     connectedWifi: String
     leftSidebarVisibility: Boolean
     leftSidebarExtended: Boolean

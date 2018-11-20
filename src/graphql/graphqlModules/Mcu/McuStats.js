@@ -19,7 +19,9 @@ module.exports.typeDefs = `
     uptime: String
     loadAverage: String,
     architecture: String
-    temperature: String
+    temperature: Int
+    minerTemperature: Int
+    minerFanSpeed: Int
     activeWifi: String
     memory: MemoryStats
     cpu: CpuStats

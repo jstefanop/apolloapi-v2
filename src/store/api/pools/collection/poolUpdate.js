@@ -1,6 +1,7 @@
 const updateFields = {
   id: 'id',
   enabled: 'enabled',
+  donation: 'donation',
   url: 'url',
   username: 'username',
   password: 'password',

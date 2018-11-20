@@ -16,6 +16,7 @@ module.exports = ({ define }) => {
     readQ.select(
       'id',
       'enabled',
+      'donation',
       'url',
       'username',
       'password',

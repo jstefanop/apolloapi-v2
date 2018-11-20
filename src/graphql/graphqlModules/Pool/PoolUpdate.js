@@ -6,6 +6,7 @@ module.exports.typeDefs = `
   input PoolUpdateInput {
     id: Int!
     enabled: Boolean
+    donation: Int
     url: String
     username: String
     password: String

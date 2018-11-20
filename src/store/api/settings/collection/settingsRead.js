@@ -5,6 +5,7 @@ module.exports = ({ define }) => {
       'voltage',
       'frequency',
       'fan',
+      'custom_approval as customApproval',
       'connected_wifi as connectedWifi',
       'left_sidebar_visibility as leftSidebarVisibility',
       'left_sidebar_extended as leftSidebarExtended',

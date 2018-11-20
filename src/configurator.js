@@ -73,16 +73,46 @@ const generate = async function (pools = null, settings = null ) {
 			'ALL'
 		],
 		'set-device' : [
-			'APL:clock=' + settings.frequency,
-			'APL:voltage=' + settings.voltage,
-			'APL:mode=' + settings.minerMode,
-			'APL:fan=' + settings.fan
+			'APL:clock=' + settings.frequency
 		]
 	};
 
+
+	const confDir = (process.env.NODE_ENV === 'production') ? '/var/local/apollo/hwmon' : '/tmp/hwmon';
+	let minerMode = 0;
+
+	switch (settings.minerMode) {
+		case 'eco':
+			minerMode = 1
+		break;
+		case 'balanced':
+			minerMode = 2
+		break;
+		case 'turbo':
+			minerMode = 3
+		break;
+		default:
+			minerMode = 0
+	}
+
+	const voltageStep = parseInt((settings.voltage - 644) / 4.15);
+
+	// Write all configuration files
+	// Bfgminer
 	fs.writeFile('/opt/bfgminer.conf', JSON.stringify(configuration, null, 4), (err) => {  
-		// console.log(configuration);
-		console.log('Configuration saved');
+		// Conf dir
+		fs.mkdir(confDir, { recursive: true }, (err) => {
+			// Mode
+			fs.writeFile(confDir + '/hwmon_state', minerMode, (err) => {  
+				// Fan
+				fs.writeFile(confDir + '/fan_speed', settings.fan, (err) => {  
+					// Voltage
+					fs.writeFile(confDir + '/reg_voltage', parseInt(voltageStep), (err) => {  
+						console.log('Configuration saved');
+					});
+				});
+			});
+		});
 	});
 }
 

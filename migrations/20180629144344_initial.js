@@ -10,7 +10,7 @@ exports.up = async function (knex) {
   await knex.schema.createTable('settings', table => {
     table.increments('id')
     table.timestamps(false, true)
-    table.enum('miner_mode', ['eco', 'turbo', 'custom']).notNullable()
+    table.enum('miner_mode', ['eco', 'balanced', 'turbo', 'custom']).notNullable()
     table.float('voltage').notNullable()
     table.integer('frequency').notNullable()
     table.integer('fan').notNullable()
@@ -19,6 +19,7 @@ exports.up = async function (knex) {
     table.boolean('left_sidebar_extended').notNullable()
     table.boolean('right_sidebar_visibility').notNullable()
     table.enum('temperature_unit', ['f', 'c']).notNullable()
+    table.boolean('custom_approval').notNull().defaultTo(false)
   })
 
   // default settings
@@ -39,11 +40,22 @@ exports.up = async function (knex) {
     table.increments('id')
     table.timestamps(false, true)
     table.boolean('enabled').notNullable()
+    table.integer('donation').notNullable()
     table.text('url').notNullable()
     table.text('username')
     table.text('password')
     table.text('proxy')
     table.integer('index').notNullable()
+  })
+
+  // default pool
+  await knex('pools').insert({
+    enabled: true,
+    donation: 1,
+    url: 'stratum+tcp://us.litecoinpool.org:3333',
+    username: 'jstefanop.x2',
+    password: 'x',
+    index: 0
   })
 }
 

@@ -3,7 +3,7 @@ module.exports.typeDefs = `
     Settings: SettingsActions
   }
 
-  enum MinerMode  { eco, turbo, custom }
+  enum MinerMode  { eco, balanced, turbo, custom }
   enum TemperatureUnit { f, c }
 
   type Settings {
@@ -13,6 +13,7 @@ module.exports.typeDefs = `
     voltage: Float!
     frequency: Int!
     fan: Int!
+    customApproval: Boolean
     connectedWifi: String
     leftSidebarVisibility: Boolean!
     leftSidebarExtended: Boolean!
