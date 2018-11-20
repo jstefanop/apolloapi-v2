@@ -24,6 +24,7 @@ const generate = async function (pools = null, settings = null ) {
 		pools = await knex('pools').select([
 			'id',
 			'enabled',
+			'donation',
 			'url',
 			'username',
 			'password',
@@ -32,15 +33,29 @@ const generate = async function (pools = null, settings = null ) {
 		])
 		.where('enabled', 1)
 		.orderBy('index', 'asc')
+	} else {
+		pools = _.filter(pools, { enabled: 1 });
 	}
 
+	let donation = 0;
+	pools = _.map(pools, (pool) => {
+		if (pool.donation) {
+			donation = pool.donation;
+			pool.index = pools.length;
+		}
+		return pool;
+	});
+
+	const mainPool = _.minBy(pools, 'index');
+
 	pools = _.chain(pools)
-		.filter(function (pool) {
-			if (pool.enabled) return pool
-		})
 		.map(function (pool) {
+			let quota = 0;
+			if (donation && pool.donation) quota = pool.donation;
+			if (donation && !pool.donation && mainPool.id === pool.id) quota = (100 - donation);
+
 			let newPool = {
-				url: pool.url,
+				quota: `${quota};${pool.url}`,
 				user: pool.username,
 				pass: pool.password,
 				'pool-priority': pool.index,
