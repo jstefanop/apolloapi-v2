@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "repository": "https://github.com/CryptofyCH/apolloapi.git",
-  "author": "Aleksander Barszczewski <alek.barszczewski@gmail.com>",
+  "author": "Cryptofy GmbH <info@cryptofy.ch>",
   "license": "ISC",
   "bin": "src/init.js",
   "engines": {
