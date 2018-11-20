@@ -24,10 +24,10 @@ exports.up = async function (knex) {
 
   // default settings
   await knex('settings').insert({
-    miner_mode: 'eco',
-    voltage: 0.5,
-    frequency: 450,
-    fan: -1,
+    miner_mode: 'balanced',
+    voltage: 0,
+    frequency: 0,
+    fan: 0,
     connected_wifi: null,
     left_sidebar_visibility: true,
     left_sidebar_extended: true,
