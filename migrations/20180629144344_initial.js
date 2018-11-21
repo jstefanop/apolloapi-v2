@@ -53,8 +53,8 @@ exports.up = async function (knex) {
     enabled: true,
     donation: 1,
     url: 'stratum+tcp://us.litecoinpool.org:3333',
-    username: 'jstefanop.x2',
-    password: 'x',
+    username: 'jstefanop.a2',
+    password: 'a2',
     index: 0
   })
 }

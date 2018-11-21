@@ -9,7 +9,10 @@ then
 	echo "nvm installed yet"
 else
 	echo "Installing nvm"
-    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.11/install.sh | bash
+	cd ~/
+	git clone https://github.com/creationix/nvm.git .nvm
+	cd ~/.nvm
+	git checkout v0.33.11
 fi
 
 . ~/.nvm/nvm.sh
@@ -27,11 +30,24 @@ sudo systemctl daemon-reload
 sudo systemctl enable apollo
 sudo systemctl enable bfgminer
 
-grep -q -F '/opt/apolloapi/scripts/firewall' /etc/rc.local || sudo sed -i '\$i \/opt\/apolloapi\/scripts\/firewall' /etc/rc.local
+grep -q -F '/opt/apolloapi/scripts/firewall' /etc/rc.local || sudo sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" /etc/rc.local
 
 ### SYSTEM ###
 
 sudo mkdir -p /var/local/apollo/hwmon
 sudo chown futurebit /var/local/apollo/hwmon
+
+### UI ###
+
+cd /opt/apolloapi
+git submodule update --recursive --remote
+
+### API ###
+
+tar xzvf build/futurebit.tar.gz -C /opt/apolloapi/
+
+### START ###
+
+sudo systemctl start apollo
 
 echo -e "Installation complete"
