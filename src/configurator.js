@@ -57,9 +57,9 @@ const generate = async function (pools = null, settings = null ) {
 			let newPool = {
 				quota: `${quota};${pool.url}`,
 				user: pool.username,
-				pass: pool.password,
-				'pool-priority': pool.index,
+				pass: pool.password
 			}
+
 			if (pool.proxy && pool.proxy.length) newPool['pool-proxy'] = pool.proxy
 			return newPool;
 		}).value()
@@ -74,6 +74,7 @@ const generate = async function (pools = null, settings = null ) {
 		'expiry-lp' : '3600',
 		'failover-switch-delay' : '300',
 		'log' : '20',
+		'load-balance': true,
 		'no-pool-disable' : true,
 		'no-client-reconnect' : true,
 		'no-show-processors' : true,
