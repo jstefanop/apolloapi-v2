@@ -1,6 +1,9 @@
 #!/bin/bash
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+APOLLO_DIR=/opt/apolloapi
+
+sudo chown -R futurebit $APOLLO_DIR
 
 ### NVM ###
 
@@ -30,21 +33,26 @@ sudo systemctl daemon-reload
 sudo systemctl enable apollo
 sudo systemctl enable bfgminer
 
-grep -q -F '/opt/apolloapi/scripts/firewall' /etc/rc.local || sudo sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" /etc/rc.local
+grep -q -F "$APOLLO_DIR/scripts/firewall" /etc/rc.local || sudo sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" /etc/rc.local
 
 ### SYSTEM ###
 
 sudo mkdir -p /var/local/apollo/hwmon
 sudo chown futurebit /var/local/apollo/hwmon
+if [ -e $APOLLO_DIR/bfgminer.conf ]
+then
+	sudo touch $APOLLO_DIR/bfgminer.conf
+fi
+sudo chown futurebit $APOLLO_DIR/bfgminer.conf
 
 ### UI ###
 
-cd /opt/apolloapi
+cd $APOLLO_DIR
 git submodule update --recursive --remote
 
 ### API ###
 
-tar xzvf build/futurebit.tar.gz -C /opt/apolloapi/
+tar xzvf build/futurebit.tar.gz -C $APOLLO_DIR/
 
 ### START ###
 
