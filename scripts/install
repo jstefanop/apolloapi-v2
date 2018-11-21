@@ -27,6 +27,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable apollo
 sudo systemctl enable bfgminer
 
-grep -q -F '/opt/apolloapi/scripts/install' /etc/rc.local || sudo sed -i '\$i \/opt\/apolloapi\/scripts\/install' /etc/rc.local
+grep -q -F '/opt/apolloapi/scripts/firewall' /etc/rc.local || sudo sed -i '\$i \/opt\/apolloapi\/scripts\/firewall' /etc/rc.local
+
+### SYSTEM ###
+
+sudo mkdir -p /var/local/apollo/hwmon
+sudo chown futurebit /var/local/apollo/hwmon
 
 echo -e "Installation complete"

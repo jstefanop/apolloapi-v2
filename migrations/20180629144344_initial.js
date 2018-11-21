@@ -40,7 +40,7 @@ exports.up = async function (knex) {
     table.increments('id')
     table.timestamps(false, true)
     table.boolean('enabled').notNullable()
-    table.integer('donation').notNullable()
+    table.integer('donation').notNullable().defaultTo(0)
     table.text('url').notNullable()
     table.text('username')
     table.text('password')
