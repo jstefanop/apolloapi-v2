@@ -41,9 +41,9 @@ sudo mkdir -p /var/local/apollo/hwmon
 sudo chown futurebit /var/local/apollo/hwmon
 if [ -e $APOLLO_DIR/bfgminer.conf ]
 then
-	sudo touch $APOLLO_DIR/bfgminer.conf
+	sudo cp $DIR/bfgminer.conf /opt/
 fi
-sudo chown futurebit $APOLLO_DIR/bfgminer.conf
+sudo chown futurebit /opt/bfgminer.conf
 
 ### UI ###
 
