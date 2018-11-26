@@ -6,6 +6,7 @@ APOLLO_DIR=/opt/apolloapi
 sudo chown -R futurebit $APOLLO_DIR
 
 ### NVM ###
+echo -e "Installing nvm..."
 
 if [ -e ~/.nvm/nvm.sh ]
 then
@@ -24,6 +25,7 @@ nvm install 9.8.0
 nvm alias default 9.8.0
 
 ### SYSTEMD ###
+echo -e "Installing systemd..."
 
 sudo cp $DIR/apollo.service /etc/systemd/system/
 sudo cp $DIR/bfgminer.service /etc/systemd/system/
@@ -36,25 +38,34 @@ sudo systemctl enable bfgminer
 grep -q -F "$APOLLO_DIR/scripts/firewall" /etc/rc.local || sudo sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" /etc/rc.local
 
 ### SYSTEM ###
+echo "Configuring system..."
 
 sudo mkdir -p /var/local/apollo/hwmon
 sudo chown futurebit /var/local/apollo/hwmon
-if [ -e $APOLLO_DIR/bfgminer.conf ]
+if [ -s $APOLLO_DIR/bfgminer.conf ]
 then
-	sudo cp $DIR/bfgminer.conf /opt/
+	echo "Bfgminer.conf exists"
+else
+	sudo cp $APOLLO_DIR/scripts/bfgminer.conf /opt/
 fi
 sudo chown futurebit /opt/bfgminer.conf
 
 ### UI ###
+echo "Updating submodule..."
 
 cd $APOLLO_DIR
+git submodule init 
 git submodule update --recursive --remote
 
 ### API ###
+echo "Decompress API build (could take few minutes)..."
 
-tar xzvf build/futurebit.tar.gz -C $APOLLO_DIR/
+tar xzf build/futurebit.tar.gz -C $APOLLO_DIR/
 
 ### START ###
+echo "Starting Apollo App..."
+
+sudo bash $APOLLO_DIR/scripts/firewall
 
 sudo systemctl start apollo
 

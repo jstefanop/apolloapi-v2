@@ -119,7 +119,7 @@ function getData() {
 	          "Stale": 0,
 	          "Get Failures": 0,
 	          "Remote Failures": 0,
-	          "User": "jstefanop.a2",
+	          "User": "jstefanop.a1",
 	          "Last Share Time": 0,
 	          "Diff1 Shares": 0,
 	          "Proxy": "",
