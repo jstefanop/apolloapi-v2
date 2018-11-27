@@ -19,6 +19,8 @@ else
 	git checkout v0.33.11
 fi
 
+~/.nvm/install.sh
+
 . ~/.nvm/nvm.sh
 
 nvm install 9.8.0
