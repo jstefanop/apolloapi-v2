@@ -2,7 +2,7 @@
  
 const net = require('net');
 const PORT = 4028;
-const HOST = 'localhost';
+const HOST = '127.0.0.1';
  
 class Client {
  constructor(port, address) {
