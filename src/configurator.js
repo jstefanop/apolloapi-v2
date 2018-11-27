@@ -64,6 +64,28 @@ const generate = async function (pools = null, settings = null ) {
 			return newPool;
 		}).value()
 
+
+	let minerMode = 0,
+		frequency = 793;
+
+	switch (settings.minerMode) {
+		case 'eco':
+			minerMode = 1
+			frequency = 598
+		break;
+		case 'balanced':
+			minerMode = 2
+			frequency = 715
+		break;
+		case 'turbo':
+			minerMode = 3
+			frequency = 793
+		break;
+		default:
+			minerMode = 0
+			frequency = 793
+	}
+
 	let configuration = {
 		'pools': pools,
 		'api-listen': true,
@@ -86,30 +108,15 @@ const generate = async function (pools = null, settings = null ) {
 		'skip-security-checks' : '0',
 		'submit-stale' : true,
 		'scan' : [
-			'ALL'
+			'MLD:/dev/ttyS1'
 		],
 		'set-device' : [
-			'APL:clock=' + settings.frequency
+			'APL:clock=' + frequency
 		]
 	};
 
 
 	const confDir = (process.env.NODE_ENV === 'production') ? '/var/local/apollo/hwmon' : '/tmp/hwmon';
-	let minerMode = 0;
-
-	switch (settings.minerMode) {
-		case 'eco':
-			minerMode = 1
-		break;
-		case 'balanced':
-			minerMode = 2
-		break;
-		case 'turbo':
-			minerMode = 3
-		break;
-		default:
-			minerMode = 0
-	}
 
 	const voltageStep = parseInt((settings.voltage - 644) / 4.15);
 

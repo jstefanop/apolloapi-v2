@@ -43,7 +43,7 @@ MINER_FAN_SPEED="0"
 
 if [ -e "/var/local/apollo/hwmon/fan_speed" ]
 then
-  MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_speed)
+  MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_rpm)
 fi
 
 # Memory
