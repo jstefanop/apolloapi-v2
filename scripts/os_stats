@@ -46,6 +46,13 @@ then
   MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_rpm)
 fi
 
+#Network
+ETH_IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f 1)
+ETH_MAC=$(ip link show eth0 | awk '/ether/ {print $2}')
+WLAN_IP=$(ip addr show wlan0 | awk '/inet / {print $2}' | cut -d/ -f 1)
+WLAN_MAC=$(ip link show wlan0 | awk '/ether/ {print $2}')
+ 
+
 # Memory
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
 memFree=$(egrep '^MemFree:' /proc/meminfo | awk '{print $2}')
@@ -77,6 +84,15 @@ JSON="{
   \"minerTemperature\": \"$MINER_TEMP\",
   \"minerFanSpeed\": \"$MINER_FAN_SPEED\",
   \"activeWifi\": \"$ACTIVE_WIFI\",
+  \"network\": [{
+      \"name\": \"eth0\",
+      \"address\": \"$ETH_IP\",
+      \"mac\": \"$ETH_MAC\"
+  }, {
+      \"name\": \"wlan0\",
+      \"address\": \"$WLAN_IP\",
+      \"mac\": \"$WLAN_MAC\"
+  }],
   \"memory\":
   {
     \"total\": $memTotal,

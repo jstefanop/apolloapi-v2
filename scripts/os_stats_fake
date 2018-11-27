@@ -4,32 +4,41 @@ cat << EOF
 {
   "hostname": "orangepizero",
   "operatingSystem": "Ubuntu 18.04 bionic",
-  "uptime": "2018-11-06 14:01:22",
-  "loadAverage": "0.00 0.00 0.00 1/120 2859",
+  "uptime": "2018-11-27 07:09:13",
+  "loadAverage": "0.00 0.00 0.00 1/118 27205",
   "architecture": "armv7l",
-  "temperature": "40656",
-  "minerTemperature": "76",
-  "minerFanSpeed": "4567",
-  "activeWifi": "befree",
+  "temperature": "41745",
+  "minerTemperature": "0",
+  "minerFanSpeed": "0",
+  "activeWifi": "",
+  "network": [{
+      "name": "eth0",
+      "address": "192.168.1.20",
+      "mac": "02:42:94:72:22:61"
+  }, {
+      "name": "wlan0",
+      "address": "",
+      "mac": "12:42:94:72:22:61"
+  }],
   "memory":
   {
     "total": 245760,
-    "available": 127384,
-    "used": 207276,
-    "cache": 90348,
-    "swap": 256
+    "available": 109952,
+    "used": 233220,
+    "cache": 97412,
+    "swap": 1280
   },
   "cpu":
   {
     "threads": 4,
-    "usedPercent": 0
+    "usedPercent": 29
   },
   "disks": [
-    {"total":7678936,
-"used":1468092,
+    {"total":7524560,
+"used":971560,
 "mountPoint":"/"},
 {"total":49584,
-"used":4312,
+"used":4348,
 "mountPoint":"/var/log"}
   ]
 }

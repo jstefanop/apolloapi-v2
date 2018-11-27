@@ -23,6 +23,7 @@ module.exports.typeDefs = `
     minerTemperature: Int
     minerFanSpeed: Int
     activeWifi: String
+    network: [NetworkStats!]
     memory: MemoryStats
     cpu: CpuStats
     disks: [DiskStats!]
@@ -39,6 +40,12 @@ module.exports.typeDefs = `
   type CpuStats {
     threads: Int
     usedPercent: Float
+  }
+
+  type NetworkStats {
+    name: String
+    address: String
+    mac: String
   }
 
   type DiskStats {
