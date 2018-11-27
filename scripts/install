@@ -52,13 +52,6 @@ else
 fi
 sudo chown futurebit /opt/bfgminer.conf
 
-### UI ###
-echo "Updating submodule..."
-
-cd $APOLLO_DIR
-git submodule init 
-git submodule update --recursive --remote
-
 ### API ###
 echo "Decompress API build (could take few minutes)..."
 
