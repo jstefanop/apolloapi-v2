@@ -8,7 +8,7 @@ cat << EOF
   "loadAverage": "0.00 0.00 0.00 1/118 27205",
   "architecture": "armv7l",
   "temperature": "41745",
-  "minerTemperature": "0",
+  "minerTemperature": "78.92",
   "minerFanSpeed": "0",
   "activeWifi": "",
   "network": [{

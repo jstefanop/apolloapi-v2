@@ -20,7 +20,7 @@ module.exports.typeDefs = `
     loadAverage: String,
     architecture: String
     temperature: Int
-    minerTemperature: Int
+    minerTemperature: Float
     minerFanSpeed: Int
     activeWifi: String
     network: [NetworkStats!]

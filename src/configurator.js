@@ -86,6 +86,8 @@ const generate = async function (pools = null, settings = null ) {
 			frequency = 793
 	}
 
+	if (settings.minerMode === 'custom') frequency = settings.frequency;
+
 	let configuration = {
 		'pools': pools,
 		'api-listen': true,
@@ -130,9 +132,11 @@ const generate = async function (pools = null, settings = null ) {
 				// Fan
 				fs.writeFile(confDir + '/fan_speed', settings.fan, (err) => {  
 					// Voltage
-					fs.writeFile(confDir + '/reg_voltage', parseInt(voltageStep), (err) => {  
-						console.log('Configuration saved');
-					});
+					if (settings.minerMode === 'custom') {
+						fs.writeFile(confDir + '/reg_voltage', parseInt(voltageStep), (err) => {  
+							console.log('Configuration saved');
+						});
+					}
 				});
 			});
 		});
