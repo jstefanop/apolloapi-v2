@@ -3,7 +3,7 @@ Description=bgfminer
 After=network.target
 
 [Service]
-Type=simple
+Type=forking
 User=root
 #Start:
 ExecStart=/etc/miner_start.sh
