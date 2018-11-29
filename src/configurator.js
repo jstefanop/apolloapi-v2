@@ -110,7 +110,7 @@ const generate = async function (pools = null, settings = null ) {
 		'skip-security-checks' : '0',
 		'submit-stale' : true,
 		'scan' : [
-			'MLD:/dev/ttyS1'
+			'APL:/dev/ttyS1'
 		],
 		'set-device' : [
 			'APL:clock=' + frequency
