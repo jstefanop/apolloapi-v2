@@ -29,8 +29,8 @@ OS=$(lsb_release -s -i -c -r | sed ':a;N;$!ba;s/\n/ /g')
 UPTIME=$(uptime -s)
 LOADAVG=$(cat /proc/loadavg)
 ARCHITECTURE=$(uname -m)
-TEMP=$(cat /sys/class/thermal/thermal_zone*/temp)
-ACTIVE_WIFI=$(nmcli -t c show --active | grep wireless | cut -d":" -f1)
+TEMP=$(cat /sys/devices/virtual/thermal/thermal_zone0/temp)
+ACTIVE_WIFI=$(nmcli -t -f name c show --active)
 
 MINER_TEMP="0"
 
