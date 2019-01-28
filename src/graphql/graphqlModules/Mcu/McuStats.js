@@ -22,6 +22,7 @@ module.exports.typeDefs = `
     temperature: Int
     minerTemperature: Float
     minerFanSpeed: Int
+    bfgminerLog: String
     activeWifi: String
     network: [NetworkStats!]
     memory: MemoryStats

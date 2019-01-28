@@ -71,6 +71,13 @@ cpuUtilization=$((100 - $(vmstat 1 2 | tail -1 | awk '{print $15}' | sed 's/%//'
 # Disk
 disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T | tail -n+2 | awk '{print "{" "\"total\":" $3 ", \"used\":" $4 ", \"mountPoint\":" "\""$7"\"" "},"}'); do echo $d; done | sed '$s/.$//')
 
+# Bfgminer log
+bfgminerLog=""
+if [ -e "/tmp/bfgminer.log" ]
+then 
+  bfgminerLog=`tail -10 /tmp/bfgminer.log | tr '\n' '|'`
+fi
+
 # Processes
 
 # Final result in JSON
@@ -108,7 +115,8 @@ JSON="{
   },
   \"disks\": [
     $disksJson
-  ]
+  ],
+  \"bfgminerLog\": \"$bfgminerLog\"
 }"
 
 echo "$JSON"

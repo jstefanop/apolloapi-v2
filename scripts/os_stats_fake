@@ -11,6 +11,7 @@ cat << EOF
   "minerTemperature": "78.92",
   "minerFanSpeed": "0",
   "activeWifi": "",
+   "bfgminerLog": " [2019-01-28 16:24:21] No servers were found that could be used to get work from.| [2019-01-28 16:24:21] Please check the details from the list below of the servers you have input| [2019-01-28 16:24:21] Most likely you have input the wrong URL, forgotten to add a port, or have not set up workers| [2019-01-28 16:24:21] Pool: 0  URL: stratum+tcp://litecoinpool.org:3333  User: michelem.1  Password: wrong| [2019-01-28 16:24:21] Press any key to exit, or BFGMiner will try again in 15s.| [2019-01-28 16:24:37] No servers were found that could be used to get work from.| [2019-01-28 16:24:37] Please check the details from the list below of the servers you have input| [2019-01-28 16:24:37] Most likely you have input the wrong URL, forgotten to add a port, or have not set up workers| [2019-01-28 16:24:37] Pool: 0  URL: stratum+tcp://litecoinpool.org:3333  User: michelem.1  Password: wrong| [2019-01-28 16:24:37] Press any key to exit, or BFGMiner will try again in 15s.|",
   "network": [{
       "name": "eth0",
       "address": "192.168.1.20",
