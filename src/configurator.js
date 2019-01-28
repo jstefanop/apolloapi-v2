@@ -1,5 +1,7 @@
 const fs = require('fs');
 const _ = require('lodash');
+const os = require('os');
+const ip = require('ip');
 const { knex } = require('./db')
 
 const generate = async function (pools = null, settings = null ) {
@@ -88,10 +90,27 @@ const generate = async function (pools = null, settings = null ) {
 
 	if (settings.minerMode === 'custom') frequency = settings.frequency;
 
+	const interfaces = os.networkInterfaces();
+		
+	let localNetmask = '255.255.255.0',
+		localIp = '127.0.0.1',
+		mainInterface = [];
+
+	if (interfaces['wlan0']) mainInterface = interfaces['wlan0'];
+	if (interfaces['en0']) mainInterface = interfaces['en0'];
+
+	if (mainInterface[0]) {
+		localNetmask = mainInterface[0].netmask;
+		localIp = mainInterface[0].address;
+	}
+
+	const localNetwork = ip.subnet(localIp, localNetmask);
+
 	let configuration = {
 		'pools': pools,
 		'api-listen': true,
-		'api-allow': 'W:127.0.0.1',
+		'api-allow': `W:${localNetwork.networkAddress}/${localNetwork.subnetMaskLength}`,
+		'api-network': true,
 		'api-mcast-port' : '4028',
 		'api-port' : '4028',
 		'expiry' : '120',
