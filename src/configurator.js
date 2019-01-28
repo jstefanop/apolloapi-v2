@@ -92,24 +92,23 @@ const generate = async function (pools = null, settings = null ) {
 
 	const interfaces = os.networkInterfaces();
 		
-	let localNetmask = '255.255.255.0',
-		localIp = '127.0.0.1',
+	let apiAllow = 'W:127.0.0.1',
 		mainInterface = [];
 
 	if (interfaces['wlan0']) mainInterface = interfaces['wlan0'];
 	if (interfaces['eth0']) mainInterface = interfaces['eth0'];
 
 	if (mainInterface[0]) {
-		localNetmask = mainInterface[0].netmask;
-		localIp = mainInterface[0].address;
+		const localNetmask = mainInterface[0].netmask;
+		const localIp = mainInterface[0].address;
+		const localNetwork = ip.subnet(localIp, localNetmask);
+		apiAllow = `W:${localNetwork.networkAddress}/${localNetwork.subnetMaskLength},127.0.0.1`
 	}
-
-	const localNetwork = ip.subnet(localIp, localNetmask);
 
 	let configuration = {
 		'pools': pools,
 		'api-listen': true,
-		'api-allow': `W:${localNetwork.networkAddress}/${localNetwork.subnetMaskLength}`,
+		'api-allow': apiAllow,
 		'api-network': true,
 		'api-mcast-port' : '4028',
 		'api-port' : '4028',
