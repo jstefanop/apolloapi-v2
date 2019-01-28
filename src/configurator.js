@@ -97,7 +97,7 @@ const generate = async function (pools = null, settings = null ) {
 		mainInterface = [];
 
 	if (interfaces['wlan0']) mainInterface = interfaces['wlan0'];
-	if (interfaces['en0']) mainInterface = interfaces['en0'];
+	if (interfaces['eth0']) mainInterface = interfaces['eth0'];
 
 	if (mainInterface[0]) {
 		localNetmask = mainInterface[0].netmask;
