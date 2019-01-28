@@ -75,7 +75,7 @@ disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T 
 bfgminerLog=""
 if [ -e "/tmp/bfgminer.log" ]
 then 
-  bfgminerLog=`tail -10 /tmp/bfgminer.log | tr '\n' '|'`
+  bfgminerLog=`sudo tail -10 /tmp/bfgminer.log | tr '\n' '|'`
 fi
 
 # Processes
