@@ -20,6 +20,7 @@ module.exports = ({ define }) => {
       'voltage',
       'frequency',
       'fan',
+      'api_allow as apiAllow',
       'custom_approval as customApproval',
       'connected_wifi as connectedWifi',
       'left_sidebar_visibility as leftSidebarVisibility',

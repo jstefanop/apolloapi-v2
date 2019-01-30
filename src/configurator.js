@@ -11,6 +11,7 @@ const generate = async function (pools = null, settings = null ) {
 			'voltage',
 			'frequency',
 			'fan',
+			'api_allow as apiAllow',
 			'connected_wifi as connectedWifi',
 			'left_sidebar_visibility as leftSidebarVisibility',
 			'left_sidebar_extended as leftSidebarExtended',
@@ -95,14 +96,17 @@ const generate = async function (pools = null, settings = null ) {
 	let apiAllow = 'W:127.0.0.1',
 		mainInterface = [];
 
-	if (interfaces['wlan0']) mainInterface = interfaces['wlan0'];
-	if (interfaces['eth0']) mainInterface = interfaces['eth0'];
+	if (settings.apiAllow) {
+		const mainInterfaceName = (process.env.NODE_ENV === 'production') ? 'eth0' : 'en0';
+		if (interfaces['wlan0']) mainInterface = interfaces['wlan0'];
+		if (interfaces[mainInterfaceName]) mainInterface = interfaces[mainInterfaceName];
 
-	if (mainInterface[0]) {
-		const localNetmask = mainInterface[0].netmask;
-		const localIp = mainInterface[0].address;
-		const localNetwork = ip.subnet(localIp, localNetmask);
-		apiAllow = `W:${localNetwork.networkAddress}/${localNetwork.subnetMaskLength},127.0.0.1`
+		if (mainInterface[0]) {
+			const localNetmask = mainInterface[0].netmask;
+			const localIp = mainInterface[0].address;
+			const localNetwork = ip.subnet(localIp, localNetmask);
+			apiAllow = `W:${localNetwork.networkAddress}/${localNetwork.subnetMaskLength},127.0.0.1`
+		}
 	}
 
 	let configuration = {
