@@ -6,6 +6,7 @@ const updateFields = {
   username: 'username',
   password: 'password',
   proxy: 'proxy',
+  index: 'index'
 }
 
 module.exports = ({ define }) => {
@@ -16,7 +17,7 @@ module.exports = ({ define }) => {
         insertData[updateFields[key]] = data[key]
       }
     })
-    insertData.index = knex('pools').select(knex.raw('coalesce(max(??), -1) + ?', ['index', 1]))
+    // insertData.index = knex('pools').select(knex.raw('coalesce(max(??), -1) + ?', ['index', 1]))
     return await knex('pools').insert(insertData).returning('*')
   })
 }

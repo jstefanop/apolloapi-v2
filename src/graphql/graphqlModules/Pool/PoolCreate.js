@@ -10,6 +10,7 @@ module.exports.typeDefs = `
     username: String
     password: String
     proxy: String
+    index: Int
   }
 
   type PoolCreateOutput {
