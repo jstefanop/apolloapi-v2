@@ -1893,6 +1893,11 @@ liftoff@2.5.0:
     rechoir "^0.6.2"
     resolve "^1.1.7"
 
+litecoin@^2.0.5:
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/litecoin/-/litecoin-2.0.5.tgz#14913dc31501141da4f81cc641476b0b7c8aff8f"
+  integrity sha512-73CWAfnMWtE+u/L5Pg17IEfKKaAUwmE0yLz6v2fwVC3QWjNHWdwVtlVYCLNSvMgouu4K6vQONgYCjgSqhq/QRA==
+
 lodash.debounce@^4.0.8:
   version "4.0.8"
   resolved "https://registry.yarnpkg.com/lodash.debounce/-/lodash.debounce-4.0.8.tgz#82d79bff30a67c4005ffd5e2515300ad9ca4d7af"
