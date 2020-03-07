@@ -18,7 +18,7 @@ function isMinerOnline () {
       } else {
       	const current = stdout.toString().replace(/(\r\n|\n|\r)/gm, '');
       	const status = (current == 'true');
-        
+
         resolve({ status: status });
       }
     })
