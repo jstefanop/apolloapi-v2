@@ -1,4 +1,3 @@
 [submodule "apolloui"]
 	path = apolloui
 	url = https://github.com/jstefanop/apolloui.git
-	branch = master
