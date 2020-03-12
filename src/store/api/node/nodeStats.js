@@ -5,25 +5,42 @@ const litecoin = require('litecoin');
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
-    const unrefinedStats = await getNodeStats()
 
-    // Strip peerInfo of unnecessary properties
-    const unrefinedPeerInfo = unrefinedStats[2]
-    const peerInfo = unrefinedPeerInfo.map(({ addr, subver }) => ({
-      addr,
-      subver
-    }));
+    try {
+      const unrefinedStats = await getNodeStats()
 
-    // Convert unrefinedStats to object
-    const stats = {
-      blockCount: unrefinedStats[0],
-      connectionCount: unrefinedStats[1],
-      peerInfo: peerInfo
+      // At this point, no error present
+
+      // Strip peerInfo of unnecessary properties
+      const unrefinedPeerInfo = unrefinedStats[2]
+      const peerInfo = unrefinedPeerInfo.map(({ addr, subver }) => ({
+        addr,
+        subver
+      }));
+
+      // Convert unrefinedStats to object
+      const stats = {
+        blockCount: unrefinedStats[0],
+        connectionCount: unrefinedStats[1],
+        peerInfo: peerInfo,
+        error: null
+      }
+
+      stats.timestamp = new Date().toISOString()
+
+      return { stats }
+    } catch (error) {
+      // Uses errno for API not available, and use description for API loading
+      const stats = {
+        error: {
+          code: error.code,
+          message: error.errno || error.message
+        },
+        timestamp: new Date().toISOString()
+      }
+
+      return { stats }
     }
-
-    stats.timestamp = new Date().toISOString()
-
-    return { stats }
   }, {
     auth: true
   })

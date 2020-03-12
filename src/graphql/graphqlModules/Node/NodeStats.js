@@ -17,11 +17,17 @@ module.exports.typeDefs = `
     blockCount: Int
     connectionCount: Int
     peerInfo: [PeerInfo!]
+    error: LoadingError
   }
 
   type PeerInfo {
     addr: String
     subver: String
+  }
+
+  type LoadingError {
+    code: String
+    message: String
   }
 `
 
