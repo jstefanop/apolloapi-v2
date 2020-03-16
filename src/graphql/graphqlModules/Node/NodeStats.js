@@ -16,8 +16,14 @@ module.exports.typeDefs = `
     timestamp: String!
     blockCount: Int
     connectionCount: Int
+    miningInfo: MiningInfo!
     peerInfo: [PeerInfo!]
     error: LoadingError
+  }
+
+  type MiningInfo {
+    difficulty: Float
+    networkhashps: Float
   }
 
   type PeerInfo {
