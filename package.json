@@ -24,7 +24,7 @@
     "express": "^4.16.4",
     "ip": "^1.1.5",
     "knex": "^0.15.2",
-    "litecoin": "^2.0.5",
+    "litecoin": "github:jstefanop/node-litecoin",
     "luxon": "^1.4.4",
     "normalize-object": "^1.1.5",
     "sqlite3": "^4.0.3"
