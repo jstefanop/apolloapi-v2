@@ -15,7 +15,6 @@ module.exports.typeDefs = `
   type NodeStats {
     timestamp: String!
     blockchainInfo: BlockchainInfo!
-    blockCount: Int
     connectionCount: Int
     miningInfo: MiningInfo!
     peerInfo: [PeerInfo!]

@@ -11,7 +11,7 @@ module.exports = ({ define }) => {
 
       // At this point, no error present
 
-      const unrefinedBlockchainInfo = unrefinedStats[1];
+      const unrefinedBlockchainInfo = unrefinedStats[0];
       const blockchainInfo = {
         blocks: unrefinedBlockchainInfo.blocks,
         initialBlockDownload: unrefinedBlockchainInfo.initialblockdownload,
@@ -20,14 +20,14 @@ module.exports = ({ define }) => {
       };
 
       // Strip miningInfo of unnecessary properties
-      const unrefinedMiningInfo = unrefinedStats[3];
+      const unrefinedMiningInfo = unrefinedStats[2];
       const miningInfo = {
         difficulty: unrefinedMiningInfo.difficulty,
         networkhashps: unrefinedMiningInfo.networkhashps
       };
 
       // Strip peerInfo of unnecessary properties
-      const unrefinedPeerInfo = unrefinedStats[4];
+      const unrefinedPeerInfo = unrefinedStats[3];
       const peerInfo = unrefinedPeerInfo.map(({ addr, subver }) => ({
         addr,
         subver
@@ -36,8 +36,7 @@ module.exports = ({ define }) => {
       // Convert unrefinedStats to object
       const stats = {
         blockchainInfo: blockchainInfo,
-        blockCount: unrefinedStats[0],
-        connectionCount: unrefinedStats[2],
+        connectionCount: unrefinedStats[1],
         miningInfo: miningInfo,
         peerInfo: peerInfo,
         error: null
@@ -73,20 +72,6 @@ const litecoinClient = new litecoin.Client({
 });
 
 function getNodeStats () {
-  const getBlockCountPromise = new Promise((resolve, reject) => {
-    litecoinClient.getBlockCount((error, blockCount) => {
-      if (error) {
-        reject(error)
-      } else {
-        try {
-          resolve(blockCount)
-        } catch (error) {
-          reject(error)
-        }
-      }
-    })
-  })
-
   const getBlockchainInfoPromise = new Promise((resolve, reject) => {
     litecoinClient.getBlockchainInfo((error, blockchainInfo) => {
       if (error) {
@@ -145,7 +130,6 @@ function getNodeStats () {
 
   return Promise.all(
     [
-      getBlockCountPromise,
       getBlockchainInfoPromise,
       getConnectionCountPromise,
       getMiningInfoPromise,
