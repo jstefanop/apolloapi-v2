@@ -11,15 +11,23 @@ module.exports = ({ define }) => {
 
       // At this point, no error present
 
+      const unrefinedBlockchainInfo = unrefinedStats[1];
+      const blockchainInfo = {
+        blocks: unrefinedBlockchainInfo.blocks,
+        initialBlockDownload: unrefinedBlockchainInfo.initialblockdownload,
+        medianTime: unrefinedBlockchainInfo.mediantime,
+        verificationProgress: unrefinedBlockchainInfo.verificationprogress
+      };
+
       // Strip miningInfo of unnecessary properties
-      const unrefinedMiningInfo = unrefinedStats[2]
+      const unrefinedMiningInfo = unrefinedStats[3];
       const miningInfo = {
         difficulty: unrefinedMiningInfo.difficulty,
         networkhashps: unrefinedMiningInfo.networkhashps
-      }
+      };
 
       // Strip peerInfo of unnecessary properties
-      const unrefinedPeerInfo = unrefinedStats[3]
+      const unrefinedPeerInfo = unrefinedStats[4];
       const peerInfo = unrefinedPeerInfo.map(({ addr, subver }) => ({
         addr,
         subver
@@ -27,27 +35,28 @@ module.exports = ({ define }) => {
 
       // Convert unrefinedStats to object
       const stats = {
+        blockchainInfo: blockchainInfo,
         blockCount: unrefinedStats[0],
-        connectionCount: unrefinedStats[1],
+        connectionCount: unrefinedStats[2],
         miningInfo: miningInfo,
         peerInfo: peerInfo,
         error: null
-      }
+      };
 
-      stats.timestamp = new Date().toISOString()
+      stats.timestamp = new Date().toISOString();
 
       return { stats }
     } catch (error) {
-      // Uses errno for API not available, and use description for API loading
+      // Use errno for API not available, and use description for API loading
       const stats = {
         error: {
           code: error.code,
           message: error.errno || error.message
         },
         timestamp: new Date().toISOString()
-      }
+      };
 
-      return { stats }
+      return { stats };
     }
   }, {
     auth: true
@@ -71,6 +80,20 @@ function getNodeStats () {
       } else {
         try {
           resolve(blockCount)
+        } catch (error) {
+          reject(error)
+        }
+      }
+    })
+  })
+
+  const getBlockchainInfoPromise = new Promise((resolve, reject) => {
+    litecoinClient.getBlockchainInfo((error, blockchainInfo) => {
+      if (error) {
+        reject(error)
+      } else {
+        try {
+          resolve(blockchainInfo)
         } catch (error) {
           reject(error)
         }
@@ -123,6 +146,7 @@ function getNodeStats () {
   return Promise.all(
     [
       getBlockCountPromise,
+      getBlockchainInfoPromise,
       getConnectionCountPromise,
       getMiningInfoPromise,
       getPeerInfoPromise
