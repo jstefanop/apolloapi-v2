@@ -14,10 +14,10 @@ module.exports.typeDefs = `
 
   type NodeStats {
     timestamp: String!
-    blockchainInfo: BlockchainInfo!
+    blockchainInfo: BlockchainInfo
     connectionCount: Int
-    miningInfo: MiningInfo!
-    peerInfo: [PeerInfo!]
+    miningInfo: MiningInfo
+    peerInfo: [PeerInfo]
     error: LoadingError
   }
 
