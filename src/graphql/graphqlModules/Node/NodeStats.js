@@ -23,8 +23,8 @@ module.exports.typeDefs = `
 
   type BlockchainInfo {
     blocks: Int
+    blockTime: Int
     headers: Int
-    medianTime: Int
   }
 
   type MiningInfo {

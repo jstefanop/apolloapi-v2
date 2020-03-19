@@ -14,8 +14,8 @@ module.exports = ({ define }) => {
       const unrefinedBlockchainInfo = unrefinedStats[0];
       const blockchainInfo = {
         blocks: unrefinedBlockchainInfo.blocks,
-        headers: unrefinedBlockchainInfo.headers,
-        medianTime: unrefinedBlockchainInfo.mediantime
+        blockTime: unrefinedBlockchainInfo.blockTime,
+        headers: unrefinedBlockchainInfo.headers
       };
 
       // Strip miningInfo of unnecessary properties
@@ -77,7 +77,17 @@ function getNodeStats () {
         reject(error)
       } else {
         try {
-          resolve(blockchainInfo)
+          // Use bestblockhash to call bestBlock, to retrieve time of last block calculation
+          const bestBlockHash = blockchainInfo.bestblockhash
+          litecoinClient.getBlock(bestBlockHash, (error, block) => {
+            if (error) {
+              reject(error)
+            } else {
+              // Add blockTime to blockchainInfo
+              blockchainInfo.blockTime = block.time;
+              resolve(blockchainInfo)
+            }
+          })
         } catch (error) {
           reject(error)
         }
