@@ -14,9 +14,8 @@ module.exports = ({ define }) => {
       const unrefinedBlockchainInfo = unrefinedStats[0];
       const blockchainInfo = {
         blocks: unrefinedBlockchainInfo.blocks,
-        initialBlockDownload: unrefinedBlockchainInfo.initialblockdownload,
-        medianTime: unrefinedBlockchainInfo.mediantime,
-        verificationProgress: unrefinedBlockchainInfo.verificationprogress
+        headers: unrefinedBlockchainInfo.headers,
+        medianTime: unrefinedBlockchainInfo.mediantime
       };
 
       // Strip miningInfo of unnecessary properties
