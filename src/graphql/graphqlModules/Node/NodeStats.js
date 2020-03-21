@@ -25,6 +25,7 @@ module.exports.typeDefs = `
     blocks: Int
     blockTime: Int
     headers: Int
+    sizeOnDisk: String
   }
 
   type MiningInfo {

@@ -5,17 +5,19 @@ const litecoin = require('litecoin');
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
-
     try {
       const unrefinedStats = await getNodeStats()
 
       // At this point, no error present
 
       const unrefinedBlockchainInfo = unrefinedStats[0];
+
+      // Convert sizeOnDisk to String because number too large
       const blockchainInfo = {
         blocks: unrefinedBlockchainInfo.blocks,
         blockTime: unrefinedBlockchainInfo.blockTime,
-        headers: unrefinedBlockchainInfo.headers
+        headers: unrefinedBlockchainInfo.headers,
+        sizeOnDisk: unrefinedBlockchainInfo.size_on_disk.toString()
       };
 
       // Strip miningInfo of unnecessary properties
