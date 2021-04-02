@@ -1,0 +1,16 @@
+[Unit]
+Description=node
+After=multi-user.target
+
+[Service]
+Type=forking
+User=futurebit
+#Start:
+ExecStart=/opt/apolloapi/node/node_start.sh
+#WorkingDirectory=/opt/apolloapi/node
+#Stop:
+TimeoutStartSec=300
+ExecStop=/opt/apolloapi/node/node_stop.sh
+
+[Install]
+WantedBy=multi-user.target

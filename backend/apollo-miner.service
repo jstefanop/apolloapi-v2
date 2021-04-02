@@ -1,0 +1,15 @@
+[Unit]
+Description=apollo-miner
+After=network.target
+
+[Service]
+Type=forking
+User=root
+#Start:
+ExecStart=/opt/apolloapi/apollo-miner/miner_start.sh
+WorkingDirectory=/opt/apolloapi/apollo-miner
+#Stop:
+ExecStop=/opt/apolloapi/apollo-miner/miner_stop.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,68 @@
+#!/bin/bash
+
+#TO-DO assume this is not installed in embedded system (ie user git clones or downloads source and installer needs to start from there
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+APOLLO_DIR=/opt/apolloapi  #TO-DO assume this is not here and needs to be made by script
+
+sudo chown -R futurebit $APOLLO_DIR  #TO-DO have root run script and permissions
+
+### NVM ###                   TO-DO setup so UI runs on stock NVM install (ie sudo apt install nvm)
+echo -e "Installing nvm..."
+
+if [ -e ~/.nvm/nvm.sh ]
+then
+	echo "nvm installed yet"
+else
+	echo "Installing nvm"
+	cd ~/
+	git clone https://github.com/creationix/nvm.git .nvm
+	cd ~/.nvm
+	git checkout v0.33.11
+fi
+
+~/.nvm/install.sh
+
+. ~/.nvm/nvm.sh
+
+nvm install 9.8.0
+nvm alias default 9.8.0
+
+### SYSTEMD ###
+echo -e "Installing systemd..."
+
+sudo cp $DIR/apollo-ui.service /etc/systemd/system/
+sudo cp $DIR/apollo-miner.service /etc/systemd/system/
+sudo cp $DIR/node.service /etc/systemd/system/
+
+sudo systemctl daemon-reload
+
+sudo systemctl enable apollo-ui
+sudo systemctl enable apollo-miner
+sudo systemctl enable node
+
+#TO-DO Use perminant iptable to redirect ports instead of this script?
+
+grep -q -F "$APOLLO_DIR/scripts/firewall" /etc/rc.local || sudo sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" /etc/rc.local
+
+### SYSTEM ###
+echo "Configuring miner system..."
+
+#TO-DO move correct miner binary based on system being installed on
+
+### API ###
+echo "Decompress API build (could take few minutes)..."
+
+#TO-DO build/install API locally, since machines this is installed is no longer low power and could be installed on arm or x86
+#see 
+
+tar xzf build/futurebit.tar.gz -C $APOLLO_DIR/
+
+### START ###
+echo "Starting Apollo App..."
+
+sudo bash $APOLLO_DIR/backend/firewall
+
+sudo systemctl start apollo-ui
+
+echo -e "Installation complete"
