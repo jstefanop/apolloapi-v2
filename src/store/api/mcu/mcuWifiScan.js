@@ -13,7 +13,7 @@ module.exports = ({ define }) => {
 function getWifiScan() {
   return new Promise((resolve, reject) => {
     const scriptName = (process.env.NODE_ENV === 'production') ? 'wifi_scan' : 'wifi_scan_fake'
-    const scriptPath = join(__dirname, '..', '..', '..', '..', 'scripts', scriptName)
+    const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
     exec(scriptPath, {}, (err, stdout) => {
       if (err) {
         reject(err)

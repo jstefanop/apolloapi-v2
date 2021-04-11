@@ -12,7 +12,7 @@ module.exports = ({ define }) => {
 
 function isMinerOnline () {
   return new Promise((resolve, reject) => {
-    exec('systemctl is-active bfgminer >/dev/null 2>&1 && echo true || echo false', {}, (err, stdout) => {
+    exec('systemctl is-active apollo-miner >/dev/null 2>&1 && echo true || echo false', {}, (err, stdout) => {
       if (err) {
         reject(err)
       } else {

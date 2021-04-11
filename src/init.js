@@ -28,7 +28,11 @@ function initEnvFile () {
 
 async function runMigrations () {
   const { knex } = require('./db')
-  await knex.migrate.latest()
+  try {
+    const resp = await knex.migrate.latest()
+  } catch (err) {
+    console.log(err)
+  }
 }
 
 function startServer () {

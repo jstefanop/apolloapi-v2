@@ -3,6 +3,8 @@ const updateFields = {
   voltage: 'voltage',
   frequency: 'frequency',
   fan: 'fan',
+  fan_low: 'fan_low',
+  fan_high: 'fan_high',
   apiAllow: 'api_allow',
   customApproval: 'custom_approval',
   connectedWifi: 'connected_wifi',
