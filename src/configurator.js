@@ -70,27 +70,31 @@ const generate = async function (pools = null, settings = null ) {
 
 
 	let minerMode = 0,
-		frequency = 793;
+		frequency = 40;
 
 	switch (settings.minerMode) {
 		case 'eco':
 			minerMode = 1
-			frequency = 598
+			voltage = 45
+			frequency = 35
 		break;
 		case 'balanced':
 			minerMode = 2
-			frequency = 715
+			voltage = 60
+			frequency = 40
 		break;
 		case 'turbo':
 			minerMode = 3
-			frequency = 793
+			voltage = 45
+			frequency = 50
 		break;
 		default:
 			minerMode = 0
-			frequency = 793
+			voltage = settings.voltage
+			frequency = settings.frequency
 	}
 
-	if (settings.minerMode === 'custom') frequency = settings.frequency;
+	const fan = (!settings.fan_low && !settings.fan_high) ? null : `-fan_temp_hi ${settings.fan_low} -fan_temp_low ${settings.fan_high}`;
 
 	const interfaces = os.networkInterfaces();
 		
@@ -140,27 +144,24 @@ const generate = async function (pools = null, settings = null ) {
 		]
 	};
 
+	/*
+	brd_ocp is voltage
+	osc is frequency
+	fan_temp_low is fan_low
+	fan_temp_hi is fan_high
+	*/
 
-	const confDir = '../backend/apollo-miner';
+	let minerConfig = `-host us-east.stratum.slushpool.com -port 3333 -user jstefanop.worker1 -brd_ocp ${voltage} -osc ${frequency}`;
+	if (fan) minerConfig += ` ${fan}`;
 
-	// -host us-east.stratum.slushpool.com -port 3333 -user jstefanop.worker1 -brd_ocp 75 -osc 50 -fan_temp_hi 80 -fan_temp_low 65
-
-	const voltageStep = parseInt((settings.voltage - 644) / 4.15);
+	const confDir = `${__dirname}/../backend/apollo-miner`;
 
 	try {
-		// Write all configuration files
-		// Bfgminer
-		await fsPromises.writeFile('/opt/bfgminer.conf', JSON.stringify(configuration, null, 4));
+		// Write all configuration file
 		// Conf dir
 		await fsPromises.mkdir(confDir, { recursive: true });
-		// Mode
-		await fsPromises.writeFile(confDir + '/hwmon_state', parseInt(minerMode).toFixed());
-		// Fan
-		await fsPromises.writeFile(confDir + '/fan_speed', parseInt(settings.fan).toFixed());
-		// Voltage
-		if (settings.minerMode === 'custom') {
-			await fsPromises.writeFile(confDir + '/reg_voltage', parseInt(voltageStep).toFixed());
-		}
+		// Conf file
+		await fsPromises.writeFile(confDir + '/miner_config', minerConfig);
 		console.log('Configuration saved');
 	} catch (err) {
 		console.log('Error saving configuration files');
