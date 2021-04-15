@@ -4,12 +4,16 @@ module.exports.typeDefs = `
   }
 
   type MinerStatsOutput {
-    result: MinerStatsResult!
+    result: MinerStatsResult
     error: Error
   }
 
   type MinerStatsResult {
-    date: Date
+    stats: MinerStats!
+  }
+
+  type MinerStats {
+    date: String
     statVersion: String
     versions: MinerStatsVersion
     master: MinerStatsMaster
@@ -83,9 +87,9 @@ module.exports.typeDefs = `
     sharesAccepted: Int
     sharesRejected: Int
     solutionsAccepted: Int
-    minRespTime: Int
-    avgRespTime: Int
-    maxRespTime: Int
+    minRespTime: Float
+    avgRespTime: Float
+    maxRespTime: Float
     shareLoss: Float
     poolTotal: Int
     inService: Int

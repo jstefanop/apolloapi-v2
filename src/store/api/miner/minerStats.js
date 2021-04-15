@@ -1,8 +1,8 @@
 const { join } = require('path')
 const { exec } = require('child_process')
-const normalize = require('normalize-object')
 const fs =require('fs');
 const path = require('path')
+const _ = require('lodash')
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
@@ -30,10 +30,23 @@ function getMinerStats (errors) {
 
       received = JSON.parse(received);
 
-      // Normalize object keys to fit GraphQL and be code-friendly
-      const results = normalize(received, 'camel');
+      received.master.intervals = _.mapKeys(received.master.intervals, (value, name) => {
+        return `int_${name}`
+      });
 
-      resolve(results)
+      received.pool.intervals = _.mapKeys(received.pool.intervals, (value, name) => {
+        return `int_${name}`
+      });
+
+      received.fans = _.mapKeys(received.fans, (value, name) => {
+        return `int_${name}`
+      });
+
+      received.slots = _.mapKeys(received.slots, (value, name) => {
+        return `int_${name}`
+      });
+
+      resolve(received)
     } catch (err) {
       reject(new errors.InternalError(err.toString()));
     }
