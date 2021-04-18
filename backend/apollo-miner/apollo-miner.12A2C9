@@ -9,7 +9,7 @@
     },
     "master": {
         "upTime": 591230,
-        "diff": 4491,
+        "diff": 4375.744074072639,
         "boards": 1,
         "errorSpi": 0,
         "osc": 62,
@@ -21,7 +21,7 @@
             "0": {
                 "name": "total",
                 "interval": 591202,
-                "bySol": "3794.7",
+                "bySol": "3868.9",
                 "byDiff": "3799.1",
                 "byPool": "3750.3",
                 "byJobs": "3852.6",
@@ -167,7 +167,7 @@
             "brokenPwc": 0,
             "solutions": "9590",
             "errors": "107",
-            "ghs": "4118.9",
+            "ghs": "3868.9",
             "errorRate": "1.1",
             "chipRestarts": "0",
             "wattPerGHs": "0.067251",

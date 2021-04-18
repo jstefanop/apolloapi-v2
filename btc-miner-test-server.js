@@ -1,6 +1,7 @@
 const fs = require('fs');
 
 function getData() {
+	const hashrate = getRandomFloat(3700, 4000).toFixed(1);
 	return {
 		"date": "2021-01-26 15:54:19",
 		"statVersion": "1.2",
@@ -12,7 +13,7 @@ function getData() {
 		},
 		"master": {
 			"upTime": 591230,
-			"diff": 4491,
+			"diff": getRandomArbitrary(4000, 4500),
 			"boards": 1,
 			"errorSpi": 0,
 			"osc": 62,
@@ -76,7 +77,7 @@ function getData() {
 				"0": {
 					"name": "total",
 					"interval": 591202,
-					"bySol": "3794.7",
+					"bySol": hashrate,
 					"byDiff": "3799.1",
 					"byPool": "3750.3",
 					"byJobs": "3852.6",
@@ -170,7 +171,7 @@ function getData() {
 				"brokenPwc": 0,
 				"solutions": "9590",
 				"errors": "107",
-				"ghs": "4118.9",
+				"ghs": hashrate,
 				"errorRate": "1.1",
 				"chipRestarts": "0",
 				"wattPerGHs": "0.067251",
@@ -223,9 +224,14 @@ class Server {
  init() {
   setInterval(() => {
   	const data = JSON.stringify(getData(), null, 4);
-  	fs.writeFile('backend/apollo-miner/apollo-miner.stat', data, function (err) {
+  	fs.writeFile('backend/apollo-miner/apollo-miner.12A2C9', data, function (err) {
   		if (err) console.log(err)
   		console.log('Writing stat file')
+  		const data2 = JSON.stringify(getData(), null, 4);
+  		fs.writeFile('backend/apollo-miner/apollo-miner.FC614E3E', data2, function (err) {
+	  		if (err) console.log(err)
+	  		console.log('Writing stat file')
+	  	});
   	});
   }, 3000)
  }

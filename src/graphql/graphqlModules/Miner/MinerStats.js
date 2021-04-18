@@ -9,10 +9,11 @@ module.exports.typeDefs = `
   }
 
   type MinerStatsResult {
-    stats: MinerStats!
+    stats: [MinerStats]
   }
 
   type MinerStats {
+    uuid: String
     date: String
     statVersion: String
     versions: MinerStatsVersion

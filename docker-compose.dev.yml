@@ -7,7 +7,6 @@ services:
     command: sh -c "yarn --production=false && yarn dev"
     environment:
       NODE_ENV: 'development'
-      IDENTITY_POOL_ID: '${IDENTITY_POOL_ID}'
     ports:
       - '5000:5000'
   frontend:
@@ -17,6 +16,5 @@ services:
     command: sh -c "npm start"
     environment:
       NODE_ENV: 'development'
-      IDENTITY_POOL_ID: '${IDENTITY_POOL_ID}'
     ports:
       - '3000:3000'
