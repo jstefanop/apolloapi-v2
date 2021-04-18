@@ -62,3 +62,6 @@ typings/
 
 # sqlite
 *.sqlite
+
+#backed
+backedn/apollo-miner/

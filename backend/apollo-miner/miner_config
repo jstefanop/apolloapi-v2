@@ -1,1 +1,0 @@
--host us-east.stratum.slushpool.com -port 3333 -user jstefanop.worker1 -brd_ocp 50 -osc 46 -fan_temp_hi 50 -fan_temp_low 80
