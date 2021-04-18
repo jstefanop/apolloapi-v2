@@ -12,7 +12,7 @@ module.exports.typeDefs = `
     minerMode: MinerMode!
     voltage: Float!
     frequency: Int!
-    fan: Int!
+    fan: Int
     fan_low: Int!
     fan_high: Int!
     apiAllow: Boolean

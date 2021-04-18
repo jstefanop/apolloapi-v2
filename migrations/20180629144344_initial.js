@@ -13,7 +13,6 @@ exports.up = async function (knex) {
     table.enum('miner_mode', ['eco', 'balanced', 'turbo', 'custom']).notNullable()
     table.float('voltage').notNullable()
     table.integer('frequency').notNullable()
-    table.integer('fan').notNullable()
     table.text('connected_wifi')
     table.boolean('left_sidebar_visibility').notNullable()
     table.boolean('left_sidebar_extended').notNullable()
@@ -27,7 +26,6 @@ exports.up = async function (knex) {
     miner_mode: 'eco',
     voltage: 30,
     frequency: 25,
-    fan: 0,
     connected_wifi: null,
     left_sidebar_visibility: true,
     left_sidebar_extended: true,
