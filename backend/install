@@ -3,7 +3,9 @@
 #TO-DO assume this is not installed in embedded system (ie user git clones or downloads source and installer needs to start from there
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
-APOLLO_DIR=/opt/apolloapi  #TO-DO assume this is not here and needs to be made by script
+APOLLO_DIR=/opt/apolloapi
+
+sudo mkdir -p APOLLO_DIR
 
 sudo chown -R futurebit $APOLLO_DIR  #TO-DO have root run script and permissions
 
@@ -15,18 +17,13 @@ then
 	echo "nvm installed yet"
 else
 	echo "Installing nvm"
-	cd ~/
-	git clone https://github.com/creationix/nvm.git .nvm
-	cd ~/.nvm
-	git checkout v0.33.11
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
 fi
-
-~/.nvm/install.sh
 
 . ~/.nvm/nvm.sh
 
-nvm install 9.8.0
-nvm alias default 9.8.0
+nvm install 14.16.1
+nvm alias default 14.16.1
 
 ### SYSTEMD ###
 echo -e "Installing systemd..."
@@ -54,9 +51,15 @@ echo "Configuring miner system..."
 echo "Decompress API build (could take few minutes)..."
 
 #TO-DO build/install API locally, since machines this is installed is no longer low power and could be installed on arm or x86
-#see 
+npm i -g pm2 serve
 
-tar xzf build/futurebit.tar.gz -C $APOLLO_DIR/
+# TO-DO we should get git submodules for UI but git should be public for this otherwise you have to pack api+ui together
+
+cd APOLLO_DIR/apolloui
+
+yarn
+
+yarn build
 
 ### START ###
 echo "Starting Apollo App..."
