@@ -5,14 +5,20 @@
 apt-get update
 apt-get -y upgrade
 
-DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev
+DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev vim git sudo
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 APOLLO_DIR=/opt/apolloapi
 
-sudo mkdir -p APOLLO_DIR
+sudo adduser --disabled-password --gecos "" futurebit
+
+sudo mkdir -p $APOLLO_DIR
+
+git clone --recurse-submodules -j8 https://github.com/jstefanop/apolloapi.git $APOLLO_DIR
 
 sudo chown -R futurebit $APOLLO_DIR  #TO-DO have root run script and permissions
+
+cd $APOLLO_DIR
 
 ### NVM ###                   TO-DO setup so UI runs on stock NVM install (ie sudo apt install nvm)
 echo -e "Installing nvm..."
@@ -33,9 +39,9 @@ nvm alias default 14.16.1
 ### SYSTEMD ###
 echo -e "Installing systemd..."
 
-sudo cp $DIR/apollo-ui.service /etc/systemd/system/
-sudo cp $DIR/apollo-miner.service /etc/systemd/system/
-sudo cp $DIR/node.service /etc/systemd/system/
+sudo cp backend/apollo-ui.service /etc/systemd/system/
+sudo cp backend/apollo-miner.service /etc/systemd/system/
+sudo cp backend/node.service /etc/systemd/system/
 
 sudo systemctl daemon-reload
 
@@ -60,7 +66,7 @@ echo "Building UI (could take few minutes)..."
 
 npm -g i yarn
 
-cd APOLLO_DIR/apolloui
+cd $APOLLO_DIR/apolloui
 
 yarn
 
