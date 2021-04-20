@@ -11,7 +11,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzi
 # nvm environment variables
 RUN mkdir -p /usr/local/nvm
 ENV NVM_DIR /usr/local/nvm
-ENV NODE_VERSION 15.13.0
+ENV NODE_VERSION 14.16.1
 
 # install nvm
 # https://github.com/creationix/nvm#install-script

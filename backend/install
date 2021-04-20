@@ -2,6 +2,11 @@
 
 #TO-DO assume this is not installed in embedded system (ie user git clones or downloads source and installer needs to start from there
 
+apt-get update
+apt-get -y upgrade
+
+DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 APOLLO_DIR=/opt/apolloapi
 
@@ -48,12 +53,12 @@ echo "Configuring miner system..."
 #TO-DO move correct miner binary based on system being installed on
 
 ### API ###
-echo "Decompress API build (could take few minutes)..."
-
-#TO-DO build/install API locally, since machines this is installed is no longer low power and could be installed on arm or x86
-npm i -g pm2 serve
+echo "Building UI (could take few minutes)..."
 
 # TO-DO we should get git submodules for UI but git should be public for this otherwise you have to pack api+ui together
+# git submodule update --init --recursive
+
+npm -g i yarn
 
 cd APOLLO_DIR/apolloui
 
