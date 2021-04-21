@@ -65,7 +65,7 @@ module.exports = ({ define }) => {
 
 const litecoinClient = new litecoin.Client({
   host: '127.0.0.1',
-  port: 9332,
+  port: 8332,
   user: 'futurebit',
   pass: 'futurebit',
   timeout: 30000,
