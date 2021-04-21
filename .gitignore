@@ -64,4 +64,5 @@ typings/
 *.sqlite
 
 #backed
-backend/apollo-miner/*
+backend/apollo-miner/apollo-miner.*
+backend/apollo-miner/*config*

@@ -6,10 +6,10 @@ After=network.target
 Type=forking
 User=root
 #Start:
-ExecStart=/opt/apolloapi/apollo-miner/miner_start.sh
-WorkingDirectory=/opt/apolloapi/apollo-miner
+ExecStart=/opt/apolloapi/backend/apollo-miner/miner_start.sh
+WorkingDirectory=/opt/apolloapi/backend/apollo-miner
 #Stop:
-ExecStop=/opt/apolloapi/apollo-miner/miner_stop.sh
+ExecStop=/opt/apolloapi/backend/apollo-miner/miner_stop.sh
 
 [Install]
 WantedBy=multi-user.target
