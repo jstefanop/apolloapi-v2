@@ -44,7 +44,7 @@ echo -e "${YELLOW} ---> Installing firewall${NC}"
 RC_LOCAL=/etc/rc.local
 
 if [ ! -f "$RC_LOCAL" ]; then
-	touch RC_LOCAL
+	touch $RC_LOCAL
 fi
 
 grep -q -F "$APOLLO_DIR/scripts/firewall" $RC_LOCAL || sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" $RC_LOCAL
@@ -55,16 +55,11 @@ cd $APOLLO_DIR
 
 echo -e "${YELLOW} ---> Installing NVM${NC}"
 
-if [ -e ~/.nvm/nvm.sh ]
-then
-	echo "nvm installed yet"
-else
-	echo "Installing nvm"
-	mkdir /usr/local/nvm
-	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | NVM_DIR=/usr/local/nvm bash
-fi
+echo "Installing nvm"
+mkdir /usr/local/nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | NVM_DIR=/usr/local/nvm bash
 
-. ~/.nvm/nvm.sh
+. /usr/local/nvm/nvm.sh
 
 nvm install 14.16.1
 nvm alias default 14.16.1
