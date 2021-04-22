@@ -6,11 +6,11 @@ After=multi-user.target
 Type=forking
 User=futurebit
 #Start:
-ExecStart=/opt/apolloapi/node/node_start.sh
-#WorkingDirectory=/opt/apolloapi/node
+ExecStart=/opt/apolloapi/backend/node/node_start.sh
+#WorkingDirectory=/opt/apolloapi/backend/node
 #Stop:
 TimeoutStartSec=300
-ExecStop=/opt/apolloapi/node/node_stop.sh
+ExecStop=/opt/apolloapi/backend/node/node_stop.sh
 
 [Install]
 WantedBy=multi-user.target
