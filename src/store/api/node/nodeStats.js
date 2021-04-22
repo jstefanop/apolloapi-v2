@@ -1,7 +1,7 @@
  const { join } = require('path')
 const { exec } = require('child_process')
 
-const litecoin = require('litecoin');
+const bitcoin = require('litecoin');
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
@@ -63,7 +63,7 @@ module.exports = ({ define }) => {
   })
 }
 
-const litecoinClient = new litecoin.Client({
+const bitcoinClient = new bitcoin.Client({
   host: '127.0.0.1',
   port: 8332,
   user: 'futurebit',
@@ -74,14 +74,14 @@ const litecoinClient = new litecoin.Client({
 
 function getNodeStats () {
   const getBlockchainInfoPromise = new Promise((resolve, reject) => {
-    litecoinClient.getBlockchainInfo((error, blockchainInfo) => {
+    bitcoinClient.getBlockchainInfo((error, blockchainInfo) => {
       if (error) {
         reject(error)
       } else {
         try {
           // Use bestblockhash to call bestBlock, to retrieve time of last block calculation
           const bestBlockHash = blockchainInfo.bestblockhash
-          litecoinClient.getBlock(bestBlockHash, (error, block) => {
+          bitcoinClient.getBlock(bestBlockHash, (error, block) => {
             if (error) {
               reject(error)
             } else {
@@ -98,7 +98,7 @@ function getNodeStats () {
   })
 
   const getConnectionCountPromise = new Promise((resolve, reject) => {
-    litecoinClient.getConnectionCount((error, connectionCount) => {
+    bitcoinClient.getConnectionCount((error, connectionCount) => {
       if (error) {
         reject(error)
       } else {
@@ -112,7 +112,7 @@ function getNodeStats () {
   })
 
   const getMiningInfoPromise = new Promise((resolve, reject) => {
-    litecoinClient.getMiningInfo((error, miningInfo) => {
+    bitcoinClient.getMiningInfo((error, miningInfo) => {
       if (error) {
         reject(error)
       } else {
@@ -126,7 +126,7 @@ function getNodeStats () {
   })
 
   const getPeerInfoPromise = new Promise((resolve, reject) => {
-    litecoinClient.getPeerInfo((error, peerInfo) => {
+    bitcoinClient.getPeerInfo((error, peerInfo) => {
       if (error) {
         reject(error)
       } else {

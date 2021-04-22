@@ -50,7 +50,7 @@ exports.up = async function (knex) {
   await knex('pools').insert({
     enabled: true,
     donation: 1,
-    url: 'stratum+tcp://us.litecoinpool.org:3333',
+    url: 'stratum+tcp://stratum.slushpool.com:3333',
     username: 'jstefanop.a1',
     password: 'a1',
     index: 99

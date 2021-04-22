@@ -1,9 +1,10 @@
 const fs = require('fs');
+const moment = require('moment');
 
 function getData() {
 	const hashrate = getRandomFloat(3700, 4000).toFixed(1);
 	return {
-		"date": "2021-01-26 15:54:19",
+		"date": moment().format('YYYY-MM-DD HH:mm:ss'), //"2021-01-26 15:54:19"
 		"statVersion": "1.2",
 		"versions": {
 			"miner": "v13.16.1",

@@ -23,11 +23,11 @@ cat << EOF
   }],
   "memory":
   {
-    "total": 245760,
-    "available": 109952,
-    "used": 233220,
-    "cache": 97412,
-    "swap": 1280
+    "total": 2457600,
+    "available": 1099520,
+    "used": 2332200,
+    "cache": 974120,
+    "swap": 12800
   },
   "cpu":
   {
