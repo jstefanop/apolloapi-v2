@@ -1,0 +1,51 @@
+#!/bin/bash
+
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+if [ "$EUID" -ne 0 ]
+  then echo -e "${RED}Update script must be run by root or with sudo${NC}"
+  exit
+fi
+
+
+APOLLO_DIR=/opt/apolloapi
+
+. /usr/local/nvm/nvm.sh
+
+nvm use 14.16.1
+
+### API ###
+echo -e "${YELLOW} ---> Updating API modules${NC}"
+
+cd $APOLLO_DIR
+
+git pull
+
+yarn
+
+### UI ###
+echo -e "${YELLOW} ---> Updating UI modules${NC}"
+
+cd $APOLLO_DIR/apolloui
+
+git pull
+
+yarn
+
+echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
+
+yarn build
+
+### SYSTEMD ###
+echo -e "${YELLOW} ---> Updating systemd files${NC}"
+
+cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/node.service /etc/systemd/system/
+
+echo -e "${YELLOW} ---> Restarting APP${NC}"
+systemctl daemon-reload
+
+systemctl restart apollo-ui
