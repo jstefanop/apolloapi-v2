@@ -29,7 +29,7 @@ OS=$(lsb_release -s -i -c -r | sed ':a;N;$!ba;s/\n/ /g')
 UPTIME=$(uptime -s)
 LOADAVG=$(cat /proc/loadavg)
 ARCHITECTURE=$(uname -m)
-if [ -f /sys/devices/virtual/thermal/thermal_zone0/temp ]; then
+if [ -f "/sys/devices/virtual/thermal/thermal_zone0/temp" ]; then
   TEMP=$(cat /sys/devices/virtual/thermal/thermal_zone0/temp)
 else
   TEMP="0"

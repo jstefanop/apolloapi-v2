@@ -1,9 +1,12 @@
 const { join } = require('path')
 const { exec } = require('child_process')
+const axios = require('axios')
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
     const stats = await getOsStats()
+    const gitAppVersion = await axios.get('https://raw.githubusercontent.com/CryptofyCH/apolloui/dev-BTC/package.json');
+    stats.currentAppVersion = (gitAppVersion && gitAppVersion.data) ? gitAppVersion.data.version : null;
     stats.timestamp = new Date().toISOString()
     return { stats }
   }, {

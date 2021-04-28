@@ -15,6 +15,7 @@
     "run-container": "docker run --rm -it -v \"$(pwd)\":/hostdir --entrypoint=/bin/bash orange"
   },
   "dependencies": {
+    "axios": "^0.21.1",
     "backend-helpers": "^0.5.0",
     "backend-store": "^0.7.0",
     "bcryptjs": "^2.4.3",
