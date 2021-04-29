@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo -e "Update started...."
+
+sleep 5
+
+echo -e "Wait...."
+
+sleep 5
+
+echo -e "Done!"
