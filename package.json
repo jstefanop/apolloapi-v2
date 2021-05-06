@@ -2,9 +2,9 @@
   "name": "apolloapi",
   "version": "1.0.0",
   "main": "index.js",
-  "repository": "https://github.com/CryptofyCH/apolloapi.git",
-  "author": "Cryptofy GmbH <info@cryptofy.ch>",
-  "license": "ISC",
+  "repository": "https://github.com/jstefanop/apolloapi.git",
+  "author": "FutureBit LLC",
+  "license": "CC BY-NC-ND 4.0",
   "bin": "src/init.js",
   "engines": {
     "node": ">= 8.x"
