@@ -76,7 +76,7 @@ const generate = async function (pools = null, settings = null ) {
 		case 'eco':
 			minerMode = 1
 			voltage = 45
-			frequency = 35
+			frequency = 30
 		break;
 		case 'balanced':
 			minerMode = 2
@@ -85,7 +85,7 @@ const generate = async function (pools = null, settings = null ) {
 		break;
 		case 'turbo':
 			minerMode = 3
-			voltage = 45
+			voltage = 75
 			frequency = 50
 		break;
 		default:
