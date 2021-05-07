@@ -2,7 +2,7 @@
   "name": "apolloapi",
   "version": "1.0.0",
   "main": "index.js",
-  "repository": "https://github.com/CryptofyCH/apolloapi.git",
+  "repository": "https://github.com/jstefanop/apolloapi.git",
   "author": "Cryptofy GmbH <info@cryptofy.ch>",
   "license": "ISC",
   "bin": "src/init.js",
