@@ -8,6 +8,7 @@ module.exports.typeDefs = `
 
   type Settings {
     id: Int!
+    agree: Boolean
     createdAt: String!
     minerMode: MinerMode!
     voltage: Float!

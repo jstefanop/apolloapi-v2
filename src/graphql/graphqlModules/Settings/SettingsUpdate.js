@@ -4,6 +4,7 @@ module.exports.typeDefs = `
   }
 
   input SettingsUpdateInput {
+    agree: Boolean
     minerMode: MinerMode
     voltage: Float,
     frequency: Int,

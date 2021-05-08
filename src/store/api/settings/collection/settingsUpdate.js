@@ -20,7 +20,7 @@ module.exports = ({ define }) => {
     const insertData = {}
     Object.keys(update).forEach(key => newData[key] = update[key])
     Object.keys(newData).forEach(key => {
-      insertData[updateFields[key]] = newData[key]
+      if (key !== 'agree') insertData[updateFields[key]] = newData[key]
     })
     await knex('settings').insert(insertData)
     const last100 = knex('settings')
