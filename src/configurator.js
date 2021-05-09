@@ -69,12 +69,14 @@ const generate = async function (pools = null, settings = null ) {
 			frequency = settings.frequency
 	}
 
-	const fan = (!settings.fan_low && !settings.fan_high) ? null : `-fan_temp_hi ${settings.fan_low} -fan_temp_low ${settings.fan_high}`;
+	const fanLow = (settings.fan_low && settings.fan_low !== 40) ? `-fan_temp_low ${settings.fan_low}` : null;
+	const fanHigh = (settings.fan_high && settings.fan_high !== 60) ? `-fan_temp_hi ${settings.fan_high}` : null;
 
 	const poolUrl = new URL(mainPool.url);
 
 	let minerConfig = `-host ${poolUrl.hostname} -port ${poolUrl.port} -user ${mainPool.username} -brd_ocp ${voltage} -osc ${frequency}`;
-	if (fan) minerConfig += ` ${fan}`;
+	if (fanLow) minerConfig += ` ${fanLow}`;
+	if (fanHigh) minerConfig += ` ${fanHigh}`;
 
 	const confDir = `${__dirname}/../backend/apollo-miner`;
 
