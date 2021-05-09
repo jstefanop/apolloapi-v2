@@ -30,6 +30,7 @@ echo -e "${YELLOW} ---> Updating UI modules${NC}"
 
 cd $APOLLO_DIR/apolloui
 
+git reset --hard
 git pull
 
 yarn
