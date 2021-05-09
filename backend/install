@@ -69,9 +69,6 @@ npm -g i yarn
 
 yarn
 
-chmod 755 $APOLLO_DIR/backend/install
-chmod 755 $APOLLO_DIR/backend/update
-
 ### UI ###
 echo -e "${YELLOW} ---> Installing UI modules${NC}"
 
