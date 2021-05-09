@@ -7,7 +7,7 @@ start_hashboards()
 {
     while [ $1 ];
             do
-            screen -dmS miner ./apollo-miner -comport $ports -ao_mode 1 $settings
+            screen -dmS miner ./fb-apollo-miner -comport $ports -ao_mode 1 $settings
             sleep .1
             shift
     done
@@ -21,7 +21,7 @@ gpio write 0 1
 sleep 10
 #start internal hashboard
 
-screen -dmS miner ./apollo-miner -comport /dev/ttyS1 -ao_mode 1 $settings
+screen -dmS miner ./fb-apollo-miner -comport /dev/ttyS1 -ao_mode 1 $settings
 
 #find and start external hashboards
 
