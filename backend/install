@@ -87,8 +87,16 @@ echo -e "${YELLOW} ---> Starting firewall${NC}"
 
 bash $APOLLO_DIR/backend/firewall
 
+echo -e "${YELLOW} ---> Installing miner binaries${NC}"
+
+arch=$(uname -m)
+
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/
+
+
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Installing systemd files${NC}"
+
 
 cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
