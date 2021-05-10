@@ -3,6 +3,10 @@
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
+TMPFILE='/tmp/update_progress'
+
+rm $TMPFILE
+touch $TMPFILE
 
 if [ "$EUID" -ne 0 ]
   then echo -e "${RED}Update script must be run by root or with sudo${NC}"
@@ -12,9 +16,13 @@ fi
 
 APOLLO_DIR=/opt/apolloapi
 
+echo "10" > $TMPFILE
+
 . /usr/local/nvm/nvm.sh
 
 nvm use 14.16.1
+
+echo "20" > $TMPFILE
 
 ### API ###
 echo -e "${YELLOW} ---> Updating API modules${NC}"
@@ -23,7 +31,11 @@ cd $APOLLO_DIR
 
 git pull
 
+echo "30" > $TMPFILE
+
 yarn
+
+echo "40" > $TMPFILE
 
 ### UI ###
 echo -e "${YELLOW} ---> Updating UI modules${NC}"
@@ -33,11 +45,17 @@ cd $APOLLO_DIR/apolloui
 git reset --hard
 git pull
 
+echo "60" > $TMPFILE
+
 yarn
+
+echo "70" > $TMPFILE
 
 echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
 
 yarn build
+
+echo "80" > $TMPFILE
 
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Updating systemd files${NC}"
@@ -50,3 +68,5 @@ echo -e "${YELLOW} ---> Restarting APP${NC}"
 systemctl daemon-reload
 
 systemctl restart apollo-ui
+
+echo "100" > $TMPFILE

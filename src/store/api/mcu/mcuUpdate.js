@@ -6,7 +6,7 @@ module.exports = ({ define }) => {
   	let scriptName = 'update.fake';
   	if (process.env.NODE_ENV === 'production') scriptName = 'update';
   	const updateScript = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
-    const cmd = spawn('bash',  [updateScript])
+    const cmd = spawn('sudo',  ['bash', updateScript])
 
    	cmd.stdout.on('data', (data) => {
 	  console.log(`stdout: ${data}`);

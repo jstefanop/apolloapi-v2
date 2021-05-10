@@ -1,11 +1,26 @@
 #!/bin/bash
 
+TMPFILE='/tmp/update_progress'
+
+rm $TMPFILE
+touch $TMPFILE
+
+echo "10" > $TMPFILE
+
 echo -e "Update started...."
 
-sleep 5
+sleep 3
+
+echo "40" > $TMPFILE
 
 echo -e "Wait...."
 
-sleep 5
+sleep 3
+
+echo "80" > $TMPFILE
 
 echo -e "Done!"
+
+sleep 2
+
+echo "100" > $TMPFILE
