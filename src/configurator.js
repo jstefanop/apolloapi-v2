@@ -76,7 +76,7 @@ const generate = async function (pools = null, settings = null ) {
 
 	const [poolHost, poolPort] = poolUrl.split(':');
 
-	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -brd_ocp ${voltage} -osc ${frequency}`;
+	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -pswd ${mainPool.password} -brd_ocp ${voltage} -osc ${frequency}`;
 	if (fanLow) minerConfig += ` ${fanLow}`;
 	if (fanHigh) minerConfig += ` ${fanHigh}`;
 
