@@ -3,3 +3,5 @@
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT && \
 iptables -A INPUT -p tcp --dport 5000 -j ACCEPT && \
 iptables -A PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 5000
+iptables -A INPUT -p tcp --dport 8333 -j ACCEPT
+iptables -A INPUT -p udp --dport 8333 -j ACCEPT

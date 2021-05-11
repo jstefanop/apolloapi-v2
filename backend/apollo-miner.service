@@ -1,6 +1,6 @@
 [Unit]
 Description=apollo-miner
-After=network.target
+After=network.target rc-local.service
 
 [Service]
 Type=forking

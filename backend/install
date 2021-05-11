@@ -47,7 +47,7 @@ if [ ! -f "$RC_LOCAL" ]; then
 	touch $RC_LOCAL
 fi
 
-grep -q -F "$APOLLO_DIR/scripts/firewall" $RC_LOCAL || sed -i "\$i \/opt\/apolloapi\/scripts\/firewall" $RC_LOCAL
+grep -q -F "$APOLLO_DIR/backend/firewall" $RC_LOCAL || sed -i "\$i \/opt\/apolloapi\/backend\/firewall" $RC_LOCAL
 
 cd $APOLLO_DIR
 
@@ -89,7 +89,7 @@ echo -e "${YELLOW} ---> Installing miner binaries${NC}"
 
 arch=$(uname -m)
 
-cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/fb-apollo-miner
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
 
 
 ### SYSTEMD ###
