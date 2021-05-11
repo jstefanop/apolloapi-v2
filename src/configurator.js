@@ -50,7 +50,7 @@ const generate = async function (pools = null, settings = null ) {
 	switch (settings.minerMode) {
 		case 'eco':
 			minerMode = 1
-			voltage = 45
+			voltage = 48
 			frequency = 30
 		break;
 		case 'balanced':

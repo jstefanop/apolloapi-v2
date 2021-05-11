@@ -1,0 +1,20 @@
+#!/bin/bash
+#expand SD card
+/usr/lib/armbian/armbian-resize-filesystem start
+
+#format nvme drive
+parted /dev/nvme0n1 mklabel gpt -s
+parted -a opt /dev/nvme0n1 mkpart primary ext4 0% 100% -s
+mkfs.ext4 /dev/nvme0n1p1
+
+#configure node
+mkdir /media/nvme
+mount /dev/nvme0n1p1 /media/nvme
+tune2fs -m .1 /dev/nvme0n1p1
+mkdir /media/nvme/Bitcoin
+chown -R futurebit /media/nvme/Bitcoin/
+
+#restart node
+systemctl restart node.service
+
+sed -i '$ d' /etc/rc.local

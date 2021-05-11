@@ -13,6 +13,8 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+systemctl stop node
+systemctl stop apollo-miner
 
 APOLLO_DIR=/opt/apolloapi
 
