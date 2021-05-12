@@ -34,7 +34,10 @@ if [ "$1" = "dev" ]; then
 	rm -rf $APOLLO_DIR/apolloui
 	git clone --single-branch --branch dev-BTC https://github.com/jstefanop/apolloui.git $APOLLO_DIR/apolloui
 else
-	git clone --recurse-submodules -j8 https://github.com/jstefanop/apolloapi.git $APOLLO_DIR
+	echo -e "${YELLOW} ---> Using PRODUCTION branch"
+	git clone --single-branch --branch production-BTC https://github.com/jstefanop/apolloapi.git $APOLLO_DIR
+	rm -rf $APOLLO_DIR/apolloui
+	git clone --single-branch --branch production-BTC https://github.com/jstefanop/apolloui.git $APOLLO_DIR/apolloui
 fi
 
 chown -R futurebit $APOLLO_DIR
