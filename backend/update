@@ -31,6 +31,7 @@ echo -e "${YELLOW} ---> Updating API modules${NC}"
 
 cd $APOLLO_DIR
 
+git reset --hard
 git pull
 
 echo "30" > $TMPFILE
