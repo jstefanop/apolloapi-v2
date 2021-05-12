@@ -66,9 +66,10 @@ cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/node.service /etc/systemd/system/
 
-echo -e "${YELLOW} ---> Restarting APP${NC}"
+echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 
-systemctl restart apollo-ui
-
 echo "100" > $TMPFILE
+
+echo -e "${YELLOW} ---> Restarting APP${NC}"
+systemctl restart apollo-ui
