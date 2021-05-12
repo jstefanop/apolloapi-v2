@@ -18,7 +18,7 @@ gpio write 0 0
 sleep .5
 gpio write 0 1
 
-sleep 10
+sleep 30
 #start internal hashboard
 
 screen -dmS miner ./futurebit-miner -comport /dev/ttyS1 -ao_mode 1 $settings
