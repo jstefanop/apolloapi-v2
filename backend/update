@@ -60,17 +60,6 @@ yarn build
 
 echo "80" > $TMPFILE
 
-### SYSTEMD ###
-echo -e "${YELLOW} ---> Updating systemd files${NC}"
+echo -e "${YELLOW} ---> Running update_system script${NC}"
 
-cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/node.service /etc/systemd/system/
-
-echo -e "${YELLOW} ---> Reloading systemd${NC}"
-systemctl daemon-reload
-
-echo "100" > $TMPFILE
-
-echo -e "${YELLOW} ---> Restarting APP${NC}"
-systemctl restart apollo-ui
+$APOLLO_DIR/backend/update_system
