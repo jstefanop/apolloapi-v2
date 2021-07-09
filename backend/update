@@ -62,4 +62,4 @@ echo "80" > $TMPFILE
 
 echo -e "${YELLOW} ---> Running update_system script${NC}"
 
-$APOLLO_DIR/backend/update_system
+bash $APOLLO_DIR/backend/update_system
