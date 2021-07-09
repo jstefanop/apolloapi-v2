@@ -26,3 +26,5 @@ echo "100" > $TMPFILE
 
 echo -e "${YELLOW} ---> Restarting APP${NC}"
 systemctl restart apollo-ui
+systemctl restart node
+systemctl restart apollo-miner
