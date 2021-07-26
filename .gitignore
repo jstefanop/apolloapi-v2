@@ -66,3 +66,4 @@ typings/
 #backed
 backend/apollo-miner/apollo-miner.*
 backend/apollo-miner/*config*
+backend/apollo-miner/miner.events

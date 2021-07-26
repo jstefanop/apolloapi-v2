@@ -13,7 +13,6 @@ module.exports.typeDefs = `
   }
 
   type McuStats {
-    currentAppVersion: String,
     timestamp: String!
     hostname: String,
     operatingSystem: String
