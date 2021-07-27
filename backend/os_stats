@@ -34,7 +34,7 @@ if [ -f "/sys/devices/virtual/thermal/thermal_zone0/temp" ]; then
 else
   TEMP="0"
 fi
-ACTIVE_WIFI=$(nmcli -t -f name c show --active | sed ':a;N;$!ba;s/\n/,/g')
+ACTIVE_WIFI=$(nmcli -t -f name c show --active)
 
 MINER_TEMP="0"
 
