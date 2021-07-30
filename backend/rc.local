@@ -1,0 +1,12 @@
+#MCU Image rc.local
+
+/opt/apolloapi/backend/firewall
+#configure gpios
+gpio mode 1 out
+gpio write 1 0
+gpio mode 0 out
+gpio write 0 1
+#configure cpu
+cpufreq-set -c0 -u 1.2GHz -g CONSERVATIVE
+#mount nvme drive
+/opt/apolloapi/backend/first_run

@@ -14,7 +14,10 @@ tune2fs -m .1 /dev/nvme0n1p1
 mkdir /media/nvme/Bitcoin
 chown -R futurebit /media/nvme/Bitcoin/
 
-#restart node
-systemctl restart node.service
+#configure swap
+fallocate -l 2G /media/nvme/swapfile
+chmod 600 /media/nvme/swapfile
+mkswap /media/nvme/swapfile
 
 sed -i '$ d' /etc/rc.local
+sed -i "\$i mount \/dev\/nvme0n1p1 \/media\/nvme" /etc/rc.local
