@@ -17,6 +17,9 @@ if [ ! -b "$DEVICE"  ]; then
 	tune2fs -m .1 /dev/nvme0n1p1
 	mkdir /media/nvme/Bitcoin
 	chown -R futurebit /media/nvme/Bitcoin/
+else
+        mkdir /media/nvme
+	mount /dev/nvme0n1p1 /media/nvme
 fi
 
 
