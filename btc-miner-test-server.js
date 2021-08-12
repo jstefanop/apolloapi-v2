@@ -101,7 +101,7 @@ function getData() {
 					"interval": 591202,
 					"jobs": 21681,
 					"cleanFlags": 1040,
-					"sharesSent": 122077,
+					"sharesSent": getRandomArbitrary(4000, 45000),
 					"sharesAccepted": 121988,
 					"sharesRejected": 89,
 					"solutionsAccepted": "516223196",
