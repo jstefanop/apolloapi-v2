@@ -9,6 +9,16 @@ APOLLO_DIR=/opt/apolloapi
 ### SYSTEM commands ###
 # Write down this line the system commands needed
 
+
+### Update Miner/Node Binaries ###
+
+echo -e "${YELLOW} ---> Updating System binaries${NC}"
+
+arch=$(uname -m)
+
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+
 # Don't touch below this line
 echo "90" > $TMPFILE
 

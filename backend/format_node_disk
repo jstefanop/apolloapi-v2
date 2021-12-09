@@ -1,18 +1,23 @@
 #!/bin/bash
 
 # Stop node
-screen -X -S node quit
+systemctl stop node
 sleep 10
 
-# Umount disk
-sudo umount /media/nvme
+# Umount disk, remove existing partition
+umount /media/nvme
+parted /dev/nvme0n1 rm 1
 
 # Format disk
-sudo mkfs.ext4 -F -j /dev/nvme0n1p1
+parted /dev/nvme0n1 mklabel gpt -s
+parted -a opt /dev/nvme0n1 mkpart primary ext4 0% 100% -s
+mkfs.ext4 /dev/nvme0n1p1
 
-# Mount back disk
-sudo mount /dev/nvme0n1p1 /media/nvme
+#configure node drive
+mount /dev/nvme0n1p1 /media/nvme
+tune2fs -m .1 /dev/nvme0n1p1
+mkdir /media/nvme/Bitcoin
+chown -R futurebit /media/nvme/Bitcoin/
 
-# Recreate Bitcoin directory
-sudo mkdir /media/nvme/Bitcoin
-sudo chown futurebit.futurebit /media/nvme/Bitcoin
+#Start node
+systemctl start node
