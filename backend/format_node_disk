@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Stop node
+screen -X -S node quit
+sleep 10
+
+# Umount disk
+sudo umount /media/nvme
+
+# Format disk
+sudo mkfs.ext4 -F -j /dev/nvme0n1p1
+
+# Mount back disk
+sudo mount /dev/nvme0n1p1 /media/nvme
+
+# Recreate Bitcoin directory
+sudo mkdir /media/nvme/Bitcoin
+sudo chown futurebit.futurebit /media/nvme/Bitcoin
