@@ -14,7 +14,7 @@ function formatDisk () {
   return new Promise((resolve, reject) => {
     const scriptName = (process.env.NODE_ENV === 'production') ? 'format_node_disk' : 'format_node_disk_fake'
     const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
-    exec(scriptPath, {}, (err, stdout) => {
+    exec(`sudo ${scriptPath}`, {}, (err, stdout) => {
       if (err) {
         reject(err)
       } else {
