@@ -1,12 +1,21 @@
 const { join } = require('path')
-const { exec } = require('child_process')
+const { spawn } = require('child_process')
 const axios = require('axios')
 
 module.exports = ({ define }) => {
   define('format', async (payload, { knex, errors, utils }) => {
+    await formatDisk();
+  }, {
+    auth: true
+  })
+}
+
+function formatDisk () {
+  return new Promise((resolve, reject) => {
     const scriptName = (process.env.NODE_ENV === 'production') ? 'format_node_disk' : 'format_node_disk_fake'
     const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
-    const cmd = spawn('sudo',  ['bash', scriptPath])
+
+    const cmd = spawn('sudo',  ['bash', scriptPath]);
 
     cmd.stdout.on('data', (data) => {
       console.log(`stdout: ${data}`);
@@ -21,7 +30,5 @@ module.exports = ({ define }) => {
       console.log(`child process exited with code ${code}`);
       resolve();
     });
-  }, {
-    auth: true
-  })
+  });
 }
