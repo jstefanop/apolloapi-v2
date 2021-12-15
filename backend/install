@@ -99,12 +99,14 @@ cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/a
 echo -e "${YELLOW} ---> Installing systemd files${NC}"
 
 
-cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/node.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-ui.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
 
 systemctl daemon-reload
 
+systemctl enable swap
 systemctl enable apollo-ui
 systemctl enable apollo-miner
 systemctl enable node
