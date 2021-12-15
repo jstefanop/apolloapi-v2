@@ -9,22 +9,41 @@ APOLLO_DIR=/opt/apolloapi
 ### SYSTEM commands ###
 # Write down this line the system commands needed
 
+
+### Update Miner/Node Binaries ###
+
+echo -e "${YELLOW} ---> Updating System binaries${NC}"
+
+arch=$(uname -m)
+
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+
 # Don't touch below this line
 echo "90" > $TMPFILE
 
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Updating systemd files${NC}"
 
-cp $APOLLO_DIR/backend/apollo-ui.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/apollo-miner.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/node.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-ui.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/start_swap.sh $APOLLO_DIR/backend/start_swap.sh
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 
-echo "100" > $TMPFILE
+
 
 echo -e "${YELLOW} ---> Restarting APP${NC}"
-systemctl restart apollo-ui
+systemctl enable swap
+systemctl start swap
 systemctl restart node
 systemctl restart apollo-miner
+
+#Restart UI after old version of UI finishes update progress
+( sleep 1 ; systemctl restart apollo-ui ) &
+
+echo "100" > $TMPFILE
+

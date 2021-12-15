@@ -3,6 +3,7 @@ const { exec } = require('child_process')
 const fs = require('fs').promises
 const path = require('path')
 const _ = require('lodash')
+const moment = require('moment')
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
@@ -54,6 +55,11 @@ async function getMinerStats (errors) {
           received.slots = _.mapKeys(received.slots, (value, name) => {
             return `int_${name}`
           });
+
+          // Hack to add timezone to miner date
+          let offset = new Date().getTimezoneOffset();
+          offset *= -1
+          received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss').utcOffset(offset).format();
 
           stats.push(received);
         }));

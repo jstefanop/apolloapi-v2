@@ -18,6 +18,7 @@ module.exports.typeDefs = `
     connectionCount: Int
     miningInfo: MiningInfo
     peerInfo: [PeerInfo]
+    networkInfo: NetworkInfo
     error: LoadingError
   }
 
@@ -36,6 +37,11 @@ module.exports.typeDefs = `
   type PeerInfo {
     addr: String
     subver: String
+  }
+
+  type NetworkInfo {
+    version: String
+    subversion: String
   }
 
   type LoadingError {

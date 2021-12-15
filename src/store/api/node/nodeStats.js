@@ -6,7 +6,7 @@ const bitcoin = require('litecoin');
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
     try {
-      const unrefinedStats = await getNodeStats()
+      const unrefinedStats = await getNodeStats();
 
       // At this point, no error present
 
@@ -34,12 +34,20 @@ module.exports = ({ define }) => {
         subver
       }));
 
+      // Strip networkInfo of unnecessary properties
+      const unrefinedNetworkInfo = unrefinedStats[4];
+      const networkInfo = {
+        version: unrefinedNetworkInfo.version,
+        subversion: unrefinedNetworkInfo.subversion
+      };
+
       // Convert unrefinedStats to object
       const stats = {
         blockchainInfo: blockchainInfo,
         connectionCount: unrefinedStats[1],
         miningInfo: miningInfo,
         peerInfo: peerInfo,
+        networkInfo: networkInfo,
         error: null
       };
 
@@ -97,6 +105,20 @@ function getNodeStats () {
     })
   })
 
+  const getNetworkInfoPromise = new Promise((resolve, reject) => {
+    bitcoinClient.cmd('getnetworkinfo', (error, networkInfo) => {
+      if (error) {
+        reject(error)
+      } else {
+        try {
+          resolve(networkInfo)
+        } catch (error) {
+          reject(error)
+        }
+      }
+    })
+  })
+
   const getConnectionCountPromise = new Promise((resolve, reject) => {
     bitcoinClient.getConnectionCount((error, connectionCount) => {
       if (error) {
@@ -144,7 +166,8 @@ function getNodeStats () {
       getBlockchainInfoPromise,
       getConnectionCountPromise,
       getMiningInfoPromise,
-      getPeerInfoPromise
+      getPeerInfoPromise,
+      getNetworkInfoPromise
     ]
   )
 }
