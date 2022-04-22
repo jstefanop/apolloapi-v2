@@ -75,7 +75,7 @@ const bitcoinClient = new bitcoin.Client({
   host: '127.0.0.1',
   port: 8332,
   user: 'futurebit',
-  pass: 'futurebit',
+  pass: process.env.BITCOIND_PASSWORD,
   timeout: 30000,
   ssl: false
 });

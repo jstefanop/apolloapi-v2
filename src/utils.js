@@ -21,7 +21,10 @@ module.exports.auth = {
 
   changeNodeRpcPassword (password) {
     exec(`sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g /opt/apolloapi/backend/node/bitcoin.conf`)
+    if (process.env.BITCOIND_PASSWORD) exec(`sudo sed -i s/BITCOIND_PASSWORD.*/BITCOIND_PASSWORD=${password}/g /opt/apolloapi/.env`)
+    else exec(`sudo echo "BITCOIND_PASSWORD=${password}" >> /opt/apolloapi/.env`)
     exec('sudo systemctl restart node')
+    exec('sudo systemctl restart apollo-ui')
   },
 
   generateAccessToken () {
