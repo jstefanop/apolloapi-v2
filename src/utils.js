@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const { exec } = require('child_process')
 const config = require('config')
 
 module.exports.auth = {
@@ -12,6 +13,15 @@ module.exports.auth = {
       return false
     }
     return bcrypt.compare(password, hash)
+  },
+
+  changeSystemPassword (password) {
+    exec(`sudo usermod --password ${password} futurebit`)
+  },
+
+  changeNodeRpcPassword (password) {
+    exec(`sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g /opt/apolloapi/backend/node/bitcoin.conf`)
+    exec('sudo systemctl restart node')
   },
 
   generateAccessToken () {
