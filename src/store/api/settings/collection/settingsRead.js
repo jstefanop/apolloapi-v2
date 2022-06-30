@@ -13,6 +13,8 @@ module.exports = ({ define }) => {
       'left_sidebar_extended as leftSidebarExtended',
       'right_sidebar_visibility as rightSidebarVisibility',
       'temperature_unit as temperatureUnit',
+      'node_rpc_password as nodeRpcPassword',
+      'node_enable_tor as nodeEnableTor'
     ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')

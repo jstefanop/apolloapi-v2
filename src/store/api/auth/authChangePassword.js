@@ -10,7 +10,6 @@ module.exports = ({ define }) => {
     })
 
     utils.auth.changeSystemPassword(password)
-    utils.auth.changeNodeRpcPassword(password)
   }, {
     auth: true 
   })
