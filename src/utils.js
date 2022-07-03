@@ -37,12 +37,17 @@ module.exports.auth = {
     }
   },
 
-  async manageTor (settings)  {
-    if (settings.nodeEnableTor) {
-      exec(`echo "server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nmaxconnections=32\nupnp=1\nuacomment=FutureBit-Apollo-Node\n#TOR_START\nproxy=127.0.0.1:9050\nlisten=1\nbind=127.0.0.1\nonlynet=onion\ndnsseed=0\ndns=0\n#TOR_END" | sudo tee /opt/apolloapi/backend/node/bitcoin.conf`)
-    } else {
-      exec(`echo "server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nmaxconnections=32\nupnp=1\nuacomment=FutureBit-Apollo-Node" | sudo tee /opt/apolloapi/backend/node/bitcoin.conf`)
-    }
+  async manageBitcoinConf (settings)  {
+    const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nmaxconnections=32\nupnp=1\nuacomment=FutureBit-Apollo-Node`
+    let conf = defaultConf
+
+    if (settings.nodeEnableTor) conf += `\n#TOR_START\nproxy=127.0.0.1:9050\nlisten=1\nbind=127.0.0.1\nonlynet=onion\ndnsseed=0\ndns=0\n#TOR_END`
+
+    if (settings.nodeUserConf) conf += `\n#USER_INPUT_START\n${settings.nodeUserConf}\n#USER_INPUT_END`
+
+    console.log('Writing Bitcoin conf file', conf)
+
+    exec(`echo "${conf}" | sudo tee /opt/apolloapi/backend/node/bitcoin.conf`)
 
     exec('sudo systemctl restart node')
   }

@@ -13,7 +13,8 @@ const updateFields = {
   rightSidebarVisibility: 'right_sidebar_visibility',
   temperatureUnit: 'temperature_unit',
   nodeRpcPassword: 'node_rpc_password',
-  nodeEnableTor: 'node_enable_tor'
+  nodeEnableTor: 'node_enable_tor',
+  nodeUserConf: 'node_user_conf'
 }
 
 module.exports = ({ define }) => {

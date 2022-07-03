@@ -6,7 +6,7 @@ module.exports = ({ define }) => {
     await dispatch('api/settings/collection/update', settings)
     const newSettings = await dispatch('api/settings/collection/read')
 
-    if (oldSettings.nodeEnableTor !== newSettings.nodeEnableTor) await utils.auth.manageTor(newSettings);
+    if (oldSettings.nodeEnableTor !== newSettings.nodeEnableTor || oldSettings.nodeUserConf !== newSettings.nodeUserConf) await utils.auth.manageBitcoinConf(newSettings);
 
     await generateConf(null, newSettings);
 

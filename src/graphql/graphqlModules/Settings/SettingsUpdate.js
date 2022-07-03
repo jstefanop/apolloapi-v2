@@ -20,6 +20,7 @@ module.exports.typeDefs = `
     temperatureUnit: TemperatureUnit
     nodeRpcPassword: String
     nodeEnableTor: Boolean
+    nodeUserConf: String
   }
 
   type SettingsUpdateOutput {
