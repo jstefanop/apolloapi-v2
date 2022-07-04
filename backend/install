@@ -14,7 +14,7 @@ echo -e "${YELLOW} ---> Installing required system packages${NC}"
 apt-get update
 apt-get -y upgrade
 
-DEBIAN_FRONTEND=noninteractive apt-get -y -q install htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev vim git sudo iptables network-manager
+DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev vim git sudo iptables network-manager
 
 APOLLO_DIR=/opt/apolloapi
 
@@ -94,6 +94,10 @@ arch=$(uname -m)
 
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
 
+### TOR ###
+usermod -a -G debian-tor futurebit
+cp $APOLLO_DIR/backend/torrc /etc/tor/torrc
+
 
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Installing systemd files${NC}"
@@ -111,5 +115,6 @@ systemctl enable apollo-ui
 systemctl enable apollo-miner
 systemctl enable node
 systemctl start apollo-ui
+systemctl start tor
 
 echo -e "${YELLOW} Installation complete${NC}"

@@ -9,6 +9,21 @@ APOLLO_DIR=/opt/apolloapi
 ### SYSTEM commands ###
 # Write down this line the system commands needed
 
+### Install packages ###
+
+echo -e "${YELLOW} ---> Installing system packages${NC}"
+
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y tor
+
+### Configuring Tor ###
+
+echo -e "${YELLOW} ---> Configuring Tor${NC}"
+
+cp $APOLLO_DIR/backend/torrc /etc/tor/torrc
+usermod -a -G debian-tor futurebit
+systemctl restart tor.service
+
 
 ### Update Miner/Node Binaries ###
 

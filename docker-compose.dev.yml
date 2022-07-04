@@ -1,6 +1,9 @@
 version: '3.5'
 services:
   backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     user: 1000:1000
     volumes:
       - .:/app
@@ -10,6 +13,9 @@ services:
     ports:
       - '5000:5000'
   frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     user: 1000:1000
     volumes:
       - ./apolloui:/app

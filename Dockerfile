@@ -39,11 +39,18 @@ ENV NODE_ENV $NODE_ENV
 WORKDIR /app
 
 RUN npm --version
-RUN npm install yarn
+RUN npm install -g yarn
 
 COPY ./package.json /app/package.json
 COPY ./yarn.lock /app/yarn.lock
 
 RUN rm -rf /app/package-lock.json
+#RUN ./node_modules/.bin/yarn
+RUN yarn
 
-RUN ./node_modules/.bin/yarn
+# Copy app files
+COPY . .
+# Expose port
+EXPOSE 5000
+# Start the app
+CMD [ "yarn", "dev" ]
