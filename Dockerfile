@@ -28,6 +28,7 @@ ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
 ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
 RUN adduser --disabled-password futurebit
+RUN grep -qxF 'futurebit  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers || echo 'futurebit  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 RUN mkdir -p /opt/apolloapi
 RUN chown -R futurebit /opt
 

@@ -94,6 +94,9 @@ arch=$(uname -m)
 
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
 
+### Bitcoind ###
+cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+
 ### TOR ###
 usermod -a -G debian-tor futurebit
 cp $APOLLO_DIR/backend/torrc /etc/tor/torrc

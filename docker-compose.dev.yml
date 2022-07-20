@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    user: 1000:1000
+    user: root
     volumes:
       - .:/opt/apolloapi
     command: sh -c "yarn --production=false && yarn dev"
@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    user: 1000:1000
+    user: root
     volumes:
       - ./apolloui:/app
     command: sh -c "npm start"

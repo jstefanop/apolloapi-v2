@@ -16,7 +16,7 @@ module.exports.auth = {
   },
 
   changeSystemPassword (password) {
-    exec(`sudo usermod --password ${password} futurebit`)
+    exec(`echo "futurebit:${password}" | sudo chpasswd`)
   },
 
   async changeNodeRpcPassword (password) {
