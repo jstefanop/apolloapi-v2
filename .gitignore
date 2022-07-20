@@ -68,3 +68,6 @@ typings/
 backend/apollo-miner/apollo-miner.*
 backend/apollo-miner/*config*
 backend/apollo-miner/miner.events
+backend/apollo-miner/futurebit-miner
+backend/node/bitcoind
+backend/start_swap.sh
