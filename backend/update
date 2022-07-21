@@ -18,6 +18,9 @@ systemctl stop apollo-miner
 
 APOLLO_DIR=/opt/apolloapi
 
+git config --global --add safe.directory $APOLLO_DIR
+git config --global --add safe.directory $APOLLO_DIR/apolloui
+
 chown -R futurebit $APOLLO_DIR
 
 echo "10" > $TMPFILE
