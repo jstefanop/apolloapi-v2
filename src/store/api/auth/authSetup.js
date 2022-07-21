@@ -1,5 +1,3 @@
-const generator = require('generate-password')
-
 module.exports = ({ define }) => {
   define('setup', async ({ password }, { knex, errors, utils }) => {
     try {
@@ -12,17 +10,8 @@ module.exports = ({ define }) => {
         password: await utils.auth.hashPassword(password)
       })
 
-      const rpcPassword = generator.generate({
-        length: 12,
-        numbers: true
-      })
-
-      await knex('settings').update({
-        node_rpc_password: rpcPassword
-      })
-
       utils.auth.changeSystemPassword(password)
-      await utils.auth.changeNodeRpcPassword(rpcPassword)
+      await utils.auth.changeNodeRpcPassword()
     } catch (err) {
       console.log('ERROR', err);
     }

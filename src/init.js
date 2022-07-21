@@ -26,24 +26,12 @@ async function initEnvFile () {
       .map(({ name, value }) => `${name}=${value}`)
       .join('\n') + '\n'
     writeFileSync(envPath, envFile)
-  } else {
-    const envFile = readFileSync(envPath)
-    let envString = envFile.toString();
-    if (!envString.match(/BITCOIND_PASSWORD=.*/)) {
-      console.log('Generating Bitcoin RPC password')
-
-      const rpcPassword = generator.generate({
-        length: 12,
-        numbers: true
-      })
-
-      await knex('settings').update({
-        node_rpc_password: rpcPassword
-      })
-
-      await utils.auth.changeNodeRpcPassword(rpcPassword)
-    }
   }
+  
+  const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
+
+  if (settings && settings.nodeRpcPassword) return
+  else await utils.auth.changeNodeRpcPassword()
 }
 
 async function runMigrations () {

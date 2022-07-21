@@ -1,7 +1,9 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { exec } = require('child_process')
+const generator = require('generate-password')
 const config = require('config')
+const { knex } = require('./db')
 
 module.exports.auth = {
   hashPassword (password) {
@@ -19,12 +21,22 @@ module.exports.auth = {
     exec(`echo "futurebit:${password}" | sudo chpasswd`)
   },
 
-  async changeNodeRpcPassword (password) {
-    exec(`sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g /opt/apolloapi/backend/node/bitcoin.conf`)
-    if (process.env.BITCOIND_PASSWORD) exec(`sudo sed -i s/BITCOIND_PASSWORD.*/BITCOIND_PASSWORD=${password}/g /opt/apolloapi/.env`)
-    else exec(`echo "BITCOIND_PASSWORD=${password}" | sudo tee -a /opt/apolloapi/.env`)
-    exec('sudo systemctl restart node')
-    exec('sudo systemctl restart apollo-ui')
+  async changeNodeRpcPassword () {
+    try {
+      const password = generator.generate({
+        length: 12,
+        numbers: true
+      })
+
+      await knex('settings').update({
+        node_rpc_password: password
+      })
+
+      exec(`sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g /opt/apolloapi/backend/node/bitcoin.conf`)
+      exec('sudo systemctl restart node')
+    } catch (err) {
+      console.log('ERR changeNodeRpcPassword', err)
+    }
   },
 
   generateAccessToken () {
