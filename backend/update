@@ -62,6 +62,8 @@ yarn build
 
 echo "80" > $TMPFILE
 
+chown -R futurebit $APOLLO_DIR
+
 echo -e "${YELLOW} ---> Running update_system script${NC}"
 
 bash $APOLLO_DIR/backend/update_system
