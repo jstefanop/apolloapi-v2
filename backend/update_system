@@ -14,7 +14,7 @@ APOLLO_DIR=/opt/apolloapi
 echo -e "${YELLOW} ---> Installing system packages${NC}"
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y tor
+DEBIAN_FRONTEND=noninteractive apt-get install -y tor sqlite3
 
 ### Configuring Tor ###
 
