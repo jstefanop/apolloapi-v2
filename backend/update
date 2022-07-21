@@ -18,6 +18,8 @@ systemctl stop apollo-miner
 
 APOLLO_DIR=/opt/apolloapi
 
+chown -R futurebit $APOLLO_DIR
+
 echo "10" > $TMPFILE
 
 . /usr/local/nvm/nvm.sh
