@@ -7,7 +7,6 @@ const { knex } = require('./db')
 
 initEnvFile()
 runMigrations()
-runGenerateBitcoinPassword()
 .then(startServer)
 
 async function initEnvFile () {
@@ -32,7 +31,9 @@ async function initEnvFile () {
 
 async function runMigrations () {
   try {
+    console.log('Run migrations')
     const resp = await knex.migrate.latest()
+    await runGenerateBitcoinPassword();
   } catch (err) {
     console.log(err)
   }
@@ -40,9 +41,10 @@ async function runMigrations () {
 
 async function runGenerateBitcoinPassword () {
   try {
+    console.log('Checking bitcoin password existence')
     const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
 
-    if (settings && settings.nodeRpcPassword) return
+    if (settings && settings.nodeRpcPassword) return console.log('Bitcoin password found')
     else await utils.auth.changeNodeRpcPassword()
   } catch (err) {
     console.log(err)

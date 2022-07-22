@@ -23,6 +23,8 @@ module.exports.auth = {
 
   async changeNodeRpcPassword () {
     try {
+      console.log('Generating and saving bitcoin password')
+
       const password = generator.generate({
         length: 12,
         numbers: true
