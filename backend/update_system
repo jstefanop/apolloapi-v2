@@ -69,8 +69,7 @@ systemctl restart node
 systemctl restart apollo-miner
 
 #Restart UI after old version of UI finishes update progress
-( sleep 5 ; systemctl stop apollo-ui )
-( sleep 10 ; systemctl start apollo-ui ) &
+( sleep 1 ; systemctl restart apollo-ui )
 
 echo "100" > $TMPFILE
 

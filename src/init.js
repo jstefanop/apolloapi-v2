@@ -7,6 +7,7 @@ const { knex } = require('./db')
 
 initEnvFile()
 runMigrations()
+runGenerateBitcoinPassword()
 .then(startServer)
 
 async function initEnvFile () {
@@ -27,16 +28,22 @@ async function initEnvFile () {
       .join('\n') + '\n'
     writeFileSync(envPath, envFile)
   }
-  
-  const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
-
-  if (settings && settings.nodeRpcPassword) return
-  else await utils.auth.changeNodeRpcPassword()
 }
 
 async function runMigrations () {
   try {
     const resp = await knex.migrate.latest()
+  } catch (err) {
+    console.log(err)
+  }
+}
+
+async function runGenerateBitcoinPassword () {
+  try {
+    const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
+
+    if (settings && settings.nodeRpcPassword) return
+    else await utils.auth.changeNodeRpcPassword()
   } catch (err) {
     console.log(err)
   }
