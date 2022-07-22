@@ -10,5 +10,7 @@ module.exports = ({ define }) => {
     return {
       pools
     }
+  }, {
+    auth: true 
   })
 }

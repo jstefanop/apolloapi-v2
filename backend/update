@@ -18,6 +18,11 @@ systemctl stop apollo-miner
 
 APOLLO_DIR=/opt/apolloapi
 
+git config --global --add safe.directory $APOLLO_DIR
+git config --global --add safe.directory $APOLLO_DIR/apolloui
+
+chown -R futurebit $APOLLO_DIR
+
 echo "10" > $TMPFILE
 
 . /usr/local/nvm/nvm.sh
@@ -59,6 +64,8 @@ echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
 yarn build
 
 echo "80" > $TMPFILE
+
+chown -R futurebit $APOLLO_DIR
 
 echo -e "${YELLOW} ---> Running update_system script${NC}"
 

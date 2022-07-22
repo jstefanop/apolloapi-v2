@@ -6,7 +6,17 @@ const bitcoin = require('litecoin');
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
     try {
-      const unrefinedStats = await getNodeStats();
+      const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
+      const bitcoinClient = new bitcoin.Client({
+        host: '127.0.0.1',
+        port: 8332,
+        user: 'futurebit',
+        pass: settings.nodeRpcPassword,
+        timeout: 30000,
+        ssl: false
+      });
+
+      const unrefinedStats = await getNodeStats(bitcoinClient);
 
       // At this point, no error present
 
@@ -71,16 +81,7 @@ module.exports = ({ define }) => {
   })
 }
 
-const bitcoinClient = new bitcoin.Client({
-  host: '127.0.0.1',
-  port: 8332,
-  user: 'futurebit',
-  pass: 'futurebit',
-  timeout: 30000,
-  ssl: false
-});
-
-function getNodeStats () {
+function getNodeStats (bitcoinClient) {
   const getBlockchainInfoPromise = new Promise((resolve, reject) => {
     bitcoinClient.getBlockchainInfo((error, blockchainInfo) => {
       if (error) {
@@ -171,3 +172,4 @@ function getNodeStats () {
     ]
   )
 }
+

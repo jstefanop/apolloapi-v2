@@ -1,16 +1,22 @@
 version: '3.5'
 services:
   backend:
-    user: 1000:1000
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
     volumes:
-      - .:/app
+      - .:/opt/apolloapi
     command: sh -c "yarn --production=false && yarn dev"
     environment:
       NODE_ENV: 'development'
     ports:
       - '5000:5000'
   frontend:
-    user: 1000:1000
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
     volumes:
       - ./apolloui:/app
     command: sh -c "npm start"

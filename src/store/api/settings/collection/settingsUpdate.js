@@ -11,7 +11,10 @@ const updateFields = {
   leftSidebarVisibility: 'left_sidebar_visibility',
   leftSidebarExtended: 'left_sidebar_extended',
   rightSidebarVisibility: 'right_sidebar_visibility',
-  temperatureUnit: 'temperature_unit'
+  temperatureUnit: 'temperature_unit',
+  nodeRpcPassword: 'node_rpc_password',
+  nodeEnableTor: 'node_enable_tor',
+  nodeUserConf: 'node_user_conf'
 }
 
 module.exports = ({ define }) => {

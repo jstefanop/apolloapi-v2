@@ -1,12 +1,15 @@
-const { writeFileSync, existsSync } = require('fs')
+const { writeFileSync, readFileSync, existsSync } = require('fs')
 const { join } = require('path')
 const crypto = require('crypto')
+const generator = require('generate-password')
+const utils = require('./utils')
+const { knex } = require('./db')
 
 initEnvFile()
 runMigrations()
 .then(startServer)
 
-function initEnvFile () {
+async function initEnvFile () {
   const envPath = join(__dirname, '..', '.env')
   const envExists = existsSync(envPath)
   if (!envExists) {
@@ -27,9 +30,22 @@ function initEnvFile () {
 }
 
 async function runMigrations () {
-  const { knex } = require('./db')
   try {
+    console.log('Run migrations')
     const resp = await knex.migrate.latest()
+    await runGenerateBitcoinPassword();
+  } catch (err) {
+    console.log(err)
+  }
+}
+
+async function runGenerateBitcoinPassword () {
+  try {
+    console.log('Checking bitcoin password existence')
+    const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
+
+    if (settings && settings.nodeRpcPassword) return console.log('Bitcoin password found')
+    else await utils.auth.changeNodeRpcPassword()
   } catch (err) {
     console.log(err)
   }

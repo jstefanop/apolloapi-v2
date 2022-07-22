@@ -13,6 +13,9 @@ start_hashboards()
     done
 }
 
+#clear old log files
+rm apollo-miner.*
+
 #reset internal hashboard
 gpio write 0 0
 sleep .5

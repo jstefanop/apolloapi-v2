@@ -18,6 +18,9 @@ module.exports.typeDefs = `
     leftSidebarExtended: Boolean
     rightSidebarVisibility: Boolean
     temperatureUnit: TemperatureUnit
+    nodeRpcPassword: String
+    nodeEnableTor: Boolean
+    nodeUserConf: String
   }
 
   type SettingsUpdateOutput {

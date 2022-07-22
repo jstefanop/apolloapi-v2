@@ -8,6 +8,8 @@ module.exports = ({ define }) => {
     await knex('setup').update({
       password: await utils.auth.hashPassword(password)
     })
+
+    utils.auth.changeSystemPassword(password)
   }, {
     auth: true 
   })

@@ -6,7 +6,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 RUN apt-get update
 RUN apt-get -y upgrade
 
-RUN DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install htop iputils-ping zip unzip whois traceroute vim openssh-server curl git libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev build-essential libxml2-dev build-essential libxslt1-dev zlib1g-dev python-dev sudo
 
 # nvm environment variables
 RUN mkdir -p /usr/local/nvm
@@ -27,23 +27,33 @@ RUN source $NVM_DIR/nvm.sh \
 ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
 ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
-RUN adduser --disabled-password app
-RUN mkdir /app
-RUN chown -R app /app
+RUN adduser --disabled-password futurebit
+RUN grep -qxF 'futurebit  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers || echo 'futurebit  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN mkdir -p /opt/apolloapi
+RUN chown -R futurebit /opt
 
-USER app
+USER futurebit
 
 ARG NODE_ENV
 ENV NODE_ENV $NODE_ENV
 
-WORKDIR /app
+WORKDIR /opt/apolloapi
 
 RUN npm --version
-RUN npm install yarn
+RUN npm install -g yarn
 
-COPY ./package.json /app/package.json
-COPY ./yarn.lock /app/yarn.lock
+COPY ./package.json /opt/apolloapi/package.json
+COPY ./yarn.lock /opt/apolloapi/yarn.lock
 
-RUN rm -rf /app/package-lock.json
+RUN rm -rf /opt/apolloapi/package-lock.json
+RUN yarn
 
-RUN ./node_modules/.bin/yarn
+# Copy app files
+COPY . .
+
+RUN /opt/apolloapi/backend/install
+
+# Expose port
+EXPOSE 5000
+# Start the app
+CMD [ "yarn", "dev" ]

@@ -1,5 +1,6 @@
 const { Store } = require('backend-store')
 const { loadStore } = require('backend-helpers')
+const logger = require('backend-store/plugins/logger')
 const config = require('config')
 const { knex } = require('./../db')
 const utils = require('./../utils')
@@ -19,7 +20,7 @@ const store = loadStore({
       return !['index.js', 'store.js'].includes(relativePath) && relativePath.match(/\.js$/)
     }
   },
-  logger: {},
+  logger: logger,
   methodContext: {
     knex,
     utils
