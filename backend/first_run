@@ -21,6 +21,7 @@ if [ ! -b "$DEVICE"  ]; then
 else
         mkdir /media/nvme
 	mount /dev/nvme0n1p1 /media/nvme
+	chown -R futurebit /media/nvme/Bitcoin/
 	ln -s /media/nvme/Bitcoin ~/.bitcoin
 fi
 
