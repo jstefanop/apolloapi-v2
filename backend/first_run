@@ -23,7 +23,6 @@ else
 fi
 
 chown -R futurebit /media/nvme/Bitcoin/
-systemctl enable node
 ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
 
 
