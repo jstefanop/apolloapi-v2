@@ -16,14 +16,16 @@ if [ ! -b "$DEVICE"  ]; then
 	mount /dev/nvme0n1p1 /media/nvme
 	tune2fs -m .1 /dev/nvme0n1p1
 	mkdir /media/nvme/Bitcoin
-	chown -R futurebit /media/nvme/Bitcoin/
-	ln -s /media/nvme/Bitcoin ~/.bitcoin
+	
 else
         mkdir /media/nvme
 	mount /dev/nvme0n1p1 /media/nvme
-	chown -R futurebit /media/nvme/Bitcoin/
-	ln -s /media/nvme/Bitcoin ~/.bitcoin
 fi
+
+chown -R futurebit /media/nvme/Bitcoin/
+systemctl enable node
+ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
+
 
 
 #configure swap
