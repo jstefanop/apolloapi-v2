@@ -1,6 +1,6 @@
 exports.up = function (knex, Promise) {
   return knex.schema.table('settings', function (t) {
-    t.text('node_enable_solo_mining').defaultTo(null);
+    t.boolean('node_enable_solo_mining').notNull().defaultTo(false);
   });
 };
 

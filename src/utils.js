@@ -76,7 +76,7 @@ module.exports.auth = {
       await fsPromises.writeFile('/opt/apolloapi/backend/ckpool/ckpool.conf', JSON.stringify(ckpoolConf, null, 2));
 
       exec(
-        ' sudo cp /opt/app/backend/systemd/ckpool.service /etc/systemd/system/ckpool.service'
+        'sudo cp /opt/app/backend/systemd/ckpool.service /etc/systemd/system/ckpool.service'
       );
       exec('sudo systemctl daemon-reload');
       exec('sudo systemctl enable ckpool');
