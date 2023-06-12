@@ -14,7 +14,8 @@ const updateFields = {
   temperatureUnit: 'temperature_unit',
   nodeRpcPassword: 'node_rpc_password',
   nodeEnableTor: 'node_enable_tor',
-  nodeUserConf: 'node_user_conf'
+  nodeUserConf: 'node_user_conf',
+  nodeEnableSoloMining: 'node_enable_solo_mining'
 }
 
 module.exports = ({ define }) => {

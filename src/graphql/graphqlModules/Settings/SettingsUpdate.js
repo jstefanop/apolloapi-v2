@@ -21,6 +21,7 @@ module.exports.typeDefs = `
     nodeRpcPassword: String
     nodeEnableTor: Boolean
     nodeUserConf: String
+    nodeEnableSoloMining: Boolean
   }
 
   type SettingsUpdateOutput {

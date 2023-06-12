@@ -15,7 +15,8 @@ module.exports = ({ define }) => {
       'temperature_unit as temperatureUnit',
       'node_rpc_password as nodeRpcPassword',
       'node_enable_tor as nodeEnableTor',
-      'node_user_conf as nodeUserConf'
+      'node_user_conf as nodeUserConf',
+      'node_enable_solo_mining as nodeEnableSoloMining'
     ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
