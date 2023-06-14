@@ -42,6 +42,13 @@ module.exports.typeDefs = `
   type NetworkInfo {
     version: String
     subversion: String
+    localaddresses: [LocalAddress]
+  }
+
+  type LocalAddress {
+    address: String
+    port: Int
+    score: Int
   }
 
   type LoadingError {
