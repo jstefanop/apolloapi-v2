@@ -48,7 +48,8 @@ module.exports = ({ define }) => {
       const unrefinedNetworkInfo = unrefinedStats[4];
       const networkInfo = {
         version: unrefinedNetworkInfo.version,
-        subversion: unrefinedNetworkInfo.subversion
+        subversion: unrefinedNetworkInfo.subversion,
+        localaddresses: unrefinedNetworkInfo.localaddresses,
       };
 
       // Convert unrefinedStats to object
