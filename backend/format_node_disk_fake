@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Stop node
+screen -X -S node quit
+sleep 5
+
+# Umount disk
+echo "umounting disk"
+
+# Format disk
+echo "formatting disk"
+
+# Mount back disk
+echo "mounting back disk"
+
+# Recreate Bitcoin directory
+echo "recreating dir"

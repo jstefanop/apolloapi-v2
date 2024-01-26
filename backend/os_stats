@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Collects system performance statistics such as CPU, memory, and disk
+# usage as well as top processes ran by users.
+#
+# All size values are in KiB (memory, disk, etc).
+
+# EXAMPLE USAGE:
+# ./os_stats.sh
+
+# Debugging and error handling
+# Stop this script on any error. Unless you want to get data by any means
+# this is a good option.
+set -e
+# Debugging options:
+# set -x
+# set -v
+
+# Validate command line arguments
+if [[ "$#" == 1 || "$#" > 2 ]]; then
+  echo "Wrong number of arguments supplied. Expects 2 arguments: <cpu>, <mem>, or none."
+  exit 1
+fi
+
+# General OS props
+HOST=$HOSTNAME
+#OS=$(uname -a)
+OS=$(lsb_release -s -i -c -r | sed ':a;N;$!ba;s/\n/ /g')
+UPTIME=$(uptime -s)
+LOADAVG=$(cat /proc/loadavg)
+ARCHITECTURE=$(uname -m)
+if [ -f "/sys/devices/virtual/thermal/thermal_zone0/temp" ]; then
+  TEMP=$(cat /sys/devices/virtual/thermal/thermal_zone0/temp)
+else
+  TEMP="0"
+fi
+ACTIVE_WIFI=$(nmcli -t -f name c show --active | sed -z 's/\n/,/g;s/,$/\n/')
+
+MINER_TEMP="0"
+
+if [ -e "/var/local/apollo/hwmon/pcb_temp" ]
+then
+  MINER_TEMP=$(cat /var/local/apollo/hwmon/pcb_temp)
+fi
+
+MINER_FAN_SPEED="0"
+
+if [ -e "/var/local/apollo/hwmon/fan_speed" ]
+then
+  MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_rpm)
+fi
+
+#Network
+ETH_IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f 1)
+ETH_MAC=$(ip link show eth0 | awk '/ether/ {print $2}')
+WLAN_IP=$(ip addr show wlan0 | awk '/inet / {print $2}' | cut -d/ -f 1)
+WLAN_MAC=$(ip link show wlan0 | awk '/ether/ {print $2}')
+ 
+
+# Memory
+memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
+memFree=$(egrep '^MemFree:' /proc/meminfo | awk '{print $2}')
+memCached=$(egrep '^Cached:' /proc/meminfo | awk '{print $2}')
+memAvailable=$(expr "$memFree" + "$memCached")
+memUsed=$(($memTotal - $memFree))
+swapTotal=$(egrep '^SwapTotal:' /proc/meminfo | awk '{print $2}')
+swapFree=$(egrep '^SwapFree:' /proc/meminfo | awk '{print $2}')
+swapUsed=$(($swapTotal - $swapFree))
+
+# CPU
+cpuThreads=$(grep processor /proc/cpuinfo | wc -l)
+#cpuUtilization=$(top -bn3 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}' | tail -1)
+cpuUtilization=$((100 - $(vmstat 1 2 | tail -1 | awk '{print $15}' | sed 's/%//')))
+
+# Disk
+disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T | tail -n+2 | awk '{print "{" "\"total\":" $3 ", \"used\":" $4 ", \"mountPoint\":" "\""$7"\"" "},"}'); do echo $d; done | sed '$s/.$//')
+
+# Bfgminer log
+bfgminerLog=""
+if [ -e "/tmp/bfgminer.log" ]
+then 
+  bfgminerLog=`sudo tail -10 /tmp/bfgminer.log | tr '\n' '|'`
+fi
+
+# Processes
+
+# Final result in JSON
+JSON="{
+  \"hostname\": \"$HOST\",
+  \"operatingSystem\": \"$OS\",
+  \"uptime\": \"$UPTIME\",
+  \"loadAverage\": \"$LOADAVG\",
+  \"architecture\": \"$ARCHITECTURE\",
+  \"temperature\": \"$TEMP\",
+  \"minerTemperature\": \"$MINER_TEMP\",
+  \"minerFanSpeed\": \"$MINER_FAN_SPEED\",
+  \"activeWifi\": \"$ACTIVE_WIFI\",
+  \"network\": [{
+      \"name\": \"eth0\",
+      \"address\": \"$ETH_IP\",
+      \"mac\": \"$ETH_MAC\"
+  }, {
+      \"name\": \"wlan0\",
+      \"address\": \"$WLAN_IP\",
+      \"mac\": \"$WLAN_MAC\"
+  }],
+  \"memory\":
+  {
+    \"total\": $memTotal,
+    \"available\": $memAvailable,
+    \"used\": $memUsed,
+    \"cache\": $memCached,
+    \"swap\": $swapUsed
+  },
+  \"cpu\":
+  {
+    \"threads\": $cpuThreads,
+    \"usedPercent\": $cpuUtilization
+  },
+  \"disks\": [
+    $disksJson
+  ],
+  \"bfgminerLog\": \"$bfgminerLog\"
+}"
+
+echo "$JSON"
+
+# Result output: STDOUT or HTTP
+#if [ -z "$3" ]; then
+#  echo "$JSON"
+#else
+#  curl -X POST -H "Content-Type: application/json" -d "$JSON" "$3"
+#fi

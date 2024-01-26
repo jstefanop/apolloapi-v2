@@ -1,0 +1,15 @@
+[Unit]
+Description=Apollo API & UI app
+After=network.target
+After=rc-local.service
+
+[Service]
+Environment=NODE_ENV=production
+Type=simple
+User=futurebit
+ExecStart=/usr/local/nvm/versions/node/v21.6.1/bin/node /opt/apolloapi/src/init.js
+WorkingDirectory=/opt/apolloapi
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

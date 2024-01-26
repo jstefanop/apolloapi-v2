@@ -1,0 +1,13 @@
+[Unit]
+Description=swap
+After=multi-user.target rc-local.service
+
+[Service]
+Type=simple
+User=root
+#Start:
+ExecStart=/opt/apolloapi/backend/start_swap.sh
+WorkingDirectory=/media/nvme
+
+[Install]
+WantedBy=multi-user.target
