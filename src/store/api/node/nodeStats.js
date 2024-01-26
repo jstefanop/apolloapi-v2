@@ -8,7 +8,7 @@ module.exports = ({ define }) => {
     try {
       const [ settings ] = await knex('settings').select(['node_rpc_password as nodeRpcPassword'])
       const bitcoinClient = new bitcoin.Client({
-        host: '127.0.0.1',
+        host: process.env.BITCOIN_NODE_HOST || '127.0.0.1',
         port: 8332,
         user: 'futurebit',
         pass: settings.nodeRpcPassword,
