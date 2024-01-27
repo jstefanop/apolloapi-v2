@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# Install Ubuntu packages needed
+sudo apt-get update
+sudo apt-get install build-essential yasm libzmq3-dev
+
+echo "Ubuntu packages installed."
+
+# Define the NVM_DIR variable
+NVM_DIR_LINE='export NVM_DIR="/usr/local/nvm"'
+
+# Define the NVM sourcing line
+NVM_SOURCE_LINE='[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm'
+
+# Add the lines to the user's ~/.bashrc file
+echo "$NVM_DIR_LINE" >> ~/.bashrc
+echo "$NVM_SOURCE_LINE" >> ~/.bashrc
+
+echo "Lines added to ~/.bashrc."
+
+# Enable nvm for the current shell session
+eval "$NVM_DIR_LINE"
+eval "$NVM_SOURCE_LINE"
+
+# Change ownership of /usr/local/nvm to user "futurebit"
+sudo chown -R futurebit /usr/local/nvm
+echo "Changed ownership of /usr/local/nvm to futurebit."
+
+# Install Node.js version 21 using nvm
+nvm install 21.6.1
+echo "Node.js version 21 installed."
+
+# Clone the Git repository into /opt/apolloapi
+sudo git clone -b dev git@github.com:jstefanop/apolloapi-v2.git /opt/apolloapi
+
+# Clone the Git repository into /opt/apolloapi/apolloui-v2
+sudo git clone -b dev git@github.com:jstefanop/apolloui-v2.git /opt/apolloapi/apolloui-v2
+
+echo "Git repository cloned into /opt/apolloapi."
+
+# Change ownership of apolloui-v2 to user "futurebit"
+sudo chown -R futurebit /opt/apolloapi
+echo "Changed ownership of /opt/apolloapi to futurebit."
+
+# Install yarn globally
+nvm use 21.6.1
+npm i -g yarn
+echo "Yarn installed globally."
+
+# Navigate to the /opt/apolloapi directory
+cd /opt/apolloapi/apolloui-v2
+
+# Generate a random string for NEXTAUTH_SECRET
+NEXTAUTH_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+
+# Create the .env file with the specified content
+echo "NEXT_PUBLIC_POLLING_TIME=5000" >> .env
+echo "NEXT_PUBLIC_POLLING_TIME_NODE=30000" >> .env
+echo "NEXTAUTH_SECRET='$NEXTAUTH_SECRET'" >> .env
+
+echo ".env file created with random NEXTAUTH_SECRET."
+
+# Install project dependencies using yarn
+yarn
+echo "Project dependencies installed using yarn."
+
+# Build the project
+yarn build
+echo "Project built using yarn."
+
+# Remove the existing iptables rule
+sudo iptables -D PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 5000
+echo "Removed existing iptables rule."
+
+# Add a new iptables rule
+sudo iptables -A PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 3000
+echo "Added new iptables rule."
+
+##### TODO #####
+# Pull API updates from TEMP branch dev-BTC
+cd /opt/apolloapi
+git checkout -b dev-BTC
+git pull origin dev-BTC
+
+# Rename apollo-ui.service to apollo-api.service
+sudo systemctl stop apollo-ui.service
+sudo systemctl disable apollo-ui.service
+sudo cp /opt/apolloapi/backend/systemd/apollo-api.service /etc/systemd/system/
+
+echo "Renamed apollo-ui.service to apollo-api.service."
+
+# Copy the apollo.service file to /etc/systemd/system
+sudo cp /opt/apolloapi/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
+
+# Copy the ckpool.service file to /etc/systemd/system
+sudo cp /opt/apolloapi/backend/systemd/ckpool.service /etc/systemd/system/
+
+echo "Copied apollo.service and ckpool.service to /etc/systemd/system."
+
+# Reload systemd daemon to recognize the new service
+sudo systemctl daemon-reload
+
+echo "Reloaded systemd daemon."
+
+# Stop and disable the apollo-ui.service and ckpool.service
+sudo systemctl enable apollo-api.service
+sudo systemctl enable ckpool.service
+sudo systemctl start apollo-api.service
+
+echo "Restart apollo-api.service."
+
+# Enable and start the apollo-ui-v2.service
+sudo systemctl enable apollo-ui-v2.service
+sudo systemctl start apollo-ui-v2.service
+
+echo "Enabled and started apollo-ui-v2.service."
+
+echo "Installation complete."

@@ -30,6 +30,9 @@ bower_components
 # node-waf configuration
 .lock-wscript
 
+# Dev files
+dev-*.js
+
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/
 
@@ -56,7 +59,7 @@ typings/
 .yarn-integrity
 
 # dotenv environment variables file
-.env
+.env*.local
 
 # next.js build output
 .next
