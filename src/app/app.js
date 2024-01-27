@@ -1,10 +1,12 @@
 const path = require('path')
 const express = require('express')
-const config = require('config')
+const cors = require('cors');
 const graphqlApp = require('./graphqlApp')
 const buildPath = path.join(__dirname, '../../apolloui/build');
 
 const app = express()
+
+app.use(cors());
 
 app.use('/api/graphql', graphqlApp)
 
