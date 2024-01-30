@@ -338,6 +338,11 @@ bindings@^1.5.0:
   dependencies:
     file-uri-to-path "1.0.0"
 
+bitcoin@^3.0.3:
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/bitcoin/-/bitcoin-3.0.3.tgz#a46b73d8641288a20ade07123285eeb927d4e2ff"
+  integrity sha512-ffUbJRG5CmPhEo+AtWTkH7T52jKvTHsDWR8Tg5wac8he/R0BDCh6iyKrCNZDh//9/25sLa/XQ2GMhmdNhFvBsQ==
+
 bl@^4.0.3:
   version "4.1.0"
   resolved "https://registry.yarnpkg.com/bl/-/bl-4.1.0.tgz#451535264182bec2fbbc83a62ab98cf11d9f7b3a"
@@ -1593,10 +1598,6 @@ koa-compose@^3.2.1:
   integrity sha1-qFzLQLfZhtjlo0Wzoazo6rz1Tec=
   dependencies:
     any-promise "^1.1.0"
-
-"litecoin@github:jstefanop/node-litecoin":
-  version "2.0.5"
-  resolved "https://codeload.github.com/jstefanop/node-litecoin/tar.gz/ff1156b4ea4084920ecf5fe644f5d866155a5888"
 
 lodash.defaults@^4.2.0:
   version "4.2.0"
