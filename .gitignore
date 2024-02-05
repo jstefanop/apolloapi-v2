@@ -75,4 +75,5 @@ backend/apollo-miner/miner.events
 backend/apollo-miner/futurebit-miner
 backend/node/bitcoind
 backend/node/bitcoin.conf
+backend/ckpool/ckpool.conf
 backend/start_swap.sh

@@ -5,6 +5,7 @@ const generator = require('generate-password');
 const config = require('config');
 const { knex } = require('./db');
 const fsPromises = require('fs').promises;
+const path = require('path');
 
 module.exports.auth = {
   hashPassword(password) {
@@ -35,9 +36,15 @@ module.exports.auth = {
         node_rpc_password: password,
       });
 
-      exec(
-        `sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g /opt/apolloapi/backend/node/bitcoin.conf`
+      const configFilePath = path.resolve(
+        __dirname,
+        '../backend/node/bitcoin.conf'
       );
+
+      exec(
+        `sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g ${configFilePath}`
+      );
+      console.log(password, configFilePath);
       exec('sudo systemctl restart node');
     } catch (err) {
       console.log('ERR changeNodeRpcPassword', err);
