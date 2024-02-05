@@ -23,6 +23,7 @@ module.exports.typeDefs = `
     temperature: MinerStatsTemperature
     slots: MinerStatsSlots
     slaves: [MinerStatsSlave]
+    ckpool: MinerStatsCkpool
   }
 
   type MinerStatsVersion {
@@ -160,7 +161,7 @@ module.exports.typeDefs = `
     errorRate: Float
     chipRestarts: Int
     wattPerGHs: Float
-    tmpAlert: [MinerStatsSlotAlert],
+    tmpAlert: [MinerStatsSlotAlert]
     osc: Int
     oscStopChip: String
   }
@@ -181,12 +182,68 @@ module.exports.typeDefs = `
     ping: Int
   }
 
-`
+  type MinerStatsCkpool {
+    pool: MinerStatsCkpoolPool
+    users: MinerStatsCkpoolUsers
+  }
+
+  type MinerStatsCkpoolPool {
+    runtime: Int
+    lastupdate: Int
+    Users: Int
+    Workers: Int
+    Idle: Int
+    Disconnected: Int
+    hashrate1m: String
+    hashrate5m: String
+    hashrate15m: String
+    hashrate1hr: String
+    hashrate6hr: String
+    hashrate1d: String
+    hashrate7d: String
+    diff: Int
+    accepted: Int
+    rejected: Int
+    bestshare: Int
+    SPS1m: Float
+    SPS5m: Float
+    SPS15m: Float
+    SPS1h: Float
+  }
+
+  type MinerStatsCkpoolUsers {
+    hashrate1m: String
+    hashrate5m: String
+    hashrate1hr: String
+    hashrate1d: String
+    hashrate7d: String
+    lastshare: Int
+    workers: Int
+    shares: Int
+    bestshare: Float
+    bestever: Int
+    authorised: Int
+    worker: [MinerStatsCkpoolWorker]
+  }
+
+  type MinerStatsCkpoolWorker {
+    workername: String,
+    hashrate1m: String,
+    hashrate5m: String,
+    hashrate1hr: String,
+    hashrate1d: String,
+    hashrate7d: String,
+    lastshare: Int,
+    shares: Int,
+    bestshare: Float,
+    bestever: Int
+  }
+`;
 
 module.exports.resolvers = {
   MinerActions: {
-    stats (root, args, { dispatch }) {
-      return dispatch('api/miner/stats')
+    stats(root, args, { dispatch }) {
+      return dispatch('api/miner/stats');
     }
   }
-}
+};
