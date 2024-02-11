@@ -174,7 +174,7 @@ cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/a
 ### Bitcoind ###
 #########################
 cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
-cp $APOLLO_DIR/backend/node/bin/bitcoin.conf $APOLLO_DIR/backend/node/bitcoin.conf
+cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
 
 ### TOR ###
 #########################
@@ -197,6 +197,7 @@ cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 
 # Copy the ckpool.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
 
 # Copy the apollo-miner.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
@@ -209,13 +210,13 @@ systemctl daemon-reload
 echo -e "${GREEN} ---> Reloaded systemd daemon${NC}"
 
 # Enable and start the services
-systemctl enable ckpool.service
-systemctl start ckpool.service
 systemctl enable apollo-api.service
 systemctl start apollo-api.service
 systemctl enable apollo-ui-v2.service
 systemctl start apollo-ui-v2.service
 systemctl enable apollo-miner.service
+systemctl enable ckpool.service
+systemctl start ckpool.service
 
 echo -e "${GREEN} --->  Enabled and started apollo services${NC}"
 
