@@ -104,11 +104,11 @@ chown -R futurebit /usr/local/nvm
 echo -e "${GREEN} ---> Changed ownership of /usr/local/nvm to futurebit${NC}"
 
 # Install Node.js version 21 using nvm
-nvm install 21.6.1
+nvm install 21.6.2
 echo -e "${GREEN} ---> Node.js version 21 installed${NC}"
 
 # Install yarn globally
-nvm use 21.6.1
+nvm use 21.6.2
 npm i -g yarn
 echo -e "${GREEN} ---> Yarn installed globally${NC}"
 
