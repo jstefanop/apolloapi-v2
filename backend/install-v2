@@ -100,7 +100,7 @@ eval "$NVM_DIR_LINE"
 eval "$NVM_SOURCE_LINE"
 
 # Change ownership of /usr/local/nvm to user "futurebit"
-sudo chown -R futurebit /usr/local/nvm
+chown -R futurebit /usr/local/nvm
 echo -e "${GREEN} ---> Changed ownership of /usr/local/nvm to futurebit${NC}"
 
 # Install Node.js version 21 using nvm

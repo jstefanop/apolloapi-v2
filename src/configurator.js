@@ -43,40 +43,28 @@ const generate = async function (pools = null, settings = null ) {
 
 	const mainPool = _.minBy(pools, 'index');
 
+	// Get miner mode
+	let minerMode = settings.minerMode;
 
-	let minerMode = 0,
-		frequency = 40;
-
-	switch (settings.minerMode) {
-		case 'eco':
-			minerMode = 1
-			voltage = 48
-			frequency = 30
-		break;
-		case 'balanced':
-			minerMode = 2
-			voltage = 60
-			frequency = 40
-		break;
-		case 'turbo':
-			minerMode = 3
-			voltage = 75
-			frequency = 50
-		break;
-		default:
-			minerMode = 0
-			voltage = settings.voltage
-			frequency = settings.frequency
-	}
-
+	// Get fan settings
 	const fanLow = (settings.fan_low && settings.fan_low !== 40) ? `-fan_temp_low ${settings.fan_low}` : null;
 	const fanHigh = (settings.fan_high && settings.fan_high !== 60) ? `-fan_temp_hi ${settings.fan_high}` : null;
 
+	// Get pool url
 	const poolUrl = mainPool.url.replace(/^.*\/\//, '');
 
 	const [poolHost, poolPort] = poolUrl.split(':');
 
-	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -pswd ${mainPool.password} -brd_ocp ${voltage} -osc ${frequency}`;
+	// Parse miner configuration
+	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -pswd ${mainPool.password}`;
+
+	// Add custom configuration if needed
+	if (settings.minerMode === 'custom') {
+		minerConfig += ` -brd_ocp ${settings.voltage} -osc ${settings.frequency}`;
+		minerMode = 'config';
+	}
+	
+	// Add fan configuration if needed
 	if (fanLow) minerConfig += ` ${fanLow}`;
 	if (fanHigh) minerConfig += ` ${fanHigh}`;
 
@@ -86,8 +74,9 @@ const generate = async function (pools = null, settings = null ) {
 		// Write all configuration file
 		// Conf dir
 		await fsPromises.mkdir(confDir, { recursive: true });
-		// Conf file
+		// Conf files
 		await fsPromises.writeFile(confDir + '/miner_config', minerConfig);
+		await fsPromises.writeFile(confDir + '/mode', minerMode);
 		console.log('Configuration saved');
 	} catch (err) {
 		console.log('Error saving configuration files');
