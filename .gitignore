@@ -69,7 +69,7 @@ typings/
 *.sqlite
 
 #backed
-backend/apollo-miner/apollo-miner.*
+backend/apollo-miner/apollo-miner*
 backend/apollo-miner/*config*
 backend/apollo-miner/miner.events
 backend/apollo-miner/futurebit-miner

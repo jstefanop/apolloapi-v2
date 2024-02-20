@@ -14,6 +14,7 @@ module.exports.typeDefs = `
 
   type MinerStats {
     uuid: String
+    version: String
     date: String
     statVersion: String
     versions: MinerStatsVersion

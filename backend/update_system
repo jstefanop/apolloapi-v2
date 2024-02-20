@@ -9,22 +9,6 @@ APOLLO_DIR=/opt/apolloapi
 ### SYSTEM commands ###
 # Write down this line the system commands needed
 
-### Install packages ###
-
-echo -e "${YELLOW} ---> Installing system packages${NC}"
-
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y tor sqlite3
-
-### Configuring Tor ###
-
-echo -e "${YELLOW} ---> Configuring Tor${NC}"
-
-cp $APOLLO_DIR/backend/torrc /etc/tor/torrc
-usermod -a -G debian-tor futurebit
-systemctl restart tor.service
-
-
 ### Update Miner/Node Binaries ###
 
 echo -e "${YELLOW} ---> Updating System binaries${NC}"
@@ -51,25 +35,27 @@ echo "90" > $TMPFILE
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Updating systemd files${NC}"
 
-cp $APOLLO_DIR/backend/systemd/apollo-ui.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/start_swap.sh $APOLLO_DIR/backend/start_swap.sh
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 
-
-
 echo -e "${YELLOW} ---> Restarting APP${NC}"
 systemctl enable swap
 systemctl start swap
 systemctl restart node
+systemctl restart ckpool
 systemctl restart apollo-miner
+systemctl restart apollo-api
 
 #Restart UI after old version of UI finishes update progress
-( sleep 1 ; systemctl restart apollo-ui )
+( sleep 1 ; systemctl restart apollo-ui-v2 )
 
 echo "100" > $TMPFILE
 

@@ -109,6 +109,17 @@ const getMinerStats = async (errors, settings, pools) => {
 
         let stats = [];
 
+        const findFileDetails = (fileName) => {
+          const match = fileName.match(/^(apollo-miner)(?:-v(\d+))?\.(.+)$/);
+          if (match) {
+            const [, , version, id] = match;
+            const fileVersion = version ? 'v' + version : 'v1';
+            return { version: fileVersion, id };
+          } else {
+            return null;
+          }
+        };
+
         await Promise.all(
           statsFiles.map(async (file) => {
             const data = await fs.readFile(`${statsDir}/${file}`);
@@ -123,7 +134,9 @@ const getMinerStats = async (errors, settings, pools) => {
 
             received = JSON.parse(received);
 
-            received.uuid = file.replace('apollo-miner.', '');
+            const fileDetails = findFileDetails(file);
+            received.uuid = fileDetails.id;
+            received.version = fileDetails.version;
 
             received.master.intervals = _.mapKeys(
               received.master.intervals,

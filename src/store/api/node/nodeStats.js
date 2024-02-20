@@ -6,10 +6,13 @@ module.exports = ({ define }) => {
     'stats',
     async (payload, { knex, errors, utils }) => {
       try {
-        const settings = await knex('settings').select([
-          'node_rpc_password as nodeRpcPassword',
-        ]);
-        const bitcoinClient = createBitcoinClient(settings);
+        const settings = await knex('settings')
+          .select(['node_rpc_password as nodeRpcPassword'])
+          .orderBy('created_at', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1);
+
+        const bitcoinClient = createBitcoinClient(settings[0]);
 
         const unrefinedStats = await getNodeStats(bitcoinClient);
 
@@ -129,11 +132,21 @@ const formatNetworkInfo = (unrefinedNetworkInfo) => {
 
 const getNodeStats = async (bitcoinClient) => {
   try {
-    const getBlockchainInfoPromise = promisify(bitcoinClient.getBlockchainInfo).bind(bitcoinClient);
-    const getConnectionCountPromise = promisify(bitcoinClient.getConnectionCount).bind(bitcoinClient);
-    const getMiningInfoPromise = promisify(bitcoinClient.getMiningInfo).bind(bitcoinClient);
-    const getPeerInfoPromise = promisify(bitcoinClient.getPeerInfo).bind(bitcoinClient);
-    const getNetworkInfoPromise = promisify(bitcoinClient.getNetworkInfo).bind(bitcoinClient);
+    const getBlockchainInfoPromise = promisify(
+      bitcoinClient.getBlockchainInfo
+    ).bind(bitcoinClient);
+    const getConnectionCountPromise = promisify(
+      bitcoinClient.getConnectionCount
+    ).bind(bitcoinClient);
+    const getMiningInfoPromise = promisify(bitcoinClient.getMiningInfo).bind(
+      bitcoinClient
+    );
+    const getPeerInfoPromise = promisify(bitcoinClient.getPeerInfo).bind(
+      bitcoinClient
+    );
+    const getNetworkInfoPromise = promisify(bitcoinClient.getNetworkInfo).bind(
+      bitcoinClient
+    );
 
     return Promise.all([
       await getBlockchainInfoPromise(),
