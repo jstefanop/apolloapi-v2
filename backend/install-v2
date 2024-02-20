@@ -195,6 +195,9 @@ cp $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
 # Copy the apollo-ui.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 
+# Copy the node.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+
 # Copy the ckpool.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
@@ -215,8 +218,8 @@ systemctl start apollo-api.service
 systemctl enable apollo-ui-v2.service
 systemctl start apollo-ui-v2.service
 systemctl enable apollo-miner.service
+systemctl enable node.service
 systemctl enable ckpool.service
-systemctl start ckpool.service
 
 echo -e "${GREEN} --->  Enabled and started apollo services${NC}"
 
