@@ -6,7 +6,7 @@ After=network.target
 [Service]
 Type=simple
 User=futurebit
-Environment=PATH=/usr/local/nvm/versions/node/v21.6.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/local/nvm/versions/node/v21.6.1/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=PATH=/usr/local/nvm/versions/node/v21.6.2/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/local/nvm/versions/node/v21.6.2/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 WorkingDirectory=/opt/apolloapi/apolloui-v2
 ExecStart=/opt/apolloapi/apolloui-v2/node_modules/next/dist/bin/next start
 Restart=always

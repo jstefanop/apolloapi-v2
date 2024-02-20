@@ -6,12 +6,11 @@ After=multi-user.target
 Type=forking
 User=futurebit
 #Start:
-#ExecStart=/opt/apolloapi/backend/ckpool/ckpool_start.sh
-ExecStart=/opt/apolloapi/backend/ckpool/ckpool -B -c /opt/apolloapi/backend/ckpool/ckpool.conf -D
+ExecStart=/opt/apolloapi/backend/ckpool/ckpool_start.sh
 #Stop:
 TimeoutStopSec=300
-#ExecStop=/opt/apolloapi/backend/ckpool/ckpool_stop.sh
-ExecStop= /bin/kill -2 $MAINPID 
+ExecStop=/opt/apolloapi/backend/ckpool/ckpool_stop.sh
+
 
 [Install]
 WantedBy=multi-user.target
