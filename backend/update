@@ -19,7 +19,7 @@ systemctl stop apollo-miner
 APOLLO_DIR=/opt/apolloapi
 
 git config --global --add safe.directory $APOLLO_DIR
-git config --global --add safe.directory $APOLLO_DIR/apolloui
+git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
 
 chown -R futurebit $APOLLO_DIR
 
@@ -27,7 +27,7 @@ echo "10" > $TMPFILE
 
 . /usr/local/nvm/nvm.sh
 
-nvm use 14.16.1
+nvm use 21
 
 echo "20" > $TMPFILE
 
@@ -48,7 +48,7 @@ echo "40" > $TMPFILE
 ### UI ###
 echo -e "${YELLOW} ---> Updating UI modules${NC}"
 
-cd $APOLLO_DIR/apolloui
+cd $APOLLO_DIR/apolloui-v2
 
 git reset --hard
 git pull

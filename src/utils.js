@@ -41,11 +41,23 @@ module.exports.auth = {
         '../backend/node/bitcoin.conf'
       );
 
+      const configCkpoolFilePath = path.resolve(
+        __dirname,
+        '../backend/ckpool/ckpool.conf'
+      );
+
       exec(
         `sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g ${configFilePath}`
       );
+
+      exec(
+        `sudo sed -i s/"pass": ""/"pass": "${password}"/g ${configCkpoolFilePath}`
+      );
+
       console.log(password, configFilePath);
+
       exec('sudo systemctl restart node');
+      exec('sudo systemctl restart ckpool');
     } catch (err) {
       console.log('ERR changeNodeRpcPassword', err);
     }
