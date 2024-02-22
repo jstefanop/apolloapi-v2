@@ -51,7 +51,7 @@ module.exports.auth = {
       );
 
       exec(
-        `sudo sed -i s/"pass": ""/"pass": "${password}"/g ${configCkpoolFilePath}`
+        `sudo sed -i 's#"pass": ""#"pass": "${password}"#g' ${configCkpoolFilePath}`
       );
 
       console.log(password, configFilePath);

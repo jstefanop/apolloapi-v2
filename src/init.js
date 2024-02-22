@@ -1,6 +1,7 @@
 const { writeFileSync, readFileSync, existsSync } = require('fs');
 const { join } = require('path');
 const crypto = require('crypto');
+const { exec } = require('child_process');
 const generator = require('generate-password');
 const utils = require('./utils');
 const { knex } = require('./db');
@@ -30,6 +31,7 @@ const runMigrations = async () => {
   try {
     console.log('Run migrations');
     const resp = await knex.migrate.latest();
+    await createCkpoolConfigFile();
     await createBitcoinConfigFile();
     await runGenerateBitcoinPassword();
   } catch (err) {
@@ -85,6 +87,18 @@ const createCkpoolConfigFile = async () => {
         `Error during the creation of the file ckpool.conf: ${error.message}`
       );
     }
+  } finally {
+    const [settings] = await knex('settings')
+      .select(['node_rpc_password as nodeRpcPassword'])
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1);
+
+    if (settings && settings.nodeRpcPassword) {
+      exec(
+        `sudo sed -i 's#"pass": ""#"pass": "${settings.nodeRpcPassword}"#g' ${configFilePath}`
+      );
+    }
   }
 };
 
@@ -120,7 +134,7 @@ uacomment=FutureBit-Apollo-Node`;
 };
 
 initEnvFile();
-runMigrations().then(createCkpoolConfigFile).then(startServer);
+runMigrations().then(startServer);
 
 function startServer() {
   require('./server');
