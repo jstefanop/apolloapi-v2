@@ -133,7 +133,7 @@ yarn
 echo -e "${GREEN} ---> Project API dependencies installed using yarn${NC}"
 
 # Install UI dependencies
-# Navigate to the /opt/apolloapi directory
+# Navigate to the /opt/apolloui directory
 echo -e "${YELLOW} ---> Installing UI dependencies${NC}"
 cd $APOLLO_UI_DIR
 
@@ -146,7 +146,8 @@ echo "NEXT_PUBLIC_POLLING_TIME_NODE=30000" >> .env
 echo "NEXTAUTH_SECRET='$NEXTAUTH_SECRET'" >> .env
 
 echo -e "${GREEN} ---> .env file created with random NEXTAUTH_SECRET${NC}"
-
+#increase timeout for sd card installs
+yarn install --network-timeout 600000
 # Install project dependencies using yarn
 yarn cache clean
 yarn
