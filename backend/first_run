@@ -28,7 +28,7 @@ ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
 
 
 #configure swap
-fallocate -l 2G /media/nvme/swapfile
+fallocate -l 3G /media/nvme/swapfile
 chmod 600 /media/nvme/swapfile
 mkswap /media/nvme/swapfile
 
