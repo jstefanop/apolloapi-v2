@@ -171,6 +171,8 @@ echo -e "${YELLOW} ---> Installing miner binaries${NC}"
 arch=$(uname -m)
 
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
 
 ### Bitcoind ###
 #########################

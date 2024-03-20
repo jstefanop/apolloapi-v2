@@ -1,17 +1,23 @@
 #!/bin/bash
+cd /opt/apolloapi/backend/apollo-miner
+
 
 reset_hashboards()
 {
     while [ $1 ];
             do
-            python -c 'import termios; termios.tcsendbreak(3, 0)' 3>$1
+            ./apollo-helper -s $1 -r
             sleep .5
             shift
     done
 }
 
 #quit all mining proccesses
-for scr in $(screen -ls | awk '{print $1}'); do screen -S $scr -X quit; done
+screen -ls | grep '\.miner' | awk -F '\t|[.]' '{print $2}' | while read -r session
+do
+  echo "Killing session: $session"
+  screen -S "${session}" -X quit
+done
 
 #reset internal hashboard
 gpio write 0 0
