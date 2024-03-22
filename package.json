@@ -1,8 +1,8 @@
 {
-  "name": "apolloapi",
-  "version": "2.0.0",
+  "name": "apolloapi-v2",
+  "version": "2.0.1",
   "main": "index.js",
-  "repository": "https://github.com/jstefanop/apolloapi.git",
+  "repository": "https://github.com/jstefanop/apolloapi-v2.git",
   "author": "FutureBit LLC",
   "license": "CC BY-NC-ND 4.0",
   "bin": "src/init.js",
