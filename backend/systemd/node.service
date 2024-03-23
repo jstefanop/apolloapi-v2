@@ -1,7 +1,7 @@
 [Unit]
 Description=node
 After=multi-user.target 
-After=apollo-ui.service
+After=apollo-ui-v2.service
 
 [Service]
 Type=forking

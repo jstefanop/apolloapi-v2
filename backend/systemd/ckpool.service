@@ -1,6 +1,7 @@
 [Unit]
 Description=ckpool
-After=multi-user.target 
+After=multi-user.target
+After=node.service
 
 [Service]
 Type=forking

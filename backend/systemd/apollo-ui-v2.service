@@ -2,6 +2,7 @@
 Description=Apollo App
 Documentation=https://nextjs.org/
 After=network.target
+After=apollo-api.service
 
 [Service]
 Type=simple
