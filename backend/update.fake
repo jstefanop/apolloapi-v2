@@ -24,3 +24,7 @@ echo -e "Done!"
 sleep 2
 
 echo "100" > $TMPFILE
+
+sleep 5
+
+rm $TMPFILE

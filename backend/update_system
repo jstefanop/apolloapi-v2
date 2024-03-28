@@ -57,5 +57,8 @@ systemctl restart apollo-api
 #Restart UI after old version of UI finishes update progress
 ( sleep 1 ; systemctl restart apollo-ui-v2 )
 
+sleep 3
+
 echo "100" > $TMPFILE
 
+rm $TMPFILE
