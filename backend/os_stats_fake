@@ -1,0 +1,46 @@
+#!/bin/bash
+
+cat << EOF
+{
+  "hostname": "orangepizero",
+  "operatingSystem": "Ubuntu 18.04 bionic",
+  "uptime": "2018-11-27 07:09:13",
+  "loadAverage": "0.00 0.00 0.00 1/118 27205",
+  "architecture": "armv7l",
+  "temperature": "41745",
+  "minerTemperature": "78.92",
+  "minerFanSpeed": "0",
+  "activeWifi": "",
+   "bfgminerLog": " [2019-01-28 16:24:21] No servers were found that could be used to get work from.| [2019-01-28 16:24:21] Please check the details from the list below of the servers you have input| [2019-01-28 16:24:21] Most likely you have input the wrong URL, forgotten to add a port, or have not set up workers| [2019-01-28 16:24:21] Pool: 0  URL: stratum+tcp://litecoinpool.org:3333  User: michelem.1  Password: wrong| [2019-01-28 16:24:21] Press any key to exit, or BFGMiner will try again in 15s.| [2019-01-28 16:24:37] No servers were found that could be used to get work from.| [2019-01-28 16:24:37] Please check the details from the list below of the servers you have input| [2019-01-28 16:24:37] Most likely you have input the wrong URL, forgotten to add a port, or have not set up workers| [2019-01-28 16:24:37] Pool: 0  URL: stratum+tcp://litecoinpool.org:3333  User: michelem.1  Password: wrong| [2019-01-28 16:24:37] Press any key to exit, or BFGMiner will try again in 15s.|",
+  "network": [{
+      "name": "eth0",
+      "address": "192.168.1.20",
+      "mac": "02:42:94:72:22:61"
+  }, {
+      "name": "wlan0",
+      "address": "",
+      "mac": "12:42:94:72:22:61"
+  }],
+  "memory":
+  {
+    "total": 2457600,
+    "available": 1099520,
+    "used": 2332200,
+    "cache": 974120,
+    "swap": 12800
+  },
+  "cpu":
+  {
+    "threads": 4,
+    "usedPercent": 29
+  },
+  "disks": [
+    {"total":7524560,
+"used":971560,
+"mountPoint":"/"},
+{"total":49584,
+"used":4348,
+"mountPoint":"/var/log"}
+  ]
+}
+EOF

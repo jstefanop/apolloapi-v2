@@ -1,0 +1,72 @@
+#!/bin/bash
+
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+TMPFILE='/tmp/update_progress'
+
+rm $TMPFILE
+touch $TMPFILE
+
+if [ "$EUID" -ne 0 ]
+  then echo -e "${RED}Update script must be run by root or with sudo${NC}"
+  exit
+fi
+
+systemctl stop node
+systemctl stop apollo-miner
+
+APOLLO_DIR=/opt/apolloapi
+
+git config --global --add safe.directory $APOLLO_DIR
+git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
+
+chown -R futurebit $APOLLO_DIR
+
+echo "10" > $TMPFILE
+
+. /usr/local/nvm/nvm.sh
+
+nvm use 21
+
+echo "20" > $TMPFILE
+
+### API ###
+echo -e "${YELLOW} ---> Updating API modules${NC}"
+
+cd $APOLLO_DIR
+
+git reset --hard
+git pull
+
+echo "30" > $TMPFILE
+
+yarn
+
+echo "40" > $TMPFILE
+
+### UI ###
+echo -e "${YELLOW} ---> Updating UI modules${NC}"
+
+cd $APOLLO_DIR/apolloui-v2
+
+git reset --hard
+git pull
+
+echo "60" > $TMPFILE
+
+yarn
+
+echo "70" > $TMPFILE
+
+echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
+
+yarn build
+
+echo "80" > $TMPFILE
+
+chown -R futurebit $APOLLO_DIR
+
+echo -e "${YELLOW} ---> Running update_system script${NC}"
+
+bash $APOLLO_DIR/backend/update_system

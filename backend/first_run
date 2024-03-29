@@ -1,0 +1,36 @@
+#!/bin/bash
+DEVICE=/dev/nvme0n1p1
+
+#expand SD card
+/usr/lib/armbian/armbian-resize-filesystem start
+
+
+if [ ! -b "$DEVICE"  ]; then
+        #format nvme drive if it has not been formatted yet
+	parted /dev/nvme0n1 mklabel gpt -s
+	parted -a opt /dev/nvme0n1 mkpart primary ext4 0% 100% -s
+	mkfs.ext4 /dev/nvme0n1p1
+
+	#configure node
+	mkdir /media/nvme
+	mount /dev/nvme0n1p1 /media/nvme
+	tune2fs -m .1 /dev/nvme0n1p1
+	mkdir /media/nvme/Bitcoin
+	
+else
+        mkdir /media/nvme
+	mount /dev/nvme0n1p1 /media/nvme
+fi
+
+chown -R futurebit /media/nvme/Bitcoin/
+ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
+
+
+
+#configure swap
+fallocate -l 3G /media/nvme/swapfile
+chmod 600 /media/nvme/swapfile
+mkswap /media/nvme/swapfile
+
+sed -i '$ d' /etc/rc.local
+sed -i "\$i mount \/dev\/nvme0n1p1 \/media\/nvme" /etc/rc.local

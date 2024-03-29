@@ -1,0 +1,234 @@
+#!/bin/bash
+
+# Apollo Core Services Image Installer
+
+#### SETUP ####
+#########################
+# Set colors
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Check if script is being run as root
+if [ "$EUID" -ne 0 ]
+  then echo -e "${RED}Install script must be run by root or with sudo${NC}"
+  exit
+fi
+
+#### SYSTEM PACKAGES ####
+#########################
+echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
+
+# Install required system packages
+apt-get update
+apt-get -y upgrade
+
+DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python2-dev python-dev-is-python3 vim git sudo iptables network-manager
+
+#### SYSTEM SETUP ####
+#########################
+# Define the APOLLO_DIR variable
+APOLLO_DIR=/opt/apolloapi
+APOLLO_UI_DIR=/opt/apolloapi/apolloui-v2
+
+echo -e "${YELLOW} ---> Adding futurebit user${NC}"
+
+# Add the futurebit user
+adduser -q --disabled-password --gecos "" futurebit
+
+# Add futurebit to the sudoers file
+grep -qxF 'futurebit  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers || echo 'futurebit  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+#### APP SETUP ####
+#########################
+# Clone the Apollo app
+echo -e "${YELLOW} ---> Cloning Apollo app${NC}"
+
+mkdir -p $APOLLO_DIR
+
+if [ "$1" = "dev" ]; then
+	echo -e "${YELLOW} ---> Using DEV branch${NC}"
+	git clone --single-branch --branch dev https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
+	rm -rf $APOLLO_DIR/apolloui
+	git clone --single-branch --branch dev https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+else
+	echo -e "${YELLOW} ---> Using PRODUCTION branch${NC}"
+	git clone --single-branch --branch main https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
+	rm -rf $APOLLO_DIR/apolloui
+	git clone --single-branch --branch main https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+fi
+
+
+# Navigate to the /opt/apolloapi directory
+cd $APOLLO_DIR
+
+#### NVM SETUP ####
+#########################
+# Install NVM
+echo -e "${YELLOW} ---> Installing NVM${NC}"
+
+mkdir /usr/local/nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | NVM_DIR=/usr/local/nvm bash
+
+. /usr/local/nvm/nvm.sh
+
+# Define the NVM_DIR variable
+NVM_DIR_LINE='export NVM_DIR="/usr/local/nvm"'
+
+# Define the NVM sourcing line
+NVM_SOURCE_LINE='[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm'
+
+# Add the lines to the user's ~/.bashrc file
+echo "$NVM_DIR_LINE" >> /home/futurebit/.bashrc
+echo "$NVM_SOURCE_LINE" >> /home/futurebit/.bashrc
+
+echo -e "${GREEN} ---> Lines added to /home/futurebit/.bashrc${NC}"
+
+# Enable nvm for the current shell session
+eval "$NVM_DIR_LINE"
+eval "$NVM_SOURCE_LINE"
+
+# Change ownership of /usr/local/nvm to user "futurebit"
+chown -R futurebit /usr/local/nvm
+echo -e "${GREEN} ---> Changed ownership of /usr/local/nvm to futurebit${NC}"
+
+# Install Node.js version 21 using nvm
+nvm install 21.6.2
+echo -e "${GREEN} ---> Node.js version 21 installed${NC}"
+
+# Install yarn globally
+nvm use 21.6.2
+npm i -g yarn
+echo -e "${GREEN} ---> Yarn installed globally${NC}"
+
+#### APOLLO SETUP ####
+# Install API dependencies
+# Navigate to the /opt/apolloapi directory
+echo -e "${YELLOW} ---> Installing API dependencies${NC}"
+cd $APOLLO_DIR
+
+# Generate a random string for APP_SECRET
+APP_SECRET=$(openssl rand -hex 16)
+
+# Create the .env file with the specified content
+echo "APP_SECRET=$APP_SECRET" > .env
+echo "DATABASE_URL=$APOLLO_DIR/futurebit.sqlite" >> .env
+
+echo -e "${GREEN} ---> .env file created with random APP_SECRET${NC}"
+
+# Install project dependencies using yarn
+yarn cache clean
+yarn
+echo -e "${GREEN} ---> Project API dependencies installed using yarn${NC}"
+
+# Install UI dependencies
+# Navigate to the /opt/apolloui directory
+echo -e "${YELLOW} ---> Installing UI dependencies${NC}"
+cd $APOLLO_UI_DIR
+
+# Generate a random string for NEXTAUTH_SECRET
+NEXTAUTH_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
+
+# Create the .env file with the specified content
+echo "NEXT_PUBLIC_POLLING_TIME=5000" >> .env
+echo "NEXT_PUBLIC_POLLING_TIME_NODE=30000" >> .env
+echo "NEXTAUTH_SECRET='$NEXTAUTH_SECRET'" >> .env
+
+echo -e "${GREEN} ---> .env file created with random NEXTAUTH_SECRET${NC}"
+#increase timeout for sd card installs
+yarn install --network-timeout 600000
+# Install project dependencies using yarn
+yarn cache clean
+yarn
+echo -e "${GREEN} ---> Project UI dependencies installed using yarn${NC}"
+
+# Build the project
+yarn build
+echo -e "${GREEN} ---> Project built using yarn${NC}"
+
+
+### FIREWALL ###
+#########################
+echo -e "${YELLOW} ---> Starting firewall${NC}"
+
+bash $APOLLO_DIR/backend/firewall
+
+#### MINER SETUP ####
+#########################
+echo -e "${YELLOW} ---> Installing miner binaries${NC}"
+
+arch=$(uname -m)
+
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
+
+### Bitcoind ###
+#########################
+cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
+
+### ckpool ###
+#########################
+#cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/        TODO UPDATE BINARIES
+cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
+
+### TOR ###
+#########################
+usermod -a -G debian-tor futurebit
+cp $APOLLO_DIR/backend/torrc /etc/tor/torrc
+
+# Change ownership of /opt/apolloapi to user "futurebit"
+chown -R futurebit $APOLLO_DIR
+
+#### SYSTEMD SETUP ####
+#########################
+# Setting up systemd services
+echo -e "${YELLOW} ---> Setting up systemd services${NC}"
+
+# Copy the apollo-api.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
+
+# Copy the apollo-ui.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
+
+# Copy the node.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+
+# Copy the ckpool.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
+
+# Copy the apollo-miner.service file to /etc/systemd/system
+cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
+
+#SWAP
+cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
+
+#RC LOCAL
+cp $APOLLO_DIR/backend/rc.local /etc/
+chmod +x /etc/rc.local
+cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
+
+echo -e "${GREEN} ---> Copied apollo-api.service, apollo-ui-v2.service and ckpool.service to /etc/systemd/system${NC}"
+
+# Reload systemd daemon to recognize the new service
+systemctl daemon-reload
+
+echo -e "${GREEN} ---> Reloaded systemd daemon${NC}"
+
+# Enable and start the services
+systemctl enable apollo-api.service
+systemctl enable apollo-ui-v2.service
+systemctl enable swap.service
+systemctl enable rc-local.service
+systemctl enable apollo-miner.service
+systemctl enable node.service
+systemctl enable ckpool.service
+
+systemctl disable serial-getty@ttyS2.service
+
+echo -e "${GREEN} --->  Enabled apollo services${NC}"
+
+echo -e "${GREEN} --->  Installation complete${NC}"

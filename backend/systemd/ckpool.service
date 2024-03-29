@@ -1,0 +1,17 @@
+[Unit]
+Description=ckpool
+After=multi-user.target
+After=node.service
+
+[Service]
+Type=forking
+User=futurebit
+#Start:
+ExecStart=/opt/apolloapi/backend/ckpool/ckpool_start.sh
+#Stop:
+TimeoutStopSec=300
+ExecStop=/opt/apolloapi/backend/ckpool/ckpool_stop.sh
+
+
+[Install]
+WantedBy=multi-user.target

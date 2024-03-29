@@ -1,0 +1,22 @@
+version: '3.5'
+services:
+  backend:
+    build: .
+    user: 1000:1000
+    volumes:
+      - .:/app
+    command: sh -c "yarn --production=false && yarn dev"
+    environment:
+      NODE_ENV: 'production'
+    ports:
+      - '5000:5000'
+  frontend:
+    build: ./apolloui
+    user: 1000:1000
+    volumes:
+      - ./apolloui:/app
+    command: sh -c "npm start"
+    environment:
+      NODE_ENV: 'production'
+    ports:
+      - '3000:3000'

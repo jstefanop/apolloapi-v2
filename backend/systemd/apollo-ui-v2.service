@@ -1,0 +1,17 @@
+[Unit]
+Description=Apollo App
+Documentation=https://nextjs.org/
+After=network.target
+After=apollo-api.service
+
+[Service]
+Type=simple
+User=futurebit
+Environment=PATH=/usr/local/nvm/versions/node/v21.6.2/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/local/nvm/versions/node/v21.6.2/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+WorkingDirectory=/opt/apolloapi/apolloui-v2
+ExecStart=/opt/apolloapi/apolloui-v2/node_modules/next/dist/bin/next start
+Restart=always
+SyslogIdentifier=ApolloUIv2
+
+[Install]
+WantedBy=multi-user.target
