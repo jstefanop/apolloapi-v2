@@ -96,7 +96,7 @@ const createCkpoolConfigFile = async () => {
 
     if (settings && settings.nodeRpcPassword) {
       exec(
-        `sudo sed -i 's#"pass": ""#"pass": "${settings.nodeRpcPassword}"#g' ${configFilePath}`
+        `sudo sed -i 's#"pass":.*#"pass": "${settings.nodeRpcPassword}"#g' ${configFilePath}`
       );
     }
   }
