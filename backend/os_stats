@@ -59,7 +59,7 @@ WLAN_MAC=$(ip link show wlan0 | awk '/ether/ {print $2}')
 
 # Memory
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
-memFree=$(egrep '^MemFree:' /proc/meminfo | awk '{print $2}')
+memFree=$(egrep '^MemAvailable:' /proc/meminfo | awk '{print $2}')
 memCached=$(egrep '^Cached:' /proc/meminfo | awk '{print $2}')
 memAvailable=$(expr "$memFree" + "$memCached")
 memUsed=$(($memTotal - $memFree))
