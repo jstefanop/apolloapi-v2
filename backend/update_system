@@ -51,11 +51,13 @@ systemctl enable swap
 systemctl start swap
 systemctl restart node
 systemctl restart ckpool
-systemctl restart apollo-miner
 systemctl restart apollo-api
+systemctl restart apollo-miner
 
 #Restart UI after old version of UI finishes update progress
-( sleep 1 ; systemctl restart apollo-ui-v2 )
+sleep 1
+
+systemctl restart apollo-ui-v2
 
 sleep 3
 

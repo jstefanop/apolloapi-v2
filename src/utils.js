@@ -90,9 +90,14 @@ module.exports.auth = {
           },
         ],
         logdir: '/opt/apolloapi/backend/ckpool/logs',
+        btcsig: '/mined by Solo FutureBit Apollo/',
+        zmqblock: 'tcp://127.0.0.1:28332',
       };
 
-      await fsPromises.writeFile('/opt/apolloapi/backend/ckpool/ckpool.conf', JSON.stringify(ckpoolConf, null, 2));
+      await fsPromises.writeFile(
+        '/opt/apolloapi/backend/ckpool/ckpool.conf',
+        JSON.stringify(ckpoolConf, null, 2)
+      );
 
       exec(
         'sudo cp /opt/app/backend/systemd/ckpool.service /etc/systemd/system/ckpool.service'
@@ -102,8 +107,14 @@ module.exports.auth = {
       exec('sudo systemctl restart ckpool');
     }
 
-    if (settings.nodeEnableTor)
+    if (settings.nodeEnableTor) {
       conf += `\n#TOR_START\nproxy=127.0.0.1:9050\nlisten=1\nbind=127.0.0.1\nonlynet=onion\ndnsseed=0\ndns=0\n#TOR_END`;
+      exec('sudo systemctl enable tor');
+      exec('sudo systemctl restart tor');
+    } else {
+      exec('sudo systemctl stop tor');
+      exec('sudo systemctl disable tor');
+    }
 
     if (settings.nodeUserConf)
       conf += `\n#USER_INPUT_START\n${settings.nodeUserConf}\n#USER_INPUT_END`;

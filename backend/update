@@ -13,6 +13,8 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+echo "10" > $TMPFILE
+
 systemctl stop node
 systemctl stop apollo-miner
 
@@ -22,8 +24,6 @@ git config --global --add safe.directory $APOLLO_DIR
 git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
 
 chown -R futurebit $APOLLO_DIR
-
-echo "10" > $TMPFILE
 
 . /usr/local/nvm/nvm.sh
 
