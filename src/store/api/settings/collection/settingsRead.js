@@ -16,7 +16,8 @@ module.exports = ({ define }) => {
       'node_rpc_password as nodeRpcPassword',
       'node_enable_tor as nodeEnableTor',
       'node_user_conf as nodeUserConf',
-      'node_enable_solo_mining as nodeEnableSoloMining'
+      'node_enable_solo_mining as nodeEnableSoloMining',
+      'power_led_off as powerLedOff',
     ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')

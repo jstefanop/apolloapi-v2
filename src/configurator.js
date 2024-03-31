@@ -18,6 +18,7 @@ const generate = async function (pools = null, settings = null ) {
 			'left_sidebar_extended as leftSidebarExtended',
 			'right_sidebar_visibility as rightSidebarVisibility',
 			'temperature_unit as temperatureUnit',
+			'power_led_off as powerLedOff',
 		])
 		.orderBy('created_at', 'desc')
 		.orderBy('id', 'desc')
@@ -67,6 +68,8 @@ const generate = async function (pools = null, settings = null ) {
 	// Add fan configuration if needed
 	if (fanLow) minerConfig += ` ${fanLow}`;
 	if (fanHigh) minerConfig += ` ${fanHigh}`;
+
+	if (powerLedOff) minerConfig += ` -pwrled off`;
 
 	const confDir = `${__dirname}/../backend/apollo-miner`;
 
