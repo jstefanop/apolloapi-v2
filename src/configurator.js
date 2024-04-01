@@ -69,7 +69,7 @@ const generate = async function (pools = null, settings = null ) {
 	if (fanLow) minerConfig += ` ${fanLow}`;
 	if (fanHigh) minerConfig += ` ${fanHigh}`;
 
-	if (powerLedOff) minerConfig += ` -pwrled off`;
+	if (settings.powerLedOff) minerConfig += ` -pwrled off`;
 
 	const confDir = `${__dirname}/../backend/apollo-miner`;
 
