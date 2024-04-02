@@ -105,6 +105,9 @@ module.exports.auth = {
       exec('sudo systemctl daemon-reload');
       exec('sudo systemctl enable ckpool');
       exec('sudo systemctl restart ckpool');
+    } else {
+      exec('sudo systemctl stop ckpool');
+      exec('sudo systemctl disable ckpool');
     }
 
     if (settings.nodeEnableTor) {

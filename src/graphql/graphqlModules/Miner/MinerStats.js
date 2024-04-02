@@ -10,6 +10,7 @@ module.exports.typeDefs = `
 
   type MinerStatsResult {
     stats: [MinerStats]
+    ckpool: MinerStatsCkpool
   }
 
   type MinerStats {
@@ -24,7 +25,6 @@ module.exports.typeDefs = `
     temperature: MinerStatsTemperature
     slots: MinerStatsSlots
     slaves: [MinerStatsSlave]
-    ckpool: MinerStatsCkpool
   }
 
   type MinerStatsVersion {

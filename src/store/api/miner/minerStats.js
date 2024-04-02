@@ -14,7 +14,8 @@ module.exports = ({ define }) => {
       const settings = await dispatch('api/settings/collection/read');
       const { items: pools } = await dispatch('api/pools/collection/read', {});
       const stats = await getMinerStats(errors, settings, pools);
-      return { stats };
+      const ckpoolStats = await getCkpoolStats(errors, settings, pools);
+      return { stats, ckpool: ckpoolStats };
     },
     {
       auth: true,
@@ -33,7 +34,7 @@ const parseFileToJsonArray = async (filePath) => {
     const allKeys = {};
 
     // Analyze each line
-    lines.forEach(line => {
+    lines.forEach((line) => {
       if (line.trim() !== '') {
         try {
           const jsonObject = JSON.parse(line);
@@ -46,7 +47,9 @@ const parseFileToJsonArray = async (filePath) => {
             allKeys[key] = value;
           });
         } catch (error) {
-          console.error(`Error during the parsing of the line: ${error.message}`);
+          console.error(
+            `Error during the parsing of the line: ${error.message}`
+          );
         }
       }
     });
@@ -56,25 +59,15 @@ const parseFileToJsonArray = async (filePath) => {
     console.error(`Error during the reading of the file: ${error.message}`);
     return {};
   }
-}
+};
 
-const getMinerStats = async (errors, settings, pools) => {
+const getCkpoolStats = async (errors, settings, pools) => {
   return new Promise((resolve, reject) => {
     (async () => {
+      // Get ckpool data
+      let ckpoolData = null;
+
       try {
-        const statsDir = path.resolve(
-          __dirname,
-          '../../../../backend/apollo-miner/'
-        );
-        const statsFilePattern = 'apollo-miner.*';
-        let statsFiles = await fs.readdir(statsDir);
-        statsFiles = _.filter(statsFiles, (f) => {
-          return f.match(statsFilePattern);
-        });
-
-        // Get ckpool data
-        let ckpoolData = null;
-
         if (settings?.nodeEnableSoloMining) {
           const poolUsername = pools[0] && pools[0].username;
           const ckpoolPoolStatsFile = path.resolve(
@@ -93,8 +86,13 @@ const getMinerStats = async (errors, settings, pools) => {
           ) {
             await Promise.all([
               (async () => {
-                let ckpoolPoolData = await parseFileToJsonArray(ckpoolPoolStatsFile);
-                let ckpoolUsersData = await fs.readFile(ckpoolUsersStatsFile, 'utf8');
+                let ckpoolPoolData = await parseFileToJsonArray(
+                  ckpoolPoolStatsFile
+                );
+                let ckpoolUsersData = await fs.readFile(
+                  ckpoolUsersStatsFile,
+                  'utf8'
+                );
 
                 ckpoolUsersData = JSON.parse(ckpoolUsersData);
 
@@ -106,6 +104,28 @@ const getMinerStats = async (errors, settings, pools) => {
             ]);
           }
         }
+
+        resolve(ckpoolData);
+      } catch (err) {
+        reject(new errors.InternalError(err.toString()));
+      }
+    })();
+  });
+};
+
+const getMinerStats = async (errors, settings, pools) => {
+  return new Promise((resolve, reject) => {
+    (async () => {
+      try {
+        const statsDir = path.resolve(
+          __dirname,
+          '../../../../backend/apollo-miner/'
+        );
+        const statsFilePattern = 'apollo-miner.*';
+        let statsFiles = await fs.readdir(statsDir);
+        statsFiles = _.filter(statsFiles, (f) => {
+          return f.match(statsFilePattern);
+        });
 
         let stats = [];
 
@@ -167,8 +187,6 @@ const getMinerStats = async (errors, settings, pools) => {
               .utcOffset(offset)
               .format();
 
-            if (ckpoolData) received.ckpool = ckpoolData;
-
             stats.push(received);
           })
         );
@@ -179,4 +197,4 @@ const getMinerStats = async (errors, settings, pools) => {
       }
     })();
   });
-}
+};
