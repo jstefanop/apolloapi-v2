@@ -16,8 +16,19 @@ echo -e "${YELLOW} ---> Updating System binaries${NC}"
 arch=$(uname -m)
 
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
+cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
+
+### Bitcoind ###
+#########################
 cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
-cp $APOLLO_DIR/backend/node/bin/bitcoin.conf $APOLLO_DIR/backend/node/bitcoin.conf
+cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
+
+### ckpool ###
+#########################
+cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/
+cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
+
 
 ### Write back the Bitcoin RPC password on conf file
 PASS=`sqlite3 $APOLLO_DIR/futurebit.sqlite "SELECT node_rpc_password FROM settings ORDER BY id DESC LIMIT 1;"`
@@ -40,15 +51,11 @@ cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/start_swap.sh $APOLLO_DIR/backend/start_swap.sh
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 
 echo -e "${YELLOW} ---> Restarting APP${NC}"
-systemctl enable swap
-systemctl start swap
 systemctl restart node
 systemctl restart ckpool
 systemctl restart apollo-api

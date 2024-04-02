@@ -15,6 +15,7 @@ fi
 
 echo "10" > $TMPFILE
 
+systemctl stop ckpool
 systemctl stop node
 systemctl stop apollo-miner
 
