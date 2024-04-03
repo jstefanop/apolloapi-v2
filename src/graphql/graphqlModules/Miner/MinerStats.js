@@ -202,10 +202,10 @@ module.exports.typeDefs = `
     hashrate6hr: String
     hashrate1d: String
     hashrate7d: String
-    diff: Int
+    diff: Float
     accepted: Int
     rejected: Int
-    bestshare: Int
+    bestshare: Float
     SPS1m: Float
     SPS5m: Float
     SPS15m: Float
@@ -222,7 +222,7 @@ module.exports.typeDefs = `
     workers: Int
     shares: Int
     bestshare: Float
-    bestever: Int
+    bestever: Float
     authorised: Int
     worker: [MinerStatsCkpoolWorker]
   }
@@ -237,7 +237,7 @@ module.exports.typeDefs = `
     lastshare: Int,
     shares: Int,
     bestshare: Float,
-    bestever: Int
+    bestever: Float
   }
 `;
 
