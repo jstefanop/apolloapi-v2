@@ -171,7 +171,7 @@ cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
 
 ### ckpool ###
 #########################
-#cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/        TODO UPDATE BINARIES
+cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/
 cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
 
 ### TOR ###
@@ -218,6 +218,10 @@ systemctl daemon-reload
 
 echo -e "${GREEN} ---> Reloaded systemd daemon${NC}"
 
+#Disable Tor service until started by user
+systemctl stop tor.service
+systemctl disable tor.service
+
 # Enable and start the services
 systemctl enable apollo-api.service
 systemctl enable apollo-ui-v2.service
@@ -225,7 +229,7 @@ systemctl enable swap.service
 systemctl enable rc-local.service
 systemctl enable apollo-miner.service
 systemctl enable node.service
-systemctl enable ckpool.service
+
 
 systemctl disable serial-getty@ttyS2.service
 

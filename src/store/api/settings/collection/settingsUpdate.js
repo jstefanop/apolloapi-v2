@@ -15,7 +15,8 @@ const updateFields = {
   nodeRpcPassword: 'node_rpc_password',
   nodeEnableTor: 'node_enable_tor',
   nodeUserConf: 'node_user_conf',
-  nodeEnableSoloMining: 'node_enable_solo_mining'
+  nodeEnableSoloMining: 'node_enable_solo_mining',
+  powerLedOff: 'power_led_off'
 }
 
 module.exports = ({ define }) => {

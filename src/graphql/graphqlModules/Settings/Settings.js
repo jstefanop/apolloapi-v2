@@ -27,6 +27,7 @@ module.exports.typeDefs = `
     nodeEnableTor: Boolean
     nodeUserConf: String
     nodeEnableSoloMining: Boolean
+    powerLedOff: Boolean
   }
 `
 
