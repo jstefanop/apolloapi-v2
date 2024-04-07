@@ -1,5 +1,3 @@
-const { join } = require('path');
-const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const _ = require('lodash');
@@ -18,7 +16,7 @@ module.exports = ({ define }) => {
       return { stats, ckpool: ckpoolStats };
     },
     (payload) => ({
-      auth: payload.useAuth,
+      auth: payload.useAuth || true,
     })
   );
 };

@@ -57,13 +57,9 @@ const fetchStatistics = () => {
         };
       });
 
-      console.log('Recuperate le statistiche via API', boards);
+      await knex('time_series_data').insert(boards).returning('id');
 
-      const insertedIds = await knex('time_series_data')
-        .insert(boards)
-        .returning('id');
-
-      console.log('Inserted IDs:', insertedIds);
+      console.log('Time series data inserted');
     } catch (error) {
       console.error(
         'Error while fetching statistics from the miner via API:',
@@ -71,7 +67,7 @@ const fetchStatistics = () => {
       );
     }
   }, 30000);
-}
+};
 
 fetchStatistics();
 
