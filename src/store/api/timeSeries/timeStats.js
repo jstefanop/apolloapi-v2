@@ -16,7 +16,7 @@ module.exports = ({ define }) => {
   });
 };
 
-const getAggregateDataInRange = async (knex, startDate, endDate) => {
+const getAggregateDataInRange = async (knex, startDate, endDate, interval) => {
   try {
     const aggregateData = await knex('time_series_data')
       .select(
@@ -34,8 +34,9 @@ const getAggregateDataInRange = async (knex, startDate, endDate) => {
         knex.raw('avg(fanRpm) as fanRpm')
       )
       .whereBetween('createdAt', [startDate, endDate])
-      .groupByRaw('date(createdAt)')
-      .orderByRaw('date(createdAt)');
+      .where('uuid', 'totals')
+      .groupByRaw('datetime(createdAt)')
+      .orderByRaw('datetime(createdAt)');
 
     const result = [];
     let currentDate = moment(startDate);
