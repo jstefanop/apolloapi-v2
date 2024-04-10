@@ -9,8 +9,13 @@ module.exports = ({ define }) => {
     if (!interval) interval = 'day';
 
     // Set default values for startDate and endDate
-    if (!startDate) startDate = moment().subtract(interval === 'day' ? 30 : 1, 'days').format();
-    if (!endDate) endDate = moment().format();
+    if (!startDate) startDate = moment().subtract(interval === 'day' ? 30 : 1, 'days');
+    if (!endDate) endDate = moment();
+
+    const format = 'YYYY-MM-DD HH:mm:ssZ';
+
+    startDate = moment(startDate).utc().format(format);
+    endDate = moment(endDate).utc().format(format);
 
     if (!itemId) itemId = 'totals';
 
@@ -55,13 +60,15 @@ const getAggregateDataInRange = async (knex, startDate, endDate, interval, itemI
       );
 
     const result = [];
-    let currentDate = moment(startDate).utc();
-    const endDateObj = moment(endDate).utc();
+    let currentDate = moment(startDate);
+    const endDateObj = moment(endDate);
 
     while (currentDate <= endDateObj) {
-      const formattedDate = currentDate.local().format();
+      const formattedDate = currentDate.utc().format();
       const dataForDate = aggregateData.find((entry) => {
-        return moment(entry.date).isSame(currentDate.local(), interval);
+        const entryDate = moment(entry.date).format('YYYY-MM-DD HH:mm:ssZ');
+        //console.log(startDate, entry.date, moment(entryDate).utc().format(), moment(startDate).utc().format(), currentDate.utc().format(), moment(entry.date).isSame(currentDate, interval))
+        return moment(entryDate).utc().isSame(currentDate.utc(), interval);
       });
 
       result.push({
