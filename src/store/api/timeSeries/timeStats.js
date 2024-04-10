@@ -2,25 +2,39 @@ const moment = require('moment');
 
 module.exports = ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
-    let { startDate, endDate, interval } = payload || {};
+    let { startDate, endDate, interval, itemId } = payload || {};
 
-    // Set default values for startDate and endDate
-    if (!startDate) startDate = moment().subtract(30, 'days').format();
-    if (!endDate) endDate = moment().format();
+    // Interval can be day or hour
     // Set interval to 'day' if not provided
     if (!interval) interval = 'day';
 
-    const data = await getAggregateDataInRange(knex, startDate, endDate, interval);
+    // Set default values for startDate and endDate
+    if (!startDate) startDate = moment().subtract(interval === 'day' ? 30 : 1, 'days').format();
+    if (!endDate) endDate = moment().format();
+
+    if (!itemId) itemId = 'totals';
+
+    const data = await getAggregateDataInRange(
+      knex,
+      startDate,
+      endDate,
+      interval,
+      itemId
+    );
 
     return { data };
   });
 };
 
-const getAggregateDataInRange = async (knex, startDate, endDate, interval) => {
+const getAggregateDataInRange = async (knex, startDate, endDate, interval, itemId) => {
   try {
+    const dateFormat = interval === 'hour' ? '%Y-%m-%d %H:00:00' : '%Y-%m-%d';
+
     const aggregateData = await knex('time_series_data')
       .select(
-        knex.raw('datetime(createdAt) as date'),
+        knex.raw(
+          `strftime('${dateFormat}', datetime(createdAt, 'localtime')) as date`
+        ),
         knex.raw('avg(hashrateInGh) as hashrate'),
         knex.raw('avg(poolHashrateInGh) as poolHashrate'),
         knex.raw('avg(sharesAccepted) as accepted'),
@@ -34,18 +48,22 @@ const getAggregateDataInRange = async (knex, startDate, endDate, interval) => {
         knex.raw('avg(fanRpm) as fanRpm')
       )
       .whereBetween('createdAt', [startDate, endDate])
-      .where('uuid', 'totals')
-      .groupByRaw('datetime(createdAt)')
-      .orderByRaw('datetime(createdAt)');
+      .where('uuid', itemId)
+      .groupByRaw(`strftime('${dateFormat}', datetime(createdAt, 'localtime'))`)
+      .orderByRaw(
+        `strftime('${dateFormat}', datetime(createdAt, 'localtime'))`
+      );
 
     const result = [];
-    let currentDate = moment(startDate);
-    const endDateObj = moment(endDate);
+    let currentDate = moment(startDate).utc();
+    const endDateObj = moment(endDate).utc();
+
     while (currentDate <= endDateObj) {
-      const formattedDate = currentDate.startOf('day').format();
-      const dataForDate = aggregateData.find((entry) =>
-        moment(entry.date).isSame(currentDate, 'day')
-      );
+      const formattedDate = currentDate.local().format();
+      const dataForDate = aggregateData.find((entry) => {
+        return moment(entry.date).isSame(currentDate.local(), interval);
+      });
+
       result.push({
         date: formattedDate,
         hashrate: dataForDate ? dataForDate.hashrate : 0,
@@ -60,7 +78,8 @@ const getAggregateDataInRange = async (knex, startDate, endDate, interval) => {
         chipSpeed: dataForDate ? dataForDate.chipSpeed : 0,
         fanRpm: dataForDate ? dataForDate.fanRpm : 0,
       });
-      currentDate.add(1, 'days');
+
+      currentDate.add(1, interval);
     }
 
     return result;

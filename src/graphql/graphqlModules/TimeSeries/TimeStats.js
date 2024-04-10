@@ -1,6 +1,13 @@
 module.exports.typeDefs = `
   type TimeSeriesActions {
-    stats: TimeSeriesStatsOutput!
+    stats (input: TimeSeriesInput!): TimeSeriesStatsOutput!
+  }
+
+  input TimeSeriesInput {
+    startDate: String
+    endDate: String
+    interval: String
+    itemId: String
   }
 
   type TimeSeriesStatsOutput {
@@ -32,7 +39,7 @@ module.exports.typeDefs = `
 module.exports.resolvers = {
   TimeSeriesActions: {
     stats(root, args, { dispatch }) {
-      return dispatch('api/timeSeries/stats');
+      return dispatch('api/timeSeries/stats', args.input);
     },
   },
 };
