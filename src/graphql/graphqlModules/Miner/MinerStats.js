@@ -203,8 +203,8 @@ module.exports.typeDefs = `
     hashrate1d: String
     hashrate7d: String
     diff: Float
-    accepted: Int
-    rejected: Int
+    accepted: Float
+    rejected: Float
     bestshare: Float
     SPS1m: Float
     SPS5m: Float
@@ -220,7 +220,7 @@ module.exports.typeDefs = `
     hashrate7d: String
     lastshare: Int
     workers: Int
-    shares: Int
+    shares: Float
     bestshare: Float
     bestever: Float
     authorised: Int
@@ -235,7 +235,7 @@ module.exports.typeDefs = `
     hashrate1d: String,
     hashrate7d: String,
     lastshare: Int,
-    shares: Int,
+    shares: Float,
     bestshare: Float,
     bestever: Float
   }
