@@ -45,19 +45,10 @@ cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 
-echo -e "${YELLOW} ---> Restarting APP${NC}"
-systemctl restart node
-systemctl restart ckpool
-systemctl restart apollo-api
-systemctl restart apollo-miner
-
-#Restart UI after old version of UI finishes update progress
-sleep 1
-
-systemctl restart apollo-ui-v2
-
-sleep 3
+echo -e "${YELLOW} ---> Rebooting${NC}"
 
 echo "100" > $TMPFILE
 
 rm $TMPFILE
+
+reboot
