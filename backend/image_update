@@ -39,6 +39,8 @@ echo -e "${YELLOW} ---> Updating API modules${NC}"
 
 cd $APOLLO_DIR
 
+rm futurebit.sqlite
+
 git reset --hard
 git pull
 
