@@ -46,9 +46,6 @@ module.exports.auth = {
         '../backend/ckpool/ckpool.conf'
       );
 
-      await fs.access(configFilePath);
-      await fs.access(configCkpoolFilePath);
-
       exec(
         `sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g ${configFilePath}`
       );
@@ -56,6 +53,8 @@ module.exports.auth = {
       exec(
         `sudo sed -i 's#"pass": ""#"pass": "${password}"#g' ${configCkpoolFilePath}`
       );
+
+      console.log(password, configFilePath);
 
       exec('sudo systemctl restart node');
       exec('sudo systemctl restart ckpool');
