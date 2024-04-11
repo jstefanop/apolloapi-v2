@@ -86,30 +86,30 @@ module.exports.typeDefs = `
     interval: Int
     jobs: Int
     cleanFlags: Int
-    sharesSent: Int
-    sharesAccepted: Int
-    sharesRejected: Int
-    solutionsAccepted: Int
+    sharesSent: Float
+    sharesAccepted: Float
+    sharesRejected: Float
+    solutionsAccepted: Float
     minRespTime: Float
     avgRespTime: Float
     maxRespTime: Float
     shareLoss: Float
-    poolTotal: Int
+    poolTotal: Float
     inService: Int
     subscribeError: Int
-    diffChanges: Int
+    diffChanges: Float
     reconnections: Int
     reconnectionsOnErrors: Int
-    defaultJobShares: Int
-    staleJobShares: Int
-    duplicateShares: Int
-    lowDifficultyShares: Int
-    pwcSharesSent: Int
-    pwcSharesDropped: Int
-    bigDiffShares: Int
-    belowTargetShare: Int
+    defaultJobShares: Float
+    staleJobShares: Float
+    duplicateShares: Float
+    lowDifficultyShares: Float
+    pwcSharesSent: Float
+    pwcSharesDropped: Float
+    bigDiffShares: Float
+    belowTargetShare: Float
     pwcRestart: Int
-    statOverflow: Int
+    statOverflow: Float
   }
 
   type MinerStatsFans {
@@ -170,7 +170,7 @@ module.exports.typeDefs = `
   type MinerStatsSlotAlert {
     alertLo: Int
     alertHi: Int
-    numWrite: Int
+    numWrite: Float
   }
 
   type MinerStatsSlave {
@@ -203,8 +203,8 @@ module.exports.typeDefs = `
     hashrate1d: String
     hashrate7d: String
     diff: Float
-    accepted: Int
-    rejected: Int
+    accepted: Float
+    rejected: Float
     bestshare: Float
     SPS1m: Float
     SPS5m: Float
@@ -220,7 +220,7 @@ module.exports.typeDefs = `
     hashrate7d: String
     lastshare: Int
     workers: Int
-    shares: Int
+    shares: Float
     bestshare: Float
     bestever: Float
     authorised: Int
@@ -235,7 +235,7 @@ module.exports.typeDefs = `
     hashrate1d: String,
     hashrate7d: String,
     lastshare: Int,
-    shares: Int,
+    shares: Float,
     bestshare: Float,
     bestever: Float
   }

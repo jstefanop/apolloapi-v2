@@ -31,9 +31,9 @@ const runMigrations = async () => {
   try {
     console.log('Run migrations');
     const resp = await knex.migrate.latest();
-    await createCkpoolConfigFile();
-    await createBitcoinConfigFile();
     await runGenerateBitcoinPassword();
+    await createBitcoinConfigFile();
+    await createCkpoolConfigFile();
   } catch (err) {
     console.log(err);
   }
@@ -128,6 +128,18 @@ uacomment=FutureBit-Apollo-Node`;
     } catch (error) {
       console.error(
         `Error during the creation of the file bitcoin.conf: ${error.message}`
+      );
+    }
+  } finally {
+    const [settings] = await knex('settings')
+      .select(['node_rpc_password as nodeRpcPassword'])
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1);
+
+    if (settings && settings.nodeRpcPassword) {
+      exec(
+        `sudo sed -i s/rpcpassword.*/rpcpassword=${settings.nodeRpcPassword}/g ${configFilePath}`
       );
     }
   }
