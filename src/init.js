@@ -49,7 +49,7 @@ const runGenerateBitcoinPassword = async (settings) => {
 
     if (settings && settings.nodeRpcPassword)
       return console.log('Bitcoin password found');
-    else await utils.auth.changeNodeRpcPassword();
+    else await utils.auth.changeNodeRpcPassword(settings);
   } catch (err) {
     console.log(err);
   }
