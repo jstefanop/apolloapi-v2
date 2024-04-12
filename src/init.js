@@ -31,9 +31,9 @@ const runMigrations = async () => {
   try {
     console.log('Run migrations');
     const resp = await knex.migrate.latest();
-    await runGenerateBitcoinPassword();
-    await createBitcoinConfigFile();
     await createCkpoolConfigFile();
+    await createBitcoinConfigFile();
+    await runGenerateBitcoinPassword();
   } catch (err) {
     console.log(err);
   }

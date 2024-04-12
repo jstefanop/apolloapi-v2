@@ -147,6 +147,9 @@ echo -e "${GREEN} ---> Project UI dependencies installed using yarn${NC}"
 yarn build
 echo -e "${GREEN} ---> Project built using yarn${NC}"
 
+### DOCS ###
+#########################
+cp $APOLLO_DIR/docs/FutureBit-Apollo-II-Guide.pdf /home/futurebit/Desktop
 
 ### FIREWALL ###
 #########################
