@@ -139,7 +139,7 @@ uacomment=FutureBit-Apollo-Node`;
 
     if (settings && settings.nodeRpcPassword) {
       exec(
-        `sudo sed -i s/rpcpassword.*/rpcpassword=${settings.nodeRpcPassword}/g ${configFilePath}`
+        `sudo sed -i 's/rpcpassword.*/rpcpassword=${settings.nodeRpcPassword}/g' ${configFilePath}`
       );
     }
   }
