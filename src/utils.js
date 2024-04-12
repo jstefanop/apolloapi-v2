@@ -38,7 +38,7 @@ module.exports.auth = {
     exec(`echo 'futurebit:${password}' | sudo chpasswd`);
   },
 
-  async changeNodeRpcPassword() {
+  async changeNodeRpcPassword(settings) {
     try {
       console.log('Generating and saving bitcoin password');
 
@@ -63,7 +63,7 @@ module.exports.auth = {
       );
 
       exec('sudo systemctl restart node');
-      exec('sudo systemctl restart ckpool');
+      if (settings?.nodeEnableSoloMining)  exec('sudo systemctl restart ckpool');
     } catch (err) {
       console.log('ERR changeNodeRpcPassword', err);
     }
