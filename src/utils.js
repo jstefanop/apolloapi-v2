@@ -55,11 +55,11 @@ module.exports.auth = {
       await fsPromises.access(configCkpoolFilePath);
 
       exec(
-        `sudo sed -i s/rpcpassword.*/rpcpassword=${password}/g ${configBitcoinFilePath}`
+        `sudo sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinFilePath}`
       );
 
       exec(
-        `sudo sed -i 's#"pass": ""#"pass": "${password}"#g' ${configCkpoolFilePath}`
+        `sudo sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
       );
 
       exec('sudo systemctl restart node');
@@ -109,10 +109,10 @@ module.exports.auth = {
       const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nmaxconnections=32\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
       let conf = defaultConf;
 
+      this.manageCkpoolConf(settings);
+
       if (settings.nodeEnableSoloMining) {
         conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
-
-        this.manageCkpoolConf(settings);
 
         exec(
           `sudo cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`
@@ -139,8 +139,9 @@ module.exports.auth = {
 
       console.log('Writing Bitcoin conf file', conf);
 
-      exec(
-        `echo "${conf}" | sudo tee ${configBitcoinFilePath}`
+      await fsPromises.writeFile(
+        configBitcoinFilePath,
+        conf
       );
 
       exec('sudo systemctl restart node');

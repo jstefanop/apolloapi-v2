@@ -11,7 +11,6 @@ module.exports = ({ define }) => {
       })
 
       utils.auth.changeSystemPassword(password)
-      await utils.auth.changeNodeRpcPassword()
     } catch (err) {
       console.log('ERROR', err);
     }
