@@ -11,7 +11,7 @@ start_hashboards()
             
             local boardType=$(./apollo-helper -s $1)
             
-            if [[ "$boardType" == *"Apollo-BTC"* ]]; then
+            if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
   				screen -dmS miner ./futurebit-miner -comport $1 -ao_mode 1 $settings -powermode $mode
 			elif [[ "$boardType" == *"Apollo-2"* ]]; then
   				screen -dmS miner ./futurebit-miner-v2 -comport $1 -ao_mode 1 $settings -powermode $mode
@@ -37,7 +37,7 @@ sleep 35
 
 boardType=$(./apollo-helper -s /dev/ttyS1)
             
-if [[ "$boardType" == *"Apollo-BTC"* ]]; then
+if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
   	screen -dmS miner ./futurebit-miner -comport /dev/ttyS1 -ao_mode 1 $settings -powermode $mode
 elif [[ "$boardType" == *"Apollo-2"* ]]; then
   	screen -dmS miner ./futurebit-miner-v2 -comport /dev/ttyS1 -ao_mode 1 $settings -powermode $mode
