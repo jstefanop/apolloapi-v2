@@ -30,118 +30,28 @@ const initEnvFile = async () => {
 const runMigrations = async () => {
   try {
     console.log('Run migrations');
-    const resp = await knex.migrate.latest();
-    await createCkpoolConfigFile();
-    await createBitcoinConfigFile();
-    await runGenerateBitcoinPassword();
-  } catch (err) {
-    console.log(err);
-  }
-};
-
-const runGenerateBitcoinPassword = async () => {
-  try {
-    console.log('Checking bitcoin password existence');
+    await knex.migrate.latest();
     const [settings] = await knex('settings')
       .select(['node_rpc_password as nodeRpcPassword'])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(1);
+    await utils.auth.manageBitcoinConf(settings);
+    await runGenerateBitcoinPassword(settings);
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const runGenerateBitcoinPassword = async (settings) => {
+  try {
+    console.log('Checking bitcoin password existence');
 
     if (settings && settings.nodeRpcPassword)
       return console.log('Bitcoin password found');
     else await utils.auth.changeNodeRpcPassword();
   } catch (err) {
     console.log(err);
-  }
-};
-
-const createCkpoolConfigFile = async () => {
-  const configFilePath = path.resolve(
-    __dirname,
-    '../backend/ckpool/ckpool.conf'
-  );
-  const configContent = `{
-  "btcd": [
-    {
-      "url": "127.0.0.1:8332",
-      "auth": "futurebit",
-      "pass": "",
-      "notify": true
-    }
-  ],
-  "logdir": "/opt/apolloapi/backend/ckpool/logs"
-}`;
-
-  try {
-    // Check if the file exists
-    await fs.access(configFilePath);
-    console.log('File ckpool.conf already exists.');
-  } catch (error) {
-    try {
-      // Create the file
-      await fs.writeFile(configFilePath, configContent, 'utf-8');
-      console.log('File ckpool.conf created.');
-    } catch (error) {
-      console.error(
-        `Error during the creation of the file ckpool.conf: ${error.message}`
-      );
-    }
-  } finally {
-    const [settings] = await knex('settings')
-      .select(['node_rpc_password as nodeRpcPassword'])
-      .orderBy('created_at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1);
-
-    if (settings && settings.nodeRpcPassword) {
-      exec(
-        `sudo sed -i 's#"pass":.*#"pass": "${settings.nodeRpcPassword}",#g' ${configFilePath}`
-      );
-    }
-  }
-};
-
-const createBitcoinConfigFile = async () => {
-  const configFilePath = path.resolve(
-    __dirname,
-    '../backend/node/bitcoin.conf'
-  );
-  const configContent = `server=1
-rpcuser=futurebit
-rpcpassword=
-daemon=0
-maxconnections=32
-upnp=1
-uacomment=FutureBit-Apollo-Node`;
-
-  try {
-    // Check if the file exists
-    await fs.access(configFilePath);
-    console.log('File bitcoin.conf already exists.');
-  } catch (error) {
-    try {
-      // Create the file
-      await fs.writeFile(configFilePath, configContent, 'utf-8');
-      console.log('File bitcoin.conf created.');
-      await utils.auth.changeNodeRpcPassword();
-    } catch (error) {
-      console.error(
-        `Error during the creation of the file bitcoin.conf: ${error.message}`
-      );
-    }
-  } finally {
-    const [settings] = await knex('settings')
-      .select(['node_rpc_password as nodeRpcPassword'])
-      .orderBy('created_at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1);
-
-    if (settings && settings.nodeRpcPassword) {
-      exec(
-        `sudo sed -i 's/rpcpassword.*/rpcpassword=${settings.nodeRpcPassword}/g' ${configFilePath}`
-      );
-    }
   }
 };
 
