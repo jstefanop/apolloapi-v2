@@ -62,8 +62,6 @@ module.exports.auth = {
         `sudo sed -i 's#"pass": ""#"pass": "${password}"#g' ${configCkpoolFilePath}`
       );
 
-      console.log(password, configFilePath);
-
       exec('sudo systemctl restart node');
       exec('sudo systemctl restart ckpool');
     } catch (err) {
