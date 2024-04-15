@@ -168,15 +168,17 @@ module.exports.auth = {
       }
 
       if (settings.nodeUserConf) {
-        // Split settings.nodeUserConf and defaultConf into arrays of lines
-        const userConfLines = settings.nodeUserConf.split('\n');
-        const defaultConfLines = defaultConf.split('\n');
+        // Extract variable names from settings.nodeUserConf using regex
+        const userConfVariables = settings.nodeUserConf.match(/^[^=\r\n]+/gm);
 
-        // Exclude lines from settings.nodeUserConf that are also present in defaultConf
-        const filteredUserConfLines = userConfLines.filter(line => !defaultConfLines.includes(line));
+        // Extract variable names from defaultConf using regex
+        const defaultConfVariables = defaultConf.match(/^[^=\r\n]+/gm);
 
-        // Join the remaining lines back into a single string
-        const filteredUserConf = filteredUserConfLines.join('\n');
+        // Remove variables from settings.nodeUserConf that are also present in defaultConf
+        const filteredUserConfVariables = userConfVariables.filter(variable => !defaultConfVariables.includes(variable));
+
+        // Join the remaining variables back into a single string
+        const filteredUserConf = filteredUserConfVariables.join('\n');
 
         // Append the filtered user configuration to the overall configuration
         conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
