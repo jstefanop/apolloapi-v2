@@ -90,10 +90,10 @@ module.exports.auth = {
     // Check if wlan0 has an associated IP address
     if (interfaces['wlan0'] && interfaces['wlan0'].some(info => info.family === 'IPv4')) {
       // If wlan0 has an associated IP address, use wlan0
-      network = interfaces['wlan0'].find(info => info.family === 'IPv4').address;
+      network = interfaces['wlan0'].find(info => info.family === 'IPv4').cidr;
     } else if (interfaces['eth0'] && interfaces['eth0'].some(info => info.family === 'IPv4')) {
       // If wlan0 doesn't have an associated IP address but eth0 does, use eth0
-      network = interfaces['eth0'].find(info => info.family === 'IPv4').address;
+      network = interfaces['eth0'].find(info => info.family === 'IPv4').cidr;
     } else {
       console.log('No IP address associated with wlan0 or eth0');
     }

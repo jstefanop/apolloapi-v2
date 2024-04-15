@@ -1,12 +1,8 @@
-const { writeFileSync, readFileSync, existsSync } = require('fs');
+const { writeFileSync, existsSync } = require('fs');
 const { join } = require('path');
 const crypto = require('crypto');
-const { exec } = require('child_process');
-const generator = require('generate-password');
 const utils = require('./utils');
 const { knex } = require('./db');
-const fs = require('fs').promises;
-const path = require('path');
 
 const initEnvFile = async () => {
   const envPath = join(__dirname, '..', '.env');
@@ -32,7 +28,14 @@ const runMigrations = async () => {
     console.log('Run migrations');
     await knex.migrate.latest();
     const [settings] = await knex('settings')
-      .select(['node_rpc_password as nodeRpcPassword'])
+      .select([
+        'node_rpc_password as nodeRpcPassword',
+        'node_enable_tor as nodeEnableTor',
+        'node_user_conf as nodeUserConf',
+        'node_enable_solo_mining as nodeEnableSoloMining',
+        'node_max_connections as nodeMaxConnections',
+        'node_allow_lan as nodeAllowLan',
+      ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(1);
