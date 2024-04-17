@@ -64,6 +64,7 @@ module.exports.auth = {
       );
 
       exec('sudo systemctl restart node');
+
       if (settings?.nodeEnableSoloMining) exec('sudo systemctl restart ckpool');
     } catch (err) {
       console.log('ERR changeNodeRpcPassword', err);
@@ -80,9 +81,46 @@ module.exports.auth = {
     };
   },
 
+  networkAddressWithCIDR(ipAddress, netmask) {
+    // Converti l'indirizzo IP e la netmask in forma binaria
+    const ipBinary = ipAddress
+      .split('.')
+      .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
+      .join('');
+    const netmaskBinary = netmask
+      .split('.')
+      .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
+      .join('');
+
+    // Applica l'operazione bitwise AND
+    const networkBinary = ipBinary
+      .split('')
+      .map((bit, index) => bit & netmaskBinary[index])
+      .join('');
+
+    // Converti il risultato in forma di stringa
+    const networkAddress = networkBinary
+      .match(/.{1,8}/g)
+      .map((byte) => parseInt(byte, 2))
+      .join('.');
+
+    // Calcola il numero di bit della netmask
+    const cidrPrefix = netmask
+      .split('.')
+      .reduce(
+        (acc, byte) =>
+          acc + (parseInt(byte, 10).toString(2).match(/1/g) || '').length,
+        0
+      );
+
+    return `${networkAddress}/${cidrPrefix}`;
+  },
+
   getSystemNetwork() {
     // Get network interface information
     const interfaces = os.networkInterfaces();
+    let address = null;
+    let netmask = null;
     let network = null;
 
     // Check if wlan0 has an associated IP address
@@ -91,16 +129,29 @@ module.exports.auth = {
       interfaces['wlan0'].some((info) => info.family === 'IPv4')
     ) {
       // If wlan0 has an associated IP address, use wlan0
-      network = interfaces['wlan0'].find((info) => info.family === 'IPv4').cidr;
+      address = interfaces['wlan0'].find(
+        (info) => info.family === 'IPv4'
+      ).address;
+      netmask = interfaces['wlan0'].find(
+        (info) => info.family === 'IPv4'
+      ).netmask;
     } else if (
       interfaces['eth0'] &&
       interfaces['eth0'].some((info) => info.family === 'IPv4')
     ) {
       // If wlan0 doesn't have an associated IP address but eth0 does, use eth0
-      network = interfaces['eth0'].find((info) => info.family === 'IPv4').cidr;
+      address = interfaces['eth0'].find(
+        (info) => info.family === 'IPv4'
+      ).address;
+      netmask = interfaces['eth0'].find(
+        (info) => info.family === 'IPv4'
+      ).netmask;
     } else {
       console.log('No IP address associated with wlan0 or eth0');
     }
+
+    if (address && netmask)
+      network = this.networkAddressWithCIDR(address, netmask);
 
     return network;
   },
@@ -182,8 +233,27 @@ module.exports.auth = {
         );
 
         if (filteredUserConfVariables.length) {
-          // Join the remaining variables back into a single string
-          const filteredUserConf = filteredUserConfVariables.join('\n');
+          // Initialize an empty array to store formatted user configurations
+          const formattedUserConf = [];
+
+          // Iterate through filtered variables and format them
+          filteredUserConfVariables.forEach((variable) => {
+            // If the variable has a value, format it as "variable=value"
+            // Otherwise, format it as "variable"
+            const formattedVariable = settings.nodeUserConf.includes(
+              `${variable}=`
+            )
+              ? `${variable}=${
+                  settings.nodeUserConf.match(new RegExp(`${variable}=(.*)`))[1]
+                }`
+              : variable;
+
+            // Push the formatted variable to the array
+            formattedUserConf.push(formattedVariable);
+          });
+
+          // Join the formatted variables into a single string with newlines
+          const filteredUserConf = formattedUserConf.join('\n');
 
           // Append the filtered user configuration to the overall configuration
           conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;

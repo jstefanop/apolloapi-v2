@@ -185,7 +185,7 @@ module.exports.typeDefs = `
 
   type MinerStatsCkpool {
     pool: MinerStatsCkpoolPool
-    users: MinerStatsCkpoolUsers
+    users: [MinerStatsCkpoolUsers]
   }
 
   type MinerStatsCkpoolPool {
