@@ -85,20 +85,22 @@ module.exports.auth = {
     const interfaces = os.networkInterfaces();
     let network = null;
 
-    console.log(interfaces);
-
     // Check if wlan0 has an associated IP address
-    if (interfaces['wlan0'] && interfaces['wlan0'].some(info => info.family === 'IPv4')) {
+    if (
+      interfaces['wlan0'] &&
+      interfaces['wlan0'].some((info) => info.family === 'IPv4')
+    ) {
       // If wlan0 has an associated IP address, use wlan0
-      network = interfaces['wlan0'].find(info => info.family === 'IPv4').cidr;
-    } else if (interfaces['eth0'] && interfaces['eth0'].some(info => info.family === 'IPv4')) {
+      network = interfaces['wlan0'].find((info) => info.family === 'IPv4').cidr;
+    } else if (
+      interfaces['eth0'] &&
+      interfaces['eth0'].some((info) => info.family === 'IPv4')
+    ) {
       // If wlan0 doesn't have an associated IP address but eth0 does, use eth0
-      network = interfaces['eth0'].find(info => info.family === 'IPv4').cidr;
+      network = interfaces['eth0'].find((info) => info.family === 'IPv4').cidr;
     } else {
       console.log('No IP address associated with wlan0 or eth0');
     }
-
-    console.log('LAN IP Address:', network);
 
     return network;
   },
@@ -175,13 +177,17 @@ module.exports.auth = {
         const defaultConfVariables = defaultConf.match(/^[^=\r\n]+/gm);
 
         // Remove variables from settings.nodeUserConf that are also present in defaultConf
-        const filteredUserConfVariables = userConfVariables.filter(variable => !defaultConfVariables.includes(variable));
+        const filteredUserConfVariables = userConfVariables.filter(
+          (variable) => !defaultConfVariables.includes(variable)
+        );
 
-        // Join the remaining variables back into a single string
-        const filteredUserConf = filteredUserConfVariables.join('\n');
+        if (filteredUserConfVariables.length) {
+          // Join the remaining variables back into a single string
+          const filteredUserConf = filteredUserConfVariables.join('\n');
 
-        // Append the filtered user configuration to the overall configuration
-        conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
+          // Append the filtered user configuration to the overall configuration
+          conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
+        }
       }
 
       console.log('Writing Bitcoin conf file', conf);
