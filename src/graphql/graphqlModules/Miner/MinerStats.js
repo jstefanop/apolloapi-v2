@@ -189,7 +189,7 @@ module.exports.typeDefs = `
   }
 
   type MinerStatsCkpoolPool {
-    runtime: Int
+    runtime: Float
     lastupdate: Int
     Users: Int
     Workers: Int
