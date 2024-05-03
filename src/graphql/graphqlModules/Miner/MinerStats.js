@@ -62,7 +62,7 @@ module.exports.typeDefs = `
     byDiff: Float
     byPool: Float
     byJobs: Float
-    solutions: Int
+    solutions: Float
     errors: Int
     errorRate: Float
     chipSpeed: Float
@@ -156,8 +156,8 @@ module.exports.typeDefs = `
     lowCurrRst: Int
     currents: [Int]
     brokenPwc: Int
-    solutions: Int
-    errors: Int
+    solutions: Float
+    errors: Float
     ghs: Float
     errorRate: Float
     chipRestarts: Int

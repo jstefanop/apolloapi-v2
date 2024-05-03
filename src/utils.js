@@ -183,6 +183,10 @@ module.exports.auth = {
 
   async manageBitcoinConf(settings) {
     try {
+      // CHecking current conf file
+      const currentConf = await fsPromises.readFile(configBitcoinFilePath, 'utf8');
+      const currentConfBase64 = Buffer.from(currentConf).toString('base64');
+
       const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
       let conf = defaultConf;
 
@@ -260,12 +264,15 @@ module.exports.auth = {
         }
       }
 
+      const confBase64 = Buffer.from(conf).toString('base64');
+
+      if (currentConfBase64 === confBase64) return console.log('No changes to bitcoin.conf file');
+
       console.log('Writing Bitcoin conf file', conf);
 
       await fsPromises.writeFile(configBitcoinFilePath, conf);
 
-      exec('sudo systemctl stop node');
-      exec('sudo systemctl start node');
+      exec('sudo systemctl restart node');
     } catch (err) {
       console.log('ERR manageBitcoinConf', err);
     }

@@ -20,7 +20,7 @@ const store = loadStore({
       return !['index.js', 'store.js'].includes(relativePath) && relativePath.match(/\.js$/)
     }
   },
-  logger: logger,
+  logger: process.env.NODE_ENV !== 'development' && logger,
   methodContext: {
     knex,
     utils
