@@ -272,7 +272,7 @@ module.exports.auth = {
 
       await fsPromises.writeFile(configBitcoinFilePath, conf);
 
-      exec('sudo systemctl restart node');
+      exec('sleep 3 && sudo systemctl restart node');
     } catch (err) {
       console.log('ERR manageBitcoinConf', err);
     }
