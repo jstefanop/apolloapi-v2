@@ -189,12 +189,11 @@ module.exports.auth = {
 
       const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
       let conf = defaultConf;
+      conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
 
       this.manageCkpoolConf(settings);
 
       if (settings.nodeEnableSoloMining) {
-        conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
-
         exec(
           `sudo cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`
         );
