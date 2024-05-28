@@ -18,11 +18,13 @@ module.exports.typeDefs = `
     leftSidebarExtended: Boolean
     rightSidebarVisibility: Boolean
     temperatureUnit: TemperatureUnit
+    powerLedOff: Boolean
     nodeRpcPassword: String
     nodeEnableTor: Boolean
     nodeUserConf: String
     nodeEnableSoloMining: Boolean
-    powerLedOff: Boolean
+    nodeMaxConnections: Int
+    nodeAllowLan: Boolean
   }
 
   type SettingsUpdateOutput {

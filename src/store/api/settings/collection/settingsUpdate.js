@@ -12,11 +12,13 @@ const updateFields = {
   leftSidebarExtended: 'left_sidebar_extended',
   rightSidebarVisibility: 'right_sidebar_visibility',
   temperatureUnit: 'temperature_unit',
+  powerLedOff: 'power_led_off',
   nodeRpcPassword: 'node_rpc_password',
   nodeEnableTor: 'node_enable_tor',
   nodeUserConf: 'node_user_conf',
   nodeEnableSoloMining: 'node_enable_solo_mining',
-  powerLedOff: 'power_led_off'
+  nodeMaxConnections: 'node_max_connections',
+  nodeAllowLan: 'node_allow_lan'
 }
 
 module.exports = ({ define }) => {

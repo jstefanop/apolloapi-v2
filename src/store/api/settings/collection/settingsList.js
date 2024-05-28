@@ -28,11 +28,13 @@ module.exports = ({ define }) => {
       'left_sidebar_extended as leftSidebarExtended',
       'right_sidebar_visibility as rightSidebarVisibility',
       'temperature_unit as temperatureUnit',
+      'power_led_off as powerLedOff',
       'node_rpc_password as nodeRpcPassword',
       'node_enable_tor as nodeEnableTor',
       'node_user_conf as nodeUserConf',
       'node_enable_solo_mining as nodeEnableSoloMining',
-      'power_led_off as powerLedOff',
+      'node_max_connections as nodeMaxConnections',
+      'node_allow_lan as nodeAllowLan',
     )
 
     readQ.orderBy('created_at', 'desc')

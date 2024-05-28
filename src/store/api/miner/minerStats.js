@@ -1,10 +1,7 @@
-const { join } = require('path');
-const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const _ = require('lodash');
 const moment = require('moment');
-const { existsSync } = require('fs');
 const c = require('config');
 
 module.exports = ({ define }) => {
@@ -69,40 +66,48 @@ const getCkpoolStats = async (errors, settings, pools) => {
 
       try {
         if (settings?.nodeEnableSoloMining) {
-          const poolUsername = pools[0] && pools[0].username;
           const ckpoolPoolStatsFile = path.resolve(
             __dirname,
             '../../../../backend/ckpool/logs/pool/pool.status'
           );
 
-          const ckpoolUsersStatsFile = path.resolve(
+          const ckpoolUsersStatsDir = path.resolve(
             __dirname,
-            `../../../../backend/ckpool/logs/users/${poolUsername}`
+            '../../../../backend/ckpool/logs/users/'
           );
 
-          if (
-            existsSync(ckpoolPoolStatsFile) &&
-            existsSync(ckpoolUsersStatsFile)
-          ) {
-            await Promise.all([
-              (async () => {
-                let ckpoolPoolData = await parseFileToJsonArray(
-                  ckpoolPoolStatsFile
-                );
-                let ckpoolUsersData = await fs.readFile(
-                  ckpoolUsersStatsFile,
-                  'utf8'
-                );
-
-                ckpoolUsersData = JSON.parse(ckpoolUsersData);
-
-                ckpoolData = {
-                  pool: ckpoolPoolData,
-                  users: ckpoolUsersData,
-                };
-              })(),
-            ]);
+          try {
+            // Check if the directory exists
+            await fs.stat(ckpoolUsersStatsDir);
+          } catch (err) {
+            if (err.code === 'ENOENT') {
+              // Directory does not exist
+              resolve(ckpoolData); // Resolve with null data
+              return;
+            }
+            throw err; // Re-throw other errors
           }
+
+          const filenames = await fs.readdir(ckpoolUsersStatsDir);
+
+          const usersDataPromises = filenames.map(async (filename) => {
+            const ckpoolUsersStatsFile = path.resolve(
+              ckpoolUsersStatsDir,
+              filename
+            );
+            const ckpoolUsersData = await fs.readFile(
+              ckpoolUsersStatsFile,
+              'utf8'
+            );
+            return JSON.parse(ckpoolUsersData);
+          });
+
+          const usersData = await Promise.all(usersDataPromises);
+
+          ckpoolData = {
+            pool: await parseFileToJsonArray(ckpoolPoolStatsFile),
+            users: usersData,
+          };
         }
 
         resolve(ckpoolData);

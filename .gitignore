@@ -60,6 +60,7 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.staging
 .env*.local
 
 # next.js build output
@@ -67,6 +68,7 @@ typings/
 
 # sqlite
 *.sqlite
+*.sqlite.*
 
 #backed
 backend/apollo-miner/apollo-miner*
@@ -77,3 +79,4 @@ backend/node/bitcoind
 backend/node/bitcoin.conf
 backend/ckpool/ckpool.conf
 backend/start_swap.sh
+backend/apollo-miner/mode

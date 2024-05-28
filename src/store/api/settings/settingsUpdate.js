@@ -11,7 +11,10 @@ module.exports = ({ define }) => {
       if (
         oldSettings.nodeEnableTor !== newSettings.nodeEnableTor ||
         oldSettings.nodeUserConf !== newSettings.nodeUserConf ||
-        oldSettings.nodeEnableSoloMining !== newSettings.nodeEnableSoloMining
+        oldSettings.nodeEnableSoloMining !== newSettings.nodeEnableSoloMining ||
+        oldSettings.nodeRpcPassword !== newSettings.nodeRpcPassword ||
+        oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
+        oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections
       )
         await utils.auth.manageBitcoinConf(newSettings);
 
