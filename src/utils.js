@@ -220,7 +220,7 @@ module.exports.auth = {
 
       if (settings.nodeAllowLan) {
         const lanNetwork = this.getSystemNetwork();
-        conf += `\nrpcallowip=${lanNetwork || '127.0.0.1'}`;
+        conf += `\nrpcbind=0.0.0.0\nrpcallowip=0.0.0.0/0`;
       }
 
       if (settings.nodeUserConf) {
