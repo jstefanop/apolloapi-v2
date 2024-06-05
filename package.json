@@ -4,7 +4,7 @@
   "main": "index.js",
   "repository": "https://github.com/jstefanop/apolloapi-v2.git",
   "author": "FutureBit LLC",
-  "license": "CC BY-NC-ND 4.0",
+  "license": "CC-BY-NC-ND-4.0",
   "bin": "src/init.js",
   "engines": {
     "node": ">= 8.x"
@@ -15,25 +15,24 @@
     "run-container": "docker run --rm -it -v \"$(pwd)\":/hostdir --entrypoint=/bin/bash orange"
   },
   "dependencies": {
-    "axios": "^1.6.5",
+    "axios": "^1.7.2",
     "backend-helpers": "^0.5.0",
     "backend-store": "^0.7.0",
     "bcryptjs": "^2.4.3",
     "bitcoin": "^3.0.3",
-    "config": "^3.3.10",
+    "config": "^3.3.11",
     "cors": "^2.8.5",
     "diskusage": "^1.2.0",
-    "dotenv": "^16.3.2",
-    "express": "^4.18.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "generate-password": "^1.7.1",
-    "ip": "^1.1.8",
     "knex": "^3.1.0",
     "luxon": "^3.4.4",
     "normalize-object": "^2.0.6",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3",
+    "nodemon": "^3.1.3",
     "pkg": "^5.8.1"
   }
 }
