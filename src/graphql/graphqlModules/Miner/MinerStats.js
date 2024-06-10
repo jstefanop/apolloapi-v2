@@ -224,7 +224,7 @@ module.exports.typeDefs = `
     shares: Float
     bestshare: Float
     bestever: Float
-    authorised: Int
+    authorised: Float
     worker: [MinerStatsCkpoolWorker]
   }
 
