@@ -25,6 +25,7 @@ module.exports.typeDefs = `
     nodeEnableSoloMining: Boolean
     nodeMaxConnections: Int
     nodeAllowLan: Boolean
+    btcsig: String
   }
 
   type SettingsUpdateOutput {

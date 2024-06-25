@@ -14,7 +14,8 @@ module.exports = ({ define }) => {
         oldSettings.nodeEnableSoloMining !== newSettings.nodeEnableSoloMining ||
         oldSettings.nodeRpcPassword !== newSettings.nodeRpcPassword ||
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
-        oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections
+        oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
+        oldSettings.btcsig !== newSettings.btcsig
       )
         await utils.auth.manageBitcoinConf(newSettings);
 
