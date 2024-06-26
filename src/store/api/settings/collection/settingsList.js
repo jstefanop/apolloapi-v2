@@ -35,6 +35,7 @@ module.exports = ({ define }) => {
       'node_enable_solo_mining as nodeEnableSoloMining',
       'node_max_connections as nodeMaxConnections',
       'node_allow_lan as nodeAllowLan',
+      'btcsig'
     )
 
     readQ.orderBy('created_at', 'desc')
