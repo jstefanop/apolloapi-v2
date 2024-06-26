@@ -64,6 +64,7 @@ module.exports.auth = {
       );
 
       exec('sudo systemctl restart node');
+
       if (settings?.nodeEnableSoloMining) exec('sudo systemctl restart ckpool');
     } catch (err) {
       console.log('ERR changeNodeRpcPassword', err);
@@ -80,9 +81,46 @@ module.exports.auth = {
     };
   },
 
+  networkAddressWithCIDR(ipAddress, netmask) {
+    // Converti l'indirizzo IP e la netmask in forma binaria
+    const ipBinary = ipAddress
+      .split('.')
+      .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
+      .join('');
+    const netmaskBinary = netmask
+      .split('.')
+      .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
+      .join('');
+
+    // Applica l'operazione bitwise AND
+    const networkBinary = ipBinary
+      .split('')
+      .map((bit, index) => bit & netmaskBinary[index])
+      .join('');
+
+    // Converti il risultato in forma di stringa
+    const networkAddress = networkBinary
+      .match(/.{1,8}/g)
+      .map((byte) => parseInt(byte, 2))
+      .join('.');
+
+    // Calcola il numero di bit della netmask
+    const cidrPrefix = netmask
+      .split('.')
+      .reduce(
+        (acc, byte) =>
+          acc + (parseInt(byte, 10).toString(2).match(/1/g) || '').length,
+        0
+      );
+
+    return `${networkAddress}/${cidrPrefix}`;
+  },
+
   getSystemNetwork() {
     // Get network interface information
     const interfaces = os.networkInterfaces();
+    let address = null;
+    let netmask = null;
     let network = null;
 
     // Check if wlan0 has an associated IP address
@@ -91,16 +129,29 @@ module.exports.auth = {
       interfaces['wlan0'].some((info) => info.family === 'IPv4')
     ) {
       // If wlan0 has an associated IP address, use wlan0
-      network = interfaces['wlan0'].find((info) => info.family === 'IPv4').cidr;
+      address = interfaces['wlan0'].find(
+        (info) => info.family === 'IPv4'
+      ).address;
+      netmask = interfaces['wlan0'].find(
+        (info) => info.family === 'IPv4'
+      ).netmask;
     } else if (
       interfaces['eth0'] &&
       interfaces['eth0'].some((info) => info.family === 'IPv4')
     ) {
       // If wlan0 doesn't have an associated IP address but eth0 does, use eth0
-      network = interfaces['eth0'].find((info) => info.family === 'IPv4').cidr;
+      address = interfaces['eth0'].find(
+        (info) => info.family === 'IPv4'
+      ).address;
+      netmask = interfaces['eth0'].find(
+        (info) => info.family === 'IPv4'
+      ).netmask;
     } else {
       console.log('No IP address associated with wlan0 or eth0');
     }
+
+    if (address && netmask)
+      network = this.networkAddressWithCIDR(address, netmask);
 
     return network;
   },
@@ -132,14 +183,20 @@ module.exports.auth = {
 
   async manageBitcoinConf(settings) {
     try {
+      // Checking current conf file
+      const currentConf = await fsPromises.readFile(
+        configBitcoinFilePath,
+        'utf8'
+      );
+      const currentConfBase64 = Buffer.from(currentConf).toString('base64');
+
       const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
       let conf = defaultConf;
+      conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
 
       this.manageCkpoolConf(settings);
 
       if (settings.nodeEnableSoloMining) {
-        conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
-
         exec(
           `sudo cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`
         );
@@ -166,35 +223,46 @@ module.exports.auth = {
 
       if (settings.nodeAllowLan) {
         const lanNetwork = this.getSystemNetwork();
-        conf += `\nrpcallowip=${lanNetwork || '127.0.0.1'}`;
+        conf += `\nrpcbind=0.0.0.0\nrpcallowip=0.0.0.0/0`;
       }
 
       if (settings.nodeUserConf) {
-        // Extract variable names from settings.nodeUserConf using regex
-        const userConfVariables = settings.nodeUserConf.match(/^[^=\r\n]+/gm);
+        // Extract lines from settings.nodeUserConf
+        const userConfLines = settings.nodeUserConf.split('\n');
 
-        // Extract variable names from defaultConf using regex
-        const defaultConfVariables = defaultConf.match(/^[^=\r\n]+/gm);
+        // Initialize an empty array to store formatted user configurations
+        const formattedUserConf = [];
 
-        // Remove variables from settings.nodeUserConf that are also present in defaultConf
-        const filteredUserConfVariables = userConfVariables.filter(
-          (variable) => !defaultConfVariables.includes(variable)
-        );
+        // Iterate through each line and add to formattedUserConf if not in defaultConf
+        userConfLines.forEach((line) => {
+          const variable = line.split('=')[0];
+          if (!defaultConf.includes(variable)) {
+            formattedUserConf.push(line.trim());
+          }
+        });
 
-        if (filteredUserConfVariables.length) {
-          // Join the remaining variables back into a single string
-          const filteredUserConf = filteredUserConfVariables.join('\n');
+        if (formattedUserConf.length) {
+          // Join the formatted variables into a single string with newlines
+          const filteredUserConf = formattedUserConf.join('\n');
 
           // Append the filtered user configuration to the overall configuration
           conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
         }
       }
 
+      // Ensure there are no trailing characters or spaces
+      conf = conf.trim() + '\n';
+
+      const confBase64 = Buffer.from(conf).toString('base64');
+
+      if (currentConfBase64 === confBase64)
+        return console.log('No changes to bitcoin.conf file');
+
       console.log('Writing Bitcoin conf file', conf);
 
-      await fsPromises.writeFile(configBitcoinFilePath, conf);
+      await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
 
-      exec('sudo systemctl restart node');
+      exec('sleep 3 && sudo systemctl restart node');
     } catch (err) {
       console.log('ERR manageBitcoinConf', err);
     }

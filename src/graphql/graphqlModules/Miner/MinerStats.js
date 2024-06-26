@@ -17,6 +17,7 @@ module.exports.typeDefs = `
     uuid: String
     version: String
     date: String
+    comport: String
     statVersion: String
     versions: MinerStatsVersion
     master: MinerStatsMaster
@@ -62,7 +63,7 @@ module.exports.typeDefs = `
     byDiff: Float
     byPool: Float
     byJobs: Float
-    solutions: Int
+    solutions: Float
     errors: Int
     errorRate: Float
     chipSpeed: Float
@@ -156,8 +157,8 @@ module.exports.typeDefs = `
     lowCurrRst: Int
     currents: [Int]
     brokenPwc: Int
-    solutions: Int
-    errors: Int
+    solutions: Float
+    errors: Float
     ghs: Float
     errorRate: Float
     chipRestarts: Int
@@ -185,11 +186,11 @@ module.exports.typeDefs = `
 
   type MinerStatsCkpool {
     pool: MinerStatsCkpoolPool
-    users: MinerStatsCkpoolUsers
+    users: [MinerStatsCkpoolUsers]
   }
 
   type MinerStatsCkpoolPool {
-    runtime: Int
+    runtime: Float
     lastupdate: Int
     Users: Int
     Workers: Int
@@ -223,7 +224,7 @@ module.exports.typeDefs = `
     shares: Float
     bestshare: Float
     bestever: Float
-    authorised: Int
+    authorised: Float
     worker: [MinerStatsCkpoolWorker]
   }
 

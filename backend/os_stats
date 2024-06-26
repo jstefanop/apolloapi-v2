@@ -50,12 +50,47 @@ then
   MINER_FAN_SPEED=$(cat /var/local/apollo/hwmon/fan_rpm)
 fi
 
-#Network
+# Function to check if an interface is up or down
+get_interface_status() {
+  local interface=$1
+  ip link show "$interface" | grep -q "state UP"
+  if [ $? -eq 0 ]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+# Retrieve IP, MAC and status of eth0 and wlan0 interfaces
 ETH_IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f 1)
 ETH_MAC=$(ip link show eth0 | awk '/ether/ {print $2}')
+ETH_STATUS=$(get_interface_status eth0)
+
 WLAN_IP=$(ip addr show wlan0 | awk '/inet / {print $2}' | cut -d/ -f 1)
 WLAN_MAC=$(ip link show wlan0 | awk '/ether/ {print $2}')
- 
+WLAN_STATUS=$(get_interface_status wlan0)
+
+# Variable to track the first IP of wlx interfaces
+FIRST_WLX_IP=""
+FIRST_WLX_MAC=""
+FIRST_WLX_STATUS=""
+
+# Retrieve IP, MAC and status of WiFi interfaces starting with wlx
+for interface in $(ip -o link show | awk -F': ' '{print $2}' | grep ^wlx); do
+  WLX_IP=$(ip addr show "$interface" | awk '/inet / {print $2}' | cut -d/ -f 1)
+  WLX_MAC=$(ip link show "$interface" | awk '/ether/ {print $2}')
+  WLX_STATUS=$(get_interface_status "$interface")
+  
+  # If WLAN_IP is empty and FIRST_WLX_IP is not yet assigned, use WLX_IP
+  if [ -z "$WLAN_IP" ] && [ -z "$FIRST_WLX_IP" ] && [ -n "$WLX_IP" ]; then
+    FIRST_WLX_IP=$WLX_IP
+    FIRST_WLX_MAC=$WLX_MAC
+    FIRST_WLX_STATUS=$WLX_STATUS
+    WLAN_IP=$WLX_IP
+    WLAN_MAC=$WLX_MAC
+    WLAN_STATUS=$WLX_STATUS
+  fi
+done
 
 # Memory
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
@@ -98,11 +133,13 @@ JSON="{
   \"network\": [{
       \"name\": \"eth0\",
       \"address\": \"$ETH_IP\",
-      \"mac\": \"$ETH_MAC\"
+      \"mac\": \"$ETH_MAC\",
+      \"status\": \"$ETH_STATUS\"
   }, {
       \"name\": \"wlan0\",
       \"address\": \"$WLAN_IP\",
-      \"mac\": \"$WLAN_MAC\"
+      \"mac\": \"$WLAN_MAC\",
+      \"status\": \"$WLAN_STATUS\"
   }],
   \"memory\":
   {
