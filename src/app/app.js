@@ -95,10 +95,20 @@ const fetchStatistics = () => {
       boards.push(totals);
 
       await knex.transaction(async (trx) => {
+        // Log the number of rows before deletion
+        const rowsBefore = await trx('time_series_data').count('* as count');
+        console.log('Rows before deletion:', rowsBefore[0].count);
+
         // Remove old data
-        await trx('time_series_data')
-          .where('createdAt', '<', knex.raw("datetime('now', '-1 year')"))
+        const deletedRows = await trx('time_series_data')
+          .where('createdAt', '<', knex.raw("datetime('now', '-1 week')"))
           .del();
+        console.log('Deleted rows:', deletedRows);
+
+        // Log the number of rows after deletion
+        const rowsAfter = await trx('time_series_data').count('* as count');
+        console.log('Rows after deletion:', rowsAfter[0].count);
+
         // Insert new data
         await trx('time_series_data').insert(boards);
       });
