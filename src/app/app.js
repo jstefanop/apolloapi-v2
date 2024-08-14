@@ -101,7 +101,7 @@ const fetchStatistics = () => {
 
         // Remove old data
         const deletedRows = await trx('time_series_data')
-          .where('createdAt', '<', knex.raw("datetime('now', '-1 week')"))
+          .where('createdAt', '<', knex.raw("datetime('now', '-7 days')"))
           .del();
         console.log('Deleted rows:', deletedRows);
 
