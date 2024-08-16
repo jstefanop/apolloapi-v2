@@ -60,6 +60,8 @@ echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
 
 yarn build
 
+yarn cache clean
+
 chown -R futurebit $APOLLO_DIR
 
 
