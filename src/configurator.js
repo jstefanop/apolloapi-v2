@@ -1,7 +1,5 @@
 const fsPromises = require('fs').promises;
 const _ = require('lodash');
-const os = require('os');
-const ip = require('ip');
 const { knex } = require('./db')
 
 const generate = async function (pools = null, settings = null ) {
