@@ -88,9 +88,13 @@ const getCkpoolStats = async (errors, settings, pools) => {
             throw err; // Re-throw other errors
           }
 
-          const filenames = await fs.readdir(ckpoolUsersStatsDir);
+          let filenames = await fs.readdir(ckpoolUsersStatsDir);
+          filenames = filenames.filter((filename) => {
+            if (!filename.match(/\.ds_store/i)) return filename;
+          });
 
           const usersDataPromises = filenames.map(async (filename) => {
+            
             const ckpoolUsersStatsFile = path.resolve(
               ckpoolUsersStatsDir,
               filename
@@ -99,6 +103,7 @@ const getCkpoolStats = async (errors, settings, pools) => {
               ckpoolUsersStatsFile,
               'utf8'
             );
+
             return JSON.parse(ckpoolUsersData);
           });
 
