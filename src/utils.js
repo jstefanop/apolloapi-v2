@@ -227,25 +227,23 @@ module.exports.auth = {
       }
 
       if (settings.nodeUserConf) {
-        // Extract lines from settings.nodeUserConf
         const userConfLines = settings.nodeUserConf.split('\n');
-
-        // Initialize an empty array to store formatted user configurations
         const formattedUserConf = [];
 
-        // Iterate through each line and add to formattedUserConf if not in defaultConf
+        // Aggiungi le opzioni da escludere in una lista
+        const excludedOptions = ['rpcallowip', 'rpcbind', 'maxconnections'];
+
         userConfLines.forEach((line) => {
-          const variable = line.split('=')[0];
-          if (!defaultConf.includes(variable)) {
+          const variable = line.split('=')[0].trim();
+
+          // Verifica che la variabile non sia nell'elenco delle opzioni escluse e non sia nel defaultConf
+          if (!defaultConf.includes(variable) && !excludedOptions.includes(variable)) {
             formattedUserConf.push(line.trim());
           }
         });
 
         if (formattedUserConf.length) {
-          // Join the formatted variables into a single string with newlines
           const filteredUserConf = formattedUserConf.join('\n');
-
-          // Append the filtered user configuration to the overall configuration
           conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
         }
       }
