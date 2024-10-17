@@ -26,9 +26,8 @@ tune2fs -m .1 /dev/nvme0n1p1
 mkdir /media/nvme/Bitcoin
 chown -R futurebit /media/nvme/Bitcoin/
 
-#Start node + swap
+#Start swap (node is started from UI)
 systemctl start swap
-systemctl start node
 
 echo "100" > /tmp/format_node_disk_c_done
 
