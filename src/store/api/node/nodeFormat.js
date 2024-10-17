@@ -15,7 +15,7 @@ function formatDisk () {
     const scriptName = (process.env.NODE_ENV === 'production') ? 'format_node_disk' : 'format_node_disk_fake'
     const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
 
-    const cmd = spawn('sudo',  ['bash', scriptPath]);
+    const cmd = (process.env.NODE_ENV === 'production') ? spawn('sudo', ['bash', scriptPath])  : spawn('bash', [scriptPath]);
 
     cmd.stdout.on('data', (data) => {
       console.log(`stdout: ${data}`);
@@ -23,7 +23,7 @@ function formatDisk () {
 
     cmd.stderr.on('data', (data) => {
       console.error(`stderr: ${data}`);
-      reject(err);
+      reject(data);
     });
 
     cmd.on('close', (code) => {
