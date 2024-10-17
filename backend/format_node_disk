@@ -1,9 +1,3 @@
 #!/bin/bash
 
-if [ -f /tmp/format_node_disk_c_done ]; then
-    rm /tmp/format_node_disk_c_done
-fi
-
 screen -dmS disk /opt/apolloapi/backend/format_node_disk_c
-
-sleep 75

@@ -31,3 +31,8 @@ systemctl start swap
 
 echo "100" > /tmp/format_node_disk_c_done
 
+sleep 5
+
+if [ -f /tmp/format_node_disk_c_done ]; then
+    rm /tmp/format_node_disk_c_done
+fi
