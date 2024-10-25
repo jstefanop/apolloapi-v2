@@ -56,13 +56,17 @@ git pull
 
 echo "60" > $TMPFILE
 
-yarn
+yarn --ignore-engines
 
 echo "70" > $TMPFILE
 
 echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
 
+rm -rf .next
+
 yarn build
+
+yarn cache clean
 
 echo "80" > $TMPFILE
 

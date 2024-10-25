@@ -1,5 +1,3 @@
 #!/bin/bash
 
 screen -dmS disk /opt/apolloapi/backend/format_node_disk_c
-
-sleep 75

@@ -64,7 +64,7 @@ module.exports.typeDefs = `
     byPool: Float
     byJobs: Float
     solutions: Float
-    errors: Int
+    errors: Float
     errorRate: Float
     chipSpeed: Float
     chipRestarts: Int
@@ -74,7 +74,7 @@ module.exports.typeDefs = `
     host: String
     port: Int
     userName: String
-    diff: Int
+    diff: Float
     intervals: MinerStatsPoolIntervals
   }
 
@@ -179,7 +179,7 @@ module.exports.typeDefs = `
     uid: String
     ver: String
     rx: Int
-    err: Int
+    err: Float
     time: Int
     ping: Int
   }
@@ -224,7 +224,7 @@ module.exports.typeDefs = `
     shares: Float
     bestshare: Float
     bestever: Float
-    authorised: Int
+    authorised: Float
     worker: [MinerStatsCkpoolWorker]
   }
 

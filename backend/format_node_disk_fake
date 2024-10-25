@@ -1,8 +1,16 @@
 #!/bin/bash
 
+if [ -f /tmp/format_node_disk_c_done ]; then
+    rm /tmp/format_node_disk_c_done
+fi
+
+echo "10" > /tmp/format_node_disk_c_done
+
 # Stop node
 screen -X -S node quit
 sleep 5
+
+echo "50" > /tmp/format_node_disk_c_done
 
 # Umount disk
 echo "umounting disk"
@@ -10,8 +18,18 @@ echo "umounting disk"
 # Format disk
 echo "formatting disk"
 
+echo "80" > /tmp/format_node_disk_c_done
+
 # Mount back disk
 echo "mounting back disk"
 
 # Recreate Bitcoin directory
 echo "recreating dir"
+
+echo "100" > /tmp/format_node_disk_c_done
+
+sleep 5 
+
+if [ -f /tmp/format_node_disk_c_done ]; then
+    rm /tmp/format_node_disk_c_done
+fi

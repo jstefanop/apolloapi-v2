@@ -183,8 +183,11 @@ module.exports.auth = {
 
   async manageBitcoinConf(settings) {
     try {
-      // CHecking current conf file
-      const currentConf = await fsPromises.readFile(configBitcoinFilePath, 'utf8');
+      // Checking current conf file
+      const currentConf = await fsPromises.readFile(
+        configBitcoinFilePath,
+        'utf8'
+      );
       const currentConfBase64 = Buffer.from(currentConf).toString('base64');
 
       const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
@@ -224,52 +227,38 @@ module.exports.auth = {
       }
 
       if (settings.nodeUserConf) {
-        // Extract variable names from settings.nodeUserConf using regex
-        const userConfVariables = settings.nodeUserConf.match(/^[^=\r\n]+/gm);
+        const userConfLines = settings.nodeUserConf.split('\n');
+        const formattedUserConf = [];
 
-        // Extract variable names from defaultConf using regex
-        const defaultConfVariables = defaultConf.match(/^[^=\r\n]+/gm);
+        // Aggiungi le opzioni da escludere in una lista
+        const excludedOptions = ['rpcallowip', 'rpcbind', 'maxconnections'];
 
-        // Remove variables from settings.nodeUserConf that are also present in defaultConf
-        const filteredUserConfVariables = userConfVariables.filter(
-          (variable) => !defaultConfVariables.includes(variable)
-        );
+        userConfLines.forEach((line) => {
+          const variable = line.split('=')[0].trim();
 
-        if (filteredUserConfVariables.length) {
-          // Initialize an empty array to store formatted user configurations
-          const formattedUserConf = [];
+          // Verifica che la variabile non sia nell'elenco delle opzioni escluse e non sia nel defaultConf
+          if (!defaultConf.includes(variable) && !excludedOptions.includes(variable)) {
+            formattedUserConf.push(line.trim());
+          }
+        });
 
-          // Iterate through filtered variables and format them
-          filteredUserConfVariables.forEach((variable) => {
-            // If the variable has a value, format it as "variable=value"
-            // Otherwise, format it as "variable"
-            const formattedVariable = settings.nodeUserConf.includes(
-              `${variable}=`
-            )
-              ? `${variable}=${
-                  settings.nodeUserConf.match(new RegExp(`${variable}=(.*)`))[1]
-                }`
-              : variable;
-
-            // Push the formatted variable to the array
-            formattedUserConf.push(formattedVariable);
-          });
-
-          // Join the formatted variables into a single string with newlines
+        if (formattedUserConf.length) {
           const filteredUserConf = formattedUserConf.join('\n');
-
-          // Append the filtered user configuration to the overall configuration
           conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
         }
       }
 
+      // Ensure there are no trailing characters or spaces
+      conf = conf.trim() + '\n';
+
       const confBase64 = Buffer.from(conf).toString('base64');
 
-      if (currentConfBase64 === confBase64) return console.log('No changes to bitcoin.conf file');
+      if (currentConfBase64 === confBase64)
+        return console.log('No changes to bitcoin.conf file');
 
       console.log('Writing Bitcoin conf file', conf);
 
-      await fsPromises.writeFile(configBitcoinFilePath, conf);
+      await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
 
       exec('sleep 3 && sudo systemctl restart node');
     } catch (err) {
