@@ -219,7 +219,7 @@ module.exports.auth = {
 
       if (settings.nodeMaxConnections)
         conf += `\nmaxconnections=${settings.nodeMaxConnections}`;
-      else conf += '\nmaxconnections=32';
+      else conf += '\nmaxconnections=64';
 
       if (settings.nodeAllowLan) {
         const lanNetwork = this.getSystemNetwork();
