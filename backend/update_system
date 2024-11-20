@@ -69,6 +69,7 @@ cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
