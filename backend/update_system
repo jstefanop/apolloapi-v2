@@ -39,6 +39,24 @@ else
 	sed -i s/rpcpassword=/rpcpassword=${PASS}/ $APOLLO_DIR/backend/node/bitcoin.conf 
 fi
 
+### Set Bitcoin max connections to 64 by default if set to 32
+MAXCONNECTIONS=`sqlite3 $APOLLO_DIR/futurebit.sqlite "SELECT node_max_connections FROM settings ORDER BY id DESC LIMIT 1;"`
+
+# Function to set Bitcoin max connections to 64
+set_max_connections() {
+    echo "Bitcoin max connections set to 64"
+    sed -i 's/maxconnections=32/maxconnections=64/' "$APOLLO_DIR/backend/node/bitcoin.conf"
+    sqlite3 "$APOLLO_DIR/futurebit.sqlite" "UPDATE settings SET node_max_connections = 64 WHERE ID = (SELECT MAX(ID) FROM settings);"
+}
+
+# Check if MAXCONNECTIONS is empty or set to 32, and apply changes if needed
+if [ -z "$MAXCONNECTIONS" ]; then
+    echo "Bitcoin max connections is empty; setting to 64"
+    set_max_connections
+elif [ "$MAXCONNECTIONS" -eq 32 ]; then
+    echo "Bitcoin max connections is set to 32; updating to 64"
+    set_max_connections
+fi
 
 # Don't touch below this line
 echo "90" > $TMPFILE
@@ -51,6 +69,7 @@ cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
