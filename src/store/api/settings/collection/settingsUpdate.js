@@ -18,7 +18,8 @@ const updateFields = {
   nodeUserConf: 'node_user_conf',
   nodeEnableSoloMining: 'node_enable_solo_mining',
   nodeMaxConnections: 'node_max_connections',
-  nodeAllowLan: 'node_allow_lan'
+  nodeAllowLan: 'node_allow_lan',
+  btcsig: 'btcsig'
 }
 
 module.exports = ({ define }) => {

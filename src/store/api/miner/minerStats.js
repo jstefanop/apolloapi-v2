@@ -14,9 +14,9 @@ module.exports = ({ define }) => {
       const ckpoolStats = await getCkpoolStats(errors, settings, pools);
       return { stats, ckpool: ckpoolStats };
     },
-    {
-      auth: true,
-    }
+    (payload) => ({
+      auth: payload.useAuth || true,
+    })
   );
 };
 
