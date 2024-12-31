@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     wifiConnect (input: McuWifiConnectInput!): McuWifiConnectOutput!
   }
@@ -18,7 +18,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
     wifiConnect (root, args, { dispatch }) {
       return dispatch('api/mcu/wifiConnect', args.input)

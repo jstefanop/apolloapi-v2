@@ -1,8 +1,7 @@
-const { exec } = require('child_process')
+import { exec } from 'child_process';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('stop', async (payload, { knex, errors, utils }) => {
-    exec('sudo systemctl stop node')
-  },
-  { auth: true })
-}
+    exec('sudo systemctl stop node');
+  }, { auth: true });
+};

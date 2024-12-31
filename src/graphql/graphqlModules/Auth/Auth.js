@@ -1,15 +1,22 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     Auth: AuthActions
   }
 
   enum AuthStatus { pending, done }
-`
 
-module.exports.resolvers = {
-  Query: {
-    Auth () {
-      return {}
-    }
+  type AuthActions {
+    _dummy: String
   }
-}
+`;
+
+export const resolvers = {
+  Query: {
+    Auth() {
+      return {};
+    }
+  },
+  AuthActions: {
+    _dummy: () => "placeholder",
+  },
+};

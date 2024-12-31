@@ -1,6 +1,6 @@
-const config = require('config')
+import config from 'config';
 
-module.exports = {
+export default {
   client: 'sqlite',
   connection: config.get('db.url')
-}
+};

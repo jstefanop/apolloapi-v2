@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type MinerActions {
     stats: MinerStatsOutput!
   }
@@ -242,7 +242,7 @@ module.exports.typeDefs = `
   }
 `;
 
-module.exports.resolvers = {
+export const resolvers = {
   MinerActions: {
     stats(root, args, { dispatch }) {
       return dispatch('api/miner/stats');

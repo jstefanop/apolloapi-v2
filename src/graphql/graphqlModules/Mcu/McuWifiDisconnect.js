@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     wifiDisconnect: McuWifiDisconnectOutput!
   }
@@ -6,12 +6,12 @@ module.exports.typeDefs = `
   type McuWifiDisconnectOutput {
     error: Error
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    wifiDisconnect (root, args, { dispatch }) {
-      return dispatch('api/mcu/wifiDisconnect')
+    wifiDisconnect: (root, args, { dispatch }) => {
+      return dispatch('api/mcu/wifiDisconnect');
     }
   }
-}
+};

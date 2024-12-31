@@ -1,8 +1,7 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     updateProgress: McuUpdateProgressOutput!
   }
-
 
   type McuUpdateProgressOutput {
     result: McuUpdateProgressResult
@@ -10,14 +9,14 @@ module.exports.typeDefs = `
   }
 
   type McuUpdateProgressResult {
-  	value: Int
+    value: Int
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    updateProgress (root, args, { dispatch }) {
-      return dispatch('api/mcu/updateProgress')
+    updateProgress: (root, args, { dispatch }) => {
+      return dispatch('api/mcu/updateProgress');
     }
   }
-}
+};

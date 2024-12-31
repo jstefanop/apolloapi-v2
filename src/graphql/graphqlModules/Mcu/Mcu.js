@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     Mcu: McuActions
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   Query: {
-    Mcu () {
-      return {}
+    Mcu() {
+      return {};
     }
   }
-}
+};

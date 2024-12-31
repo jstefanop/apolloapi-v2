@@ -9,7 +9,7 @@ const updateFields = {
   index: 'index'
 }
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('insert', async (data = {}, { dispatch, knex, errors, utils }) => {
     const insertData = {}
     Object.keys(data).forEach(key => {

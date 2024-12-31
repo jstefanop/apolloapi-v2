@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type PoolActions {
     delete (input: PoolDeleteInput!): EmptyOutput!
   }
@@ -8,7 +8,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   PoolActions: {
     delete (root, args, { dispatch }) {
       return dispatch('api/pools/delete', args.input)

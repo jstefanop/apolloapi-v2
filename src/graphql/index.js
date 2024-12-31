@@ -1,3 +1,3 @@
-const schema = require('./schema')
+import schema from './schema.js';
 
-module.exports = schema
+export default schema;

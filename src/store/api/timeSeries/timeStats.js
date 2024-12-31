@@ -1,6 +1,6 @@
-const moment = require('moment');
+import moment from 'moment';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('stats', async (payload, { knex, errors, utils }) => {
     let { startDate, endDate, interval, itemId } = payload || {};
 
@@ -67,7 +67,6 @@ const getAggregateDataInRange = async (knex, startDate, endDate, interval, itemI
       const formattedDate = currentDate.utc().format();
       const dataForDate = aggregateData.find((entry) => {
         const entryDate = moment(entry.date).format('YYYY-MM-DD HH:mm:ssZ');
-        //console.log(startDate, entry.date, moment(entryDate).utc().format(), moment(startDate).utc().format(), currentDate.utc().format(), moment(entry.date).isSame(currentDate, interval))
         return moment(entryDate).utc().isSame(currentDate.utc(), interval);
       });
 

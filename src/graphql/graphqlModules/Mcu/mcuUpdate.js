@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     update: EmptyOutput!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    update (root, args, { dispatch }) {
-      return dispatch('api/mcu/update')
+    update: (root, args, { dispatch }) => {
+      return dispatch('api/mcu/update');
     }
   }
-}
+};

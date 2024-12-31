@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     stats: McuStatsOutput!
   }
@@ -56,10 +56,8 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    stats (root, args, { dispatch }) {
-      return dispatch('api/mcu/stats')
-    }
+    stats: (root, args, { dispatch }) => dispatch('api/mcu/stats')
   }
 }

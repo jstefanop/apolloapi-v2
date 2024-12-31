@@ -1,9 +1,9 @@
-const fs = require('fs')
+import fs from 'fs/promises';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('conf', async (payload, { knex, errors, utils }) => {
-    const bitcoinConf = await fs.promises.readFile('/opt/apolloapi/backend/node/bitcoin.conf');
+    const bitcoinConf = await fs.readFile('/opt/apolloapi/backend/node/bitcoin.conf');
 
-    return { bitcoinConf: bitcoinConf ? bitcoinConf.toString() : ''};
-  })
-}
+    return { bitcoinConf: bitcoinConf ? bitcoinConf.toString() : '' };
+  });
+};

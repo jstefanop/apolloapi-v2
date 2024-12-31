@@ -1,10 +1,10 @@
-const { exec } = require('child_process')
+import { exec } from 'child_process';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('reboot', async (payload, { knex, errors, utils }) => {
     if (process.env.NODE_ENV === 'production') return exec('sudo reboot');
     return;
   }, {
     auth: true
-  })
-}
+  });
+};

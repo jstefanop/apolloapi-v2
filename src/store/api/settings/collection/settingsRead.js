@@ -1,6 +1,6 @@
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('read', async (payload, { knex, errors, utils }) => {
-    const [ settings ] = await knex('settings').select([
+    const [settings] = await knex('settings').select([
       'miner_mode as minerMode',
       'voltage',
       'frequency',
@@ -24,7 +24,7 @@ module.exports = ({ define }) => {
     ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
-      .limit(1)
-    return settings
-  })
-}
+      .limit(1);
+    return settings;
+  });
+};

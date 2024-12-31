@@ -1,21 +1,20 @@
-const { join } = require('path')
-const { spawn } = require('child_process')
-const axios = require('axios')
+import { join } from 'path';
+import { spawn } from 'child_process';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('format', async (payload, { knex, errors, utils }) => {
     await formatDisk();
   }, {
     auth: true
-  })
-}
+  });
+};
 
-function formatDisk () {
+const formatDisk = () => {
   return new Promise((resolve, reject) => {
-    const scriptName = (process.env.NODE_ENV === 'production') ? 'format_node_disk' : 'format_node_disk_fake'
-    const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
+    const scriptName = (process.env.NODE_ENV === 'production') ? 'format_node_disk' : 'format_node_disk_fake';
+    const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName);
 
-    const cmd = (process.env.NODE_ENV === 'production') ? spawn('sudo', ['bash', scriptPath])  : spawn('bash', [scriptPath]);
+    const cmd = (process.env.NODE_ENV === 'production') ? spawn('sudo', ['bash', scriptPath]) : spawn('bash', [scriptPath]);
 
     cmd.stdout.on('data', (data) => {
       console.log(`stdout: ${data}`);
@@ -31,4 +30,4 @@ function formatDisk () {
       resolve();
     });
   });
-}
+};

@@ -1,6 +1,6 @@
-const fs = require('fs').promises;
+import { promises as fs } from 'fs';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define(
     'updateProgress',
     async (payload, { knex, errors, utils }) => {

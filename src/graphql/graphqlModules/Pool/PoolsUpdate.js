@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type PoolActions {
     updateAll (input: PoolUpdateAllInput!): PoolsUpdateOutput!
   }
@@ -27,7 +27,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   PoolActions: {
     updateAll (root, args, { dispatch }) {
       return dispatch('api/pools/updateAll', args.input.pools)

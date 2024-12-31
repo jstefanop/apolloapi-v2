@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     Settings: SettingsActions
   }
@@ -34,9 +34,9 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   Query: {
-    Settings () {
+    Settings() {
       return {}
     }
   }

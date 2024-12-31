@@ -1,16 +1,25 @@
-const path = require('path');
-const express = require('express');
-const cors = require('cors');
-const _ = require('lodash');
-const { knex } = require('../db');
-const store = require('./../store');
-const graphqlApp = require('./graphqlApp');
+import express from 'express';
+import cors from 'cors';
+import _ from 'lodash';
+import { knex } from '../db.js';
+import store from '../store/index.js';
+
+// Comment in English: import our new apollo server builder
+import { createApolloServer } from './graphqlServer.js';
 
 const app = express();
 
 app.use(cors());
 
-app.use('/api/graphql', graphqlApp);
+// Comment in English: We'll create and mount the Apollo middleware in an async function
+async function startApollo() {
+  const { apolloMiddleware } = await createApolloServer();
+  app.use('/api/graphql', apolloMiddleware);
+  console.log('Apollo Server mounted on /api/graphql');
+}
+
+// Comment in English: call the async function
+startApollo();
 
 const fetchStatistics = () => {
   setInterval(async () => {
@@ -120,9 +129,9 @@ const fetchStatistics = () => {
         error
       );
     }
-  }, 30000);
+  }, process.env.TIMESERIES_INTERVAL || 30000);
 };
 
 fetchStatistics();
 
-module.exports = app;
+export default app;

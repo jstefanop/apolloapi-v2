@@ -1,12 +1,13 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { exec } = require('child_process');
-const generator = require('generate-password');
-const config = require('config');
-const { knex } = require('./db');
-const fsPromises = require('fs').promises;
-const path = require('path');
-const os = require('os');
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { exec } from 'child_process';
+import generator from 'generate-password';
+import { knex } from './db.js';
+import { promises as fsPromises } from 'fs';
+import path from 'path';
+import os from 'os';
+
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 const configBitcoinFilePath = path.resolve(
   __dirname,
@@ -23,7 +24,7 @@ const configCkpoolServiceFilePath = path.resolve(
   '../backend/systemd/ckpool.service'
 );
 
-module.exports.auth = {
+export const auth = {
   hashPassword(password) {
     return bcrypt.hash(password, 12);
   },
@@ -72,7 +73,7 @@ module.exports.auth = {
   },
 
   generateAccessToken() {
-    const accessToken = jwt.sign({}, config.get('server.secret'), {
+    const accessToken = jwt.sign({}, process.env.APP_SECRET, {
       subject: 'apollouser',
       audience: 'auth',
     });
@@ -82,7 +83,6 @@ module.exports.auth = {
   },
 
   networkAddressWithCIDR(ipAddress, netmask) {
-    // Converti l'indirizzo IP e la netmask in forma binaria
     const ipBinary = ipAddress
       .split('.')
       .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
@@ -92,19 +92,16 @@ module.exports.auth = {
       .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
       .join('');
 
-    // Applica l'operazione bitwise AND
     const networkBinary = ipBinary
       .split('')
       .map((bit, index) => bit & netmaskBinary[index])
       .join('');
 
-    // Converti il risultato in forma di stringa
     const networkAddress = networkBinary
       .match(/.{1,8}/g)
       .map((byte) => parseInt(byte, 2))
       .join('.');
 
-    // Calcola il numero di bit della netmask
     const cidrPrefix = netmask
       .split('.')
       .reduce(
@@ -117,18 +114,15 @@ module.exports.auth = {
   },
 
   getSystemNetwork() {
-    // Get network interface information
     const interfaces = os.networkInterfaces();
     let address = null;
     let netmask = null;
     let network = null;
 
-    // Check if wlan0 has an associated IP address
     if (
       interfaces['wlan0'] &&
       interfaces['wlan0'].some((info) => info.family === 'IPv4')
     ) {
-      // If wlan0 has an associated IP address, use wlan0
       address = interfaces['wlan0'].find(
         (info) => info.family === 'IPv4'
       ).address;
@@ -139,7 +133,6 @@ module.exports.auth = {
       interfaces['eth0'] &&
       interfaces['eth0'].some((info) => info.family === 'IPv4')
     ) {
-      // If wlan0 doesn't have an associated IP address but eth0 does, use eth0
       address = interfaces['eth0'].find(
         (info) => info.family === 'IPv4'
       ).address;
@@ -183,7 +176,6 @@ module.exports.auth = {
 
   async manageBitcoinConf(settings) {
     try {
-      // Checking current conf file
       const currentConf = await fsPromises.readFile(
         configBitcoinFilePath,
         'utf8'
@@ -230,13 +222,11 @@ module.exports.auth = {
         const userConfLines = settings.nodeUserConf.split('\n');
         const formattedUserConf = [];
 
-        // Aggiungi le opzioni da escludere in una lista
         const excludedOptions = ['rpcallowip', 'rpcbind', 'maxconnections'];
 
         userConfLines.forEach((line) => {
           const variable = line.split('=')[0].trim();
 
-          // Verifica che la variabile non sia nell'elenco delle opzioni escluse e non sia nel defaultConf
           if (!defaultConf.includes(variable) && !excludedOptions.includes(variable)) {
             formattedUserConf.push(line.trim());
           }
@@ -248,7 +238,6 @@ module.exports.auth = {
         }
       }
 
-      // Ensure there are no trailing characters or spaces
       conf = conf.trim() + '\n';
 
       const confBase64 = Buffer.from(conf).toString('base64');

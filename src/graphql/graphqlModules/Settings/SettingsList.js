@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type SettingsActions {
     list: SettingListOutput!
   }
@@ -13,9 +13,9 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   SettingsActions: {
-    list (root, args, { dispatch }) {
+    list: (root, args, { dispatch }) => {
       return dispatch('api/settings/list', args.input)
     }
   }

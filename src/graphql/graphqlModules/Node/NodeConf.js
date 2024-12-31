@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type NodeActions {
     conf: NodeConfOutput!
   }
@@ -13,9 +13,9 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   NodeActions: {
-    conf (root, args, { dispatch }) {
+    conf: (root, args, { dispatch }) => {
       return dispatch('api/node/conf')
     }
   }

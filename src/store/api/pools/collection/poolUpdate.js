@@ -6,16 +6,16 @@ const updateFields = {
   username: 'username',
   password: 'password',
   proxy: 'proxy',
-}
+};
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('update', async (data = {}, { dispatch, knex, errors, utils }) => {
-    const updateData = {}
+    const updateData = {};
     Object.keys(data).forEach(key => {
       if (updateFields[key]) {
-        updateData[updateFields[key]] = data[key]
+        updateData[updateFields[key]] = data[key];
       }
-    })
-    return await knex('pools').update(updateData).where('id', data.id)
-  })
-}
+    });
+    return await knex('pools').update(updateData).where('id', data.id);
+  });
+};

@@ -1,4 +1,4 @@
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('read', async ({
     where = {},
     one,
@@ -7,10 +7,10 @@ module.exports = ({ define }) => {
       context: { trx } = {},
       knex
     }) => {
-    const readQ = (trx || knex)('pools')
+    const readQ = (trx || knex)('pools');
 
     if (where.id) {
-      readQ.where('id', where.id)
+      readQ.where('id', where.id);
     }
 
     readQ.select(
@@ -22,22 +22,22 @@ module.exports = ({ define }) => {
       'password',
       'proxy',
       'index'
-    )
+    );
 
-    readQ.orderBy('index', 'asc')
+    readQ.orderBy('index', 'asc');
 
     if (forUpdate) {
-      readQ.forUpdate()
+      readQ.forUpdate();
     }
 
-    const items = await readQ
+    const items = await readQ;
 
     if (one) {
-      return items[0] || null
+      return items[0] || null;
     }
 
     return {
       items
-    }
-  })
-}
+    };
+  });
+};

@@ -1,30 +1,30 @@
-const { join } = require('path')
-const { exec } = require('child_process')
+import { join } from 'path';
+import { exec } from 'child_process';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('wifiScan', async (payload, { knex, errors, utils }) => {
-    const wifiScan = await getWifiScan()
-    return { wifiScan }
+    const wifiScan = await getWifiScan();
+    return { wifiScan };
   }, {
     auth: true
-  })
-}
+  });
+};
 
-function getWifiScan() {
+const getWifiScan = () => {
   return new Promise((resolve, reject) => {
-    const scriptName = (process.env.NODE_ENV === 'production') ? 'wifi_scan' : 'wifi_scan_fake'
-    const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName)
+    const scriptName = (process.env.NODE_ENV === 'production') ? 'wifi_scan' : 'wifi_scan_fake';
+    const scriptPath = join(__dirname, '..', '..', '..', '..', 'backend', scriptName);
     exec(scriptPath, {}, (err, stdout) => {
       if (err) {
-        reject(err)
+        reject(err);
       } else {
         try {
-          const result = JSON.parse(stdout.toString())
-          resolve(result)
+          const result = JSON.parse(stdout.toString());
+          resolve(result);
         } catch (err) {
-          reject(err)
+          reject(err);
         }
       }
-    })
-  })
-}
+    });
+  });
+};

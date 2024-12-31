@@ -1,5 +1,5 @@
-module.exports.typeDefs = `
-  type AuthActions {
+export const typeDefs = `
+  extend type AuthActions {
     changePassword (input: AuthChangePasswordInput!): AuthChangePasswordOutput!
   }
 
@@ -10,12 +10,12 @@ module.exports.typeDefs = `
   type AuthChangePasswordOutput {
     error: Error
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   AuthActions: {
-    changePassword (root, args, { dispatch }) {
+    changePassword(root, args, { dispatch }) {
       return dispatch('api/auth/changePassword', args.input)
     }
   }
-}
+};

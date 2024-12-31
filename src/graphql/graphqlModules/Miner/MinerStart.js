@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type MinerActions {
     start: EmptyOutput!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   MinerActions: {
     start (root, args, { dispatch }) {
-      return dispatch('api/miner/start')
+      return dispatch('api/miner/start');
     }
   }
-}
+};

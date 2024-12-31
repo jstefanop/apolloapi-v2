@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     Miner: MinerActions
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   Query: {
-    Miner () {
-      return {}
+    Miner() {
+      return {};
     }
   }
-}
+};

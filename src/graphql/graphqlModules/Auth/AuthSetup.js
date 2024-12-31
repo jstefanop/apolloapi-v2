@@ -1,5 +1,5 @@
-module.exports.typeDefs = `
-  type AuthActions {
+export const typeDefs = `
+  extend type AuthActions {
     setup (input: AuthSetupInput): AuthSetupOutput!
   }
 
@@ -12,7 +12,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   AuthActions: {
     setup (root, args, { dispatch }) {
       return dispatch('api/auth/setup', args.input)

@@ -1,6 +1,6 @@
-const fs = require('fs').promises;
+import { promises as fs } from 'fs';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define(
     'formatProgress',
     async (payload, { knex, errors, utils }) => {
@@ -25,7 +25,7 @@ module.exports = ({ define }) => {
         }
 
         const data = await fs.readFile(filePath);
-        const progress = parseInt(data.toString());
+        const progress = parseInt(data.toString(), 10);
         return { value: progress };
       } catch (error) {
         console.log('formatProgress', error);

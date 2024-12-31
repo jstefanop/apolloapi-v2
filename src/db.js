@@ -1,11 +1,11 @@
-const config = require('config');
-const _knex = require('knex');
+import knex from 'knex';
+import { join } from 'path';
 
-const knex = _knex({
+const db = knex({
   client: 'sqlite3',
-  connection: config.get('db.url'),
+  connection: join(new URL('.', import.meta.url).pathname, '..', 'futurebit.sqlite'),
   useNullAsDefault: true,
   // debug: process.env.NODE_ENV === 'development',
 });
 
-module.exports.knex = knex;
+export { db as knex };

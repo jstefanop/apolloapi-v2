@@ -80,3 +80,5 @@ backend/node/bitcoin.conf
 backend/ckpool/ckpool.conf
 backend/start_swap.sh
 backend/apollo-miner/mode
+
+.codegpt

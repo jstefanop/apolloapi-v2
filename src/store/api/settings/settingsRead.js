@@ -1,10 +1,10 @@
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('read', async (payload, { dispatch, errors, utils }) => {
-    const settings = await dispatch('api/settings/collection/read')
+    const settings = await dispatch('api/settings/collection/read');
     return {
       settings
-    }
+    };
   }, {
     auth: true
-  })
-}
+  });
+};

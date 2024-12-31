@@ -1,9 +1,9 @@
-const { exec } = require('child_process')
+import { exec } from 'child_process';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('restart', async (payload, { knex, errors, utils }) => {
-    exec('sudo systemctl restart apollo-miner')
+    exec('sudo systemctl restart apollo-miner');
   }, {
     auth: true
-  })
-}
+  });
+};

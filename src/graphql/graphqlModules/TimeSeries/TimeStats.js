@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type TimeSeriesActions {
     stats (input: TimeSeriesInput!): TimeSeriesStatsOutput!
   }
@@ -24,7 +24,6 @@ module.exports.typeDefs = `
     hashrate: Float
     accepted: Float
     poolHashrate: Float,
-    accepted: Float,
     rejected: Float,
     sent: Float,
     errors: Float,
@@ -36,7 +35,7 @@ module.exports.typeDefs = `
   }
 `;
 
-module.exports.resolvers = {
+export const resolvers = {
   TimeSeriesActions: {
     stats(root, args, { dispatch }) {
       return dispatch('api/timeSeries/stats', args.input);

@@ -1,6 +1,6 @@
-const generateConf = require('../../../configurator');
+import generateConf from '../../../configurator.js';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define(
     'update',
     async (settings, { dispatch, errors, utils }) => {
@@ -16,8 +16,9 @@ module.exports = ({ define }) => {
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
         oldSettings.btcsig !== newSettings.btcsig
-      )
+      ) {
         await utils.auth.manageBitcoinConf(newSettings);
+      }
 
       await generateConf(null, newSettings);
 

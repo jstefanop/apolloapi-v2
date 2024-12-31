@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type NodeActions {
     stats: NodeStatsOutput!
   }
@@ -57,7 +57,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   NodeActions: {
     stats (root, args, { dispatch }) {
       return dispatch('api/node/stats')

@@ -1,9 +1,9 @@
-const dotenv = require('dotenv')
-const { join } = require('path')
+import dotenv from 'dotenv';
+import { join } from 'path';
 
-dotenv.config({ silent: true })
+dotenv.config();
 
-module.exports = {
+export default {
   db: {
     url: join(__dirname, '..', 'futurebit.sqlite')
   },
@@ -13,4 +13,4 @@ module.exports = {
     secret: process.env.APP_SECRET,
     port: process.env.PORT || 5000
   }
-}
+};

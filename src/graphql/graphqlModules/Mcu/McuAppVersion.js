@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     version: McuAppVersionOutput!
   }
@@ -7,12 +7,12 @@ module.exports.typeDefs = `
     result: String
     error: Error
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    version (root, args, { dispatch }) {
-      return dispatch('api/mcu/version')
+    version: (root, args, { dispatch }) => {
+      return dispatch('api/mcu/version');
     }
   }
-}
+};

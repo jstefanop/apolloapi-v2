@@ -1,10 +1,10 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type NodeActions {
     start: EmptyOutput!
   }
 `;
 
-module.exports.resolvers = {
+export const resolvers = {
   NodeActions: {
     start (root, args, { dispatch }) {
       return dispatch('api/node/start');

@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type MinerActions {
     online: MinerOnlineOutput!
   }
@@ -18,9 +18,9 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   MinerActions: {
-    online (root, args, { dispatch }) {
+    online: (root, args, { dispatch }) => {
       return dispatch('api/miner/online')
     }
   }

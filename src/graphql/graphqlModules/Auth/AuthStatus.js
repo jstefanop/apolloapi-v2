@@ -1,5 +1,5 @@
-module.exports.typeDefs = `
-  type AuthActions {
+export const typeDefs = `
+  extend type AuthActions {
     status: AuthStatusOutput!
   }
 
@@ -11,12 +11,12 @@ module.exports.typeDefs = `
   type AuthStatusResult {
     status: AuthStatus!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   AuthActions: {
-    status (root, args, { dispatch }) {
-      return dispatch('api/auth/status', args.input)
+    status: (root, args, { dispatch }) => {
+      return dispatch('api/auth/status', args.input);
     }
   }
-}
+};

@@ -1,24 +1,31 @@
-const { writeFileSync, existsSync } = require('fs');
-const { join } = require('path');
-const crypto = require('crypto');
-const utils = require('./utils');
-const { knex } = require('./db');
+import dotenv from 'dotenv';
+import { writeFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import * as utils from './utils.js';
+import { knex } from './db.js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const initEnvFile = async () => {
   const envPath = join(__dirname, '..', '.env');
   const envExists = existsSync(envPath);
   if (!envExists) {
-    const configVars = [];
-    configVars.push({
-      name: 'DATABASE_URL',
-      value: join(__dirname, '..', 'futurebit.sqlite'),
-    });
-    configVars.push({
-      name: 'APP_SECRET',
-      value: crypto.randomBytes(64).toString('hex'),
-    });
-    const envFile =
-      configVars.map(({ name, value }) => `${name}=${value}`).join('\n') + '\n';
+    const configVars = [
+      {
+        name: 'DATABASE_URL',
+        value: join(__dirname, '..', 'futurebit.sqlite'),
+      },
+      {
+        name: 'APP_SECRET',
+        value: crypto.randomBytes(64).toString('hex'),
+      },
+    ];
+    const envFile = configVars.map(({ name, value }) => `${name}=${value}`).join('\n') + '\n';
     writeFileSync(envPath, envFile);
   }
 };
@@ -51,9 +58,11 @@ const runGenerateBitcoinPassword = async (settings) => {
   try {
     console.log('Checking bitcoin password existence');
 
-    if (settings && settings.nodeRpcPassword)
-      return console.log('Bitcoin password found');
-    else await utils.auth.changeNodeRpcPassword(settings);
+    if (settings && settings.nodeRpcPassword) {
+      console.log('Bitcoin password found');
+    } else {
+      await utils.auth.changeNodeRpcPassword(settings);
+    }
   } catch (err) {
     console.log(err);
   }
@@ -63,5 +72,5 @@ initEnvFile();
 runMigrations().then(startServer);
 
 function startServer() {
-  require('./server');
+  import('./server.js');
 }

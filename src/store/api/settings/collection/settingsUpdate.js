@@ -22,7 +22,7 @@ const updateFields = {
   btcsig: 'btcsig'
 }
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('update', async (update = {}, { dispatch, knex, errors, utils }) => {
     const newData = await dispatch('api/settings/collection/read')
     const insertData = {}

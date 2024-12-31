@@ -1,8 +1,7 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type NodeActions {
     formatProgress: NodeFormatProgressOutput!
   }
-
 
   type NodeFormatProgressOutput {
     result: NodeFormatProgressResult
@@ -10,14 +9,14 @@ module.exports.typeDefs = `
   }
 
   type NodeFormatProgressResult {
-  	value: Int
+    value: Int
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   NodeActions: {
-    formatProgress(root, args, { dispatch }) {
-      return dispatch('api/node/formatProgress')
+    formatProgress: (root, args, { dispatch }) => {
+      return dispatch('api/node/formatProgress');
     }
   }
-}
+};

@@ -1,10 +1,10 @@
-const fsPromises = require('fs').promises;
-const _ = require('lodash');
-const { knex } = require('./db')
+import { promises as fsPromises } from 'fs';
+import _ from 'lodash';
+import { knex } from './db.js';
 
-const generate = async function (pools = null, settings = null ) {
-  	if (!settings) {
-	    [ settings ] = await knex('settings').select([
+const generate = async (pools = null, settings = null) => {
+	if (!settings) {
+		[settings] = await knex('settings').select([
 			'miner_mode as minerMode',
 			'voltage',
 			'frequency',
@@ -20,7 +20,7 @@ const generate = async function (pools = null, settings = null ) {
 		])
 		.orderBy('created_at', 'desc')
 		.orderBy('id', 'desc')
-		.limit(1)
+		.limit(1);
 	}
 
 	if (!pools) {
@@ -35,7 +35,7 @@ const generate = async function (pools = null, settings = null ) {
 			'index'
 		])
 		.where('enabled', 1)
-		.orderBy('index', 'asc')
+		.orderBy('index', 'asc');
 	} else {
 		pools = _.filter(pools, { enabled: 1 });
 	}
@@ -76,12 +76,12 @@ const generate = async function (pools = null, settings = null ) {
 		// Conf dir
 		await fsPromises.mkdir(confDir, { recursive: true });
 		// Conf files
-		await fsPromises.writeFile(confDir + '/miner_config', minerConfig);
-		await fsPromises.writeFile(confDir + '/mode', minerMode);
+		await fsPromises.writeFile(`${confDir}/miner_config`, minerConfig);
+		await fsPromises.writeFile(`${confDir}/mode`, minerMode);
 		console.log('Configuration saved');
 	} catch (err) {
 		console.log('Error saving configuration files');
 	}
-}
+};
 
-module.exports = generate;
+export default generate;

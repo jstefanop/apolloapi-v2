@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     Pool: PoolActions
   }
@@ -13,12 +13,12 @@ module.exports.typeDefs = `
     proxy: String
     index: Int!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   Query: {
-    Pool () {
-      return {}
+    Pool() {
+      return {};
     }
   }
-}
+};

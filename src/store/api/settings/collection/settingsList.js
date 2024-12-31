@@ -1,4 +1,4 @@
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define('list', async ({
     where = {},
     one,
@@ -7,10 +7,10 @@ module.exports = ({ define }) => {
       context: { trx } = {},
       knex
     }) => {
-    const readQ = (trx || knex)('settings')
+    const readQ = (trx || knex)('settings');
 
     if (where.id) {
-      readQ.where('id', where.id)
+      readQ.where('id', where.id);
     }
 
     readQ.select(
@@ -36,24 +36,24 @@ module.exports = ({ define }) => {
       'node_max_connections as nodeMaxConnections',
       'node_allow_lan as nodeAllowLan',
       'btcsig'
-    )
+    );
 
-    readQ.orderBy('created_at', 'desc')
+    readQ.orderBy('created_at', 'desc');
 
-    readQ.limit(10)
+    readQ.limit(10);
 
     if (forUpdate) {
-      readQ.forUpdate()
+      readQ.forUpdate();
     }
 
-    const items = await readQ
+    const items = await readQ;
 
     if (one) {
-      return items[0] || null
+      return items[0] || null;
     }
 
     return {
       items
-    }
-  })
-}
+    };
+  });
+};

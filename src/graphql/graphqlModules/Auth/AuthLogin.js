@@ -1,6 +1,6 @@
-module.exports.typeDefs = `
-  type AuthActions {
-    login (input: AuthLoginInput!): AuthLoginOutput!
+export const typeDefs = `
+  extend type AuthActions {
+    login(input: AuthLoginInput!): AuthLoginOutput!
   }
 
   input AuthLoginInput {
@@ -15,12 +15,12 @@ module.exports.typeDefs = `
   type AuthLoginResult {
     accessToken: String!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   AuthActions: {
     login (root, args, { dispatch }) {
-      return dispatch('api/auth/login', args.input)
+      return dispatch('api/auth/login', args.input);
     }
   }
-}
+};

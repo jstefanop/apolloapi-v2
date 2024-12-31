@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type PoolActions {
     create (input: PoolCreateInput!): PoolCreateOutput!
   }
@@ -21,12 +21,10 @@ module.exports.typeDefs = `
   type PoolCreateResult {
     pool: Pool!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   PoolActions: {
-    create (root, args, { dispatch }) {
-      return dispatch('api/pools/create', args.input)
-    }
+    create: (root, args, { dispatch }) => dispatch('api/pools/create', args.input)
   }
-}
+};

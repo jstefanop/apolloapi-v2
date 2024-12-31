@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type SettingsActions {
     read: SettingsUpdateOutput!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   SettingsActions: {
-    read (root, args, { dispatch }) {
-      return dispatch('api/settings/read', args.input)
+    read: (root, args, { dispatch }) => {
+      return dispatch('api/settings/read', args.input);
     }
   }
-}
+};

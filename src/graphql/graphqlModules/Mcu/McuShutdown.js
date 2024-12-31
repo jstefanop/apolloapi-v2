@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     shutdown: EmptyOutput!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
-    shutdown (root, args, { dispatch }) {
-      return dispatch('api/mcu/shutdown')
+    shutdown: (root, args, { dispatch }) => {
+      return dispatch('api/mcu/shutdown');
     }
   }
-}
+};

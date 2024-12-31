@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type McuActions {
     reboot: EmptyOutput!
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   McuActions: {
     reboot (root, args, { dispatch }) {
-      return dispatch('api/mcu/reboot')
+      return dispatch('api/mcu/reboot');
     }
   }
-}
+};

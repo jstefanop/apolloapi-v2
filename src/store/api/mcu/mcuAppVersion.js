@@ -1,6 +1,6 @@
-const axios = require('axios');
+import axios from 'axios';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define(
     'version',
     async (payload, { knex, errors, utils }) => {
@@ -14,9 +14,7 @@ module.exports = ({ define }) => {
           gitAppVersion && gitAppVersion.data
             ? gitAppVersion.data.version
             : null;
-        return process.env.NODE_ENV === 'development'
-          ? currentAppVersion
-          : currentAppVersion;
+        return currentAppVersion;
       } catch (e) {
         console.log(e);
         return e.toString();

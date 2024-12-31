@@ -1,4 +1,4 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type SettingsActions {
     update (input: SettingsUpdateInput!): SettingsUpdateOutput!
   }
@@ -38,7 +38,7 @@ module.exports.typeDefs = `
   }
 `
 
-module.exports.resolvers = {
+export const resolvers = {
   SettingsActions: {
     update (root, args, { dispatch }) {
       return dispatch('api/settings/update', args.input)

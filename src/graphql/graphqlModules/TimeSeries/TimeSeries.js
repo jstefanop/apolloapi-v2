@@ -1,13 +1,13 @@
-module.exports.typeDefs = `
+export const typeDefs = `
   type Query {
     TimeSeries: TimeSeriesActions
   }
-`
+`;
 
-module.exports.resolvers = {
+export const resolvers = {
   Query: {
     TimeSeries() {
-      return {}
+      return {};
     }
   }
-}
+};

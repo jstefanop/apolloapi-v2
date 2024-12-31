@@ -1,7 +1,7 @@
-const { promisify } = require('util');
-const bitcoin = require('bitcoin');
+import { promisify } from 'util';
+import bitcoin from 'bitcoin';
 
-module.exports = ({ define }) => {
+export default ({ define }) => {
   define(
     'stats',
     async (payload, { knex, errors, utils }) => {
@@ -55,15 +55,13 @@ module.exports = ({ define }) => {
 
 const createBitcoinClient = (settings) => {
   try {
-    const bitcoinClient = new bitcoin.Client({
+    return new bitcoin.Client({
       host: process.env.BITCOIN_NODE_HOST || '127.0.0.1',
       port: process.env.BITCOIN_NODE_PORT || 8332,
       user: process.env.BITCOIN_NODE_USER || 'futurebit',
       pass: process.env.BITCOIN_NODE_PASS || settings.nodeRpcPassword,
       timeout: 30000,
     });
-
-    return bitcoinClient;
   } catch (error) {
     throw error;
   }
