@@ -1,8 +1,8 @@
-exports.up = async function(knex, Promise) {
-	// remove default pool
-	await knex('pools').where({ donation: 1 }).del();
+export const up = async (knex) => {
+    // remove default pool
+    await knex('pools').where({ donation: 1 }).del();
 
-    return knex.schema.table('settings', function(t) {
+    return knex.schema.table('settings', (t) => {
         t.integer('fan_low').notNullable().defaultTo(40);
         t.integer('fan_high').notNullable().defaultTo(60);
         t.integer('voltage').notNullable().defaultTo(30).alter();
@@ -10,8 +10,8 @@ exports.up = async function(knex, Promise) {
     });
 };
 
-exports.down = function(knex, Promise) {
-    return knex.schema.table('settings', function(t) {
+export const down = (knex) => {
+    return knex.schema.table('settings', (t) => {
         t.dropColumn('fan_low');
         t.dropColumn('fan_high');
     });

@@ -1,5 +1,5 @@
-exports.up = function (knex) {
-  return knex.schema.createTable('time_series_data', function (table) {
+export const up = (knex) => {
+  return knex.schema.createTable('time_series_data', (table) => {
     table.increments('id').primary();
     table.text('uuid');
     table.float('hashrateInGh');
@@ -18,6 +18,6 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+export const down = (knex) => {
   return knex.schema.dropTable('time_series_data');
 };

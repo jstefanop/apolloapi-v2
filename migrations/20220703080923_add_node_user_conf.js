@@ -1,11 +1,11 @@
-exports.up = function(knex, Promise) {
-    return knex.schema.table('settings', function(t) {
+export const up = (knex) => {
+    return knex.schema.table('settings', (t) => {
         t.text('node_user_conf').defaultTo(null);
     });
 };
 
-exports.down = function(knex, Promise) {
-    return knex.schema.table('settings', function(t) {
+export const down = (knex) => {
+    return knex.schema.table('settings', (t) => {
         t.dropColumn('node_user_conf');
     });
 };

@@ -1,12 +1,12 @@
-exports.up = function (knex) {
-  return knex.schema.table('time_series_data', function (table) {
+export const up = (knex) => {
+  return knex.schema.table('time_series_data', (table) => {
     table.index('uuid');
     table.index('createdAt');
   });
 };
 
-exports.down = function (knex) {
-  return knex.schema.table('time_series_data', function (table) {
+export const down = (knex) => {
+  return knex.schema.table('time_series_data', (table) => {
     table.dropIndex('uuid');
     table.dropIndex('createdAt');
   });

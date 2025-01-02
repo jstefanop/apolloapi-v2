@@ -9,6 +9,8 @@ import { createApolloServer } from './graphqlServer.js';
 
 const app = express();
 
+app.use(express.json());
+
 app.use(cors());
 
 // Comment in English: We'll create and mount the Apollo middleware in an async function

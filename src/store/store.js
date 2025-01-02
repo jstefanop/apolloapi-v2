@@ -111,10 +111,6 @@ const createStore = async () => {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   await store.loadMethods(path.join(__dirname, 'api'));
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Registered methods:', store.listMethods());
-  }
-
   return store;
 };
 

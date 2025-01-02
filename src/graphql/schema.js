@@ -34,8 +34,6 @@ async function buildSchema() {
     }
   }
 
-  console.log(typeDefsArray);
-
   const typeDefs = mergeTypeDefs(typeDefsArray);
   const resolvers = mergeResolvers(resolversArray);
 
