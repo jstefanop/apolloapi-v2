@@ -1,28 +1,33 @@
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
+import jwt from 'jsonwebtoken';
 import store from './../store/index.js';
 import schema from './../graphql/index.js';
 
-// Create an async function to build and start ApolloServer
 export async function createApolloServer() {
-  // If your `schema` is a GraphQLSchema, pass { schema } directly
-  // If it's { typeDefs, resolvers }, do: new ApolloServer({ typeDefs, resolvers })
-  const apolloServer = new ApolloServer({
-    schema,  // or { typeDefs, resolvers }
-    // The "context" is the replacement for the old createGraphqlApp logic
-    // We'll handle it in the expressMiddleware below (Apollo Server v4 style).
-  });
-
-  // Start the server so it's ready to handle requests
+  const apolloServer = new ApolloServer({ schema });
   await apolloServer.start();
 
-  // Return both the server instance, and the "expressMiddleware" configured
-  // so we can plug it into Express in app.js
   const apolloMiddleware = expressMiddleware(apolloServer, {
     context: async ({ req }) => {
+      let user = null;
+      let authenticated = false;
+
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        try {
+          user = jwt.verify(token, process.env.APP_SECRET);
+          authenticated = true;
+        } catch (err) {
+          throw new Error('Invalid token');
+        }
+      }
+
       return {
         dispatch(method, payload) {
-          return store.dispatch(method, payload, req, {
+          return store.dispatch(method, payload, {
+            authenticated,
+            user,
             cid: req.headers['x-request-id'],
             internal: !!req.headers['x-test-request']
           });
@@ -30,7 +35,9 @@ export async function createApolloServer() {
         jwt: {
           secret: process.env.APP_SECRET,
           audience: 'auth'
-        }
+        },
+        user,
+        authenticated
       };
     }
   });

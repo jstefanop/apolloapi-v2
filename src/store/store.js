@@ -2,20 +2,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { knex } from '../db.js';
+import * as utils from '../utils.js';
 
 class ModernStore {
   constructor() {
     this.methods = new Map();
     this.context = {
       knex,
-      errors: {
-        InternalError: class InternalError extends Error {
-          constructor(message) {
-            super(message);
-            this.name = 'InternalError';
-          }
-        }
-      }
+      utils,
     };
 
     // Bind dispatch to this instance
