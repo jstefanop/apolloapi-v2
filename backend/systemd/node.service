@@ -1,12 +1,14 @@
 [Unit]
 Description=node
-After=multi-user.target 
+After=multi-user.target
 After=apollo-ui-v2.service
 After=dev-nvme0n1.device
 
 [Service]
 Type=forking
 User=futurebit
+Nice=19
+IOSchedulingClass=idle
 #Start:
 ExecStart=/opt/apolloapi/backend/node/node_start.sh
 #WorkingDirectory=/opt/apolloapi/backend/node
