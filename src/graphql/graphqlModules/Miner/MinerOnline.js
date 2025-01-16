@@ -14,7 +14,7 @@ module.exports.typeDefs = `
 
   type MinerOnline {
     timestamp: String!
-    status: Boolean!
+    status: String!
   }
 `
 

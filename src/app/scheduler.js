@@ -8,11 +8,11 @@ const SERVICES = ['miner', 'node'];
 /**
  * This function updates the service status in the DB
  */
-async function updateServiceStatus(serviceName, isOnline) {
+async function updateServiceStatus(serviceName, status) {
   await knex('service_status')
     .where({ service_name: serviceName })
     .update({
-      status: isOnline ? 'online' : 'offline',
+      status,
       last_checked: new Date()
     });
 }

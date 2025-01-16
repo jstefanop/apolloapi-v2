@@ -21,6 +21,7 @@ module.exports.typeDefs = `
     serviceName: String
     status: String
     requestedStatus: String
+    requestedAt: DateTime
     lastChecked: DateTime
   }
 `;

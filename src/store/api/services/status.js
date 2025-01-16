@@ -17,6 +17,7 @@ module.exports = ({ define }) => {
         'service_name as serviceName',
         'status',
         'requested_status as requestedStatus',
+        'requested_at as requestedAt',
         'last_checked as lastChecked',
       ];
 
@@ -30,6 +31,7 @@ module.exports = ({ define }) => {
 
         if (status) {
           status.lastChecked = convertToUtcDateTime(status.lastChecked);
+          status.requestedAt = convertToUtcDateTime(status.requestedAt);
         }
 
         data = [status];
@@ -40,6 +42,7 @@ module.exports = ({ define }) => {
 
         for (const row of statuses) {
           row.lastChecked = convertToUtcDateTime(row.lastChecked);
+          row.requestedAt = convertToUtcDateTime(row.requestedAt);
         }
 
         data = statuses;

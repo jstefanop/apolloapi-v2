@@ -1,23 +1,16 @@
-const { promisify } = require('util');
-const bitcoin = require('bitcoin');
+const axios = require('axios');
 
 module.exports = ({ define }) => {
   define(
     'stats',
     async (payload, { knex, errors, utils }) => {
       try {
-        const settings = await knex('settings')
-          .select(['node_rpc_password as nodeRpcPassword'])
-          .orderBy('created_at', 'desc')
-          .orderBy('id', 'desc')
-          .limit(1);
+        const rpcClient = await createRpcClient(knex);
 
-        const bitcoinClient = createBitcoinClient(settings[0]);
-
-        const unrefinedStats = await getNodeStats(bitcoinClient);
+        const unrefinedStats = await getNodeStats(rpcClient);
 
         const blockchainInfo = await formatBlockchainInfo(
-          bitcoinClient,
+          rpcClient,
           unrefinedStats[0]
         );
         const miningInfo = formatMiningInfo(unrefinedStats[2]);
@@ -39,7 +32,7 @@ module.exports = ({ define }) => {
         const stats = {
           error: {
             code: error.code,
-            message: error.errno || error.message,
+            message: error.message,
           },
           timestamp: new Date().toISOString(),
         };
@@ -47,32 +40,48 @@ module.exports = ({ define }) => {
         return { stats };
       }
     },
-    {
-      auth: true,
-    }
+    (payload) => ({
+      auth: payload.useAuth || true,
+    })
   );
 };
 
-const createBitcoinClient = (settings) => {
-  try {
-    const bitcoinClient = new bitcoin.Client({
-      host: process.env.BITCOIN_NODE_HOST || '127.0.0.1',
-      port: process.env.BITCOIN_NODE_PORT || 8332,
-      user: process.env.BITCOIN_NODE_USER || 'futurebit',
-      pass: process.env.BITCOIN_NODE_PASS || settings.nodeRpcPassword,
-      timeout: 30000,
-    });
+const createRpcClient = async (knex) => {
+  const settings = await knex('settings')
+    .select(['node_rpc_password as nodeRpcPassword'])
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1);
 
-    return bitcoinClient;
+  return axios.create({
+    baseURL: `http://${process.env.BITCOIN_NODE_HOST || '127.0.0.1'}:${process.env.BITCOIN_NODE_PORT || 8332
+      }`,
+    auth: {
+      username: process.env.BITCOIN_NODE_USER || 'futurebit',
+      password: process.env.BITCOIN_NODE_PASS || settings.nodeRpcPassword,
+    },
+    timeout: 30000,
+  });
+};
+
+const callRpcMethod = async (rpcClient, method, params = []) => {
+  try {
+    const response = await rpcClient.post('/', {
+      jsonrpc: '1.0',
+      id: 'axios',
+      method,
+      params,
+    });
+    return response.data.result;
   } catch (error) {
     throw error;
   }
 };
 
-const formatBlockchainInfo = async (bitcoinClient, unrefinedBlockchainInfo) => {
+const formatBlockchainInfo = async (rpcClient, unrefinedBlockchainInfo) => {
   try {
     const bestBlockHash = unrefinedBlockchainInfo.bestblockhash;
-    const block = await getBitcoinBlock(bitcoinClient, bestBlockHash);
+    const block = await callRpcMethod(rpcClient, 'getblock', [bestBlockHash]);
 
     unrefinedBlockchainInfo.blockTime = block.time;
 
@@ -85,18 +94,6 @@ const formatBlockchainInfo = async (bitcoinClient, unrefinedBlockchainInfo) => {
   } catch (error) {
     throw error;
   }
-};
-
-const getBitcoinBlock = (bitcoinClient, blockHash) => {
-  return new Promise((resolve, reject) => {
-    bitcoinClient.getBlock(blockHash, (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result);
-      }
-    });
-  });
 };
 
 const formatMiningInfo = (unrefinedMiningInfo) => {
@@ -130,32 +127,25 @@ const formatNetworkInfo = (unrefinedNetworkInfo) => {
   }
 };
 
-const getNodeStats = async (bitcoinClient) => {
+const getNodeStats = async (rpcClient) => {
   try {
-    const getBlockchainInfoPromise = promisify(
-      bitcoinClient.getBlockchainInfo
-    ).bind(bitcoinClient);
-    const getConnectionCountPromise = promisify(
-      bitcoinClient.getConnectionCount
-    ).bind(bitcoinClient);
-    const getMiningInfoPromise = promisify(bitcoinClient.getMiningInfo).bind(
-      bitcoinClient
-    );
-    const getPeerInfoPromise = promisify(bitcoinClient.getPeerInfo).bind(
-      bitcoinClient
-    );
-    const getNetworkInfoPromise = promisify(bitcoinClient.getNetworkInfo).bind(
-      bitcoinClient
-    );
+    const blockchainInfo = await callRpcMethod(rpcClient, 'getblockchaininfo');
+    const connectionCount = await callRpcMethod(rpcClient, 'getconnectioncount');
+    const miningInfo = await callRpcMethod(rpcClient, 'getmininginfo');
+    const peerInfo = await callRpcMethod(rpcClient, 'getpeerinfo');
+    const networkInfo = await callRpcMethod(rpcClient, 'getnetworkinfo');
 
-    return Promise.all([
-      await getBlockchainInfoPromise(),
-      await getConnectionCountPromise(),
-      await getMiningInfoPromise(),
-      await getPeerInfoPromise(),
-      await getNetworkInfoPromise(),
-    ]);
+    return [
+      blockchainInfo,
+      connectionCount,
+      miningInfo,
+      peerInfo,
+      networkInfo,
+    ];
   } catch (error) {
     throw error;
   }
 };
+
+module.exports.createRpcClient = createRpcClient;
+module.exports.callRpcMethod = callRpcMethod;
