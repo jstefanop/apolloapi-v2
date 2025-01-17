@@ -3,6 +3,7 @@ const path = require('path');
 
 let devMinerInterval = null;
 const statsDir = path.resolve(__dirname, '../backend/apollo-miner/');
+let statsFilePath = null;
 
 // Start the dev miner
 const startDevMiner = async () => {
@@ -10,8 +11,8 @@ const startDevMiner = async () => {
     console.log('Starting dev miner...');
     await delay(5_000); // Simulate startup delay
 
-    const statsFileName = `apollo-miner-v2.12345678900000000000`;
-    const statsFilePath = path.join(statsDir, statsFileName);
+    const statsFileName = `apollo-miner-v2.${Date.now()}`;
+    statsFilePath = path.join(statsDir, statsFileName);
 
     if (!fs.existsSync(statsDir)) {
       fs.mkdirSync(statsDir, { recursive: true });
@@ -35,6 +36,17 @@ const stopDevMiner = async () => {
 
     clearInterval(devMinerInterval);
     devMinerInterval = null;
+
+    if (statsFilePath && fs.existsSync(statsFilePath)) {
+      try {
+        fs.unlinkSync(statsFilePath);
+        console.log(`Dev miner stats file ${statsFilePath} deleted.`);
+      } catch (error) {
+        console.error('Error deleting Dev miner stats file:', error);
+      }
+    }
+
+    statsFilePath = null;
     console.log('Dev miner stopped.');
   }
 };
@@ -50,7 +62,10 @@ const restartDevMiner = async () => {
 // Generate dev stats
 const generateDevStats = () => {
   const now = new Date();
-  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace('T', ' ');
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 19)
+    .replace('T', ' ');
   return {
     date: localDate,
     statVersion: '1.2',
@@ -73,11 +88,11 @@ const generateDevStats = () => {
       boardsW: '258.0',
       wattPerGHs: '0.035',
       intervals: {
-        '30': generateIntervalStats(30),
-        '300': generateIntervalStats(300),
-        '900': generateIntervalStats(900),
-        '3600': generateIntervalStats(3600),
-        '0': generateIntervalStats(351349),
+        30: generateIntervalStats(30),
+        300: generateIntervalStats(300),
+        900: generateIntervalStats(900),
+        3600: generateIntervalStats(3600),
+        0: generateIntervalStats(351349),
       },
     },
     pool: {
@@ -86,15 +101,15 @@ const generateDevStats = () => {
       userName: 'michelem09.worker1',
       diff: 5002,
       intervals: {
-        '30': generatePoolStats(30),
-        '300': generatePoolStats(300),
-        '900': generatePoolStats(900),
-        '3600': generatePoolStats(3600),
-        '0': generatePoolStats(351349),
+        30: generatePoolStats(30),
+        300: generatePoolStats(300),
+        900: generatePoolStats(900),
+        3600: generatePoolStats(3600),
+        0: generatePoolStats(351349),
       },
     },
     fans: {
-      '0': {
+      0: {
         rpm: [4352],
       },
     },
@@ -105,7 +120,7 @@ const generateDevStats = () => {
       max: 72,
     },
     slots: {
-      '0': {
+      0: {
         revision: 21,
         spiNum: 1,
         spiLen: 4,

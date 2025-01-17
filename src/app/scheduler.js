@@ -169,8 +169,8 @@ async function startAllSchedulers() {
     await checkAndUpdateServices();
     
     // Then set intervals
-    setInterval(checkAndUpdateServices, 10000); // 10 seconds for status checks
-    setInterval(fetchStatistics, 30000);        // 30 seconds for statistics
+    setInterval(checkAndUpdateServices, 5000);
+    setInterval(fetchStatistics, 30000);
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }

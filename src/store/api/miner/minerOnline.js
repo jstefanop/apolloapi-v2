@@ -24,9 +24,9 @@ module.exports = ({ define }) => {
           dbStatus = initialUserStatus;
         }
 
-        // Check miner status based on file updates and database status
+        // Ensure timestamps are in UTC and consistent
         const online = await isMinerOnline(dbStatus);
-        online.timestamp = new Date().toISOString();
+        online.timestamp = new Date().toISOString(); // Always UTC
 
         return { online };
       } catch (error) {
@@ -48,23 +48,30 @@ async function isMinerOnline(dbStatus) {
     );
     const statsFilePattern = /^apollo-miner.*$/; // Regex to match stats file names
 
-    // Define thresholds
+    // Define thresholds in milliseconds
     const recentThresholdMs = 15000; // File considered recent if updated within 15 seconds
-    const pendingThresholdMs = 30000; // Pending timeout for "online" request
+    const pendingThresholdMs = 60000; // Pending timeout for "online" request
     const pendingStopTimeoutMs = 5000; // Pending timeout for "offline" request
 
-    // Get current time and requested time
-    const currentTime = Date.now();
+    // Get current time in UTC
+    const currentTime = Date.now(); // Always UTC
     const requestedAtTime = dbStatus.requestedAt
-      ? new Date(dbStatus.requestedAt).getTime()
-      : 0; // Default to 0 if requestedAt is null
+      ? new Date(dbStatus.requestedAt).getTime() // Ensure this is UTC
+      : 0;
 
     // List all files in the stats directory
     const files = await fs.readdir(statsDir);
     const statsFiles = files.filter((file) => statsFilePattern.test(file));
 
+    // If no stats files are found, check the requested status and pending logic
     if (statsFiles.length === 0) {
-      return { status: 'offline' }; // No files found
+      if (
+        dbStatus.requestedStatus === 'online' &&
+        currentTime - requestedAtTime <= pendingThresholdMs
+      ) {
+        return { status: 'pending' }; // Still in pending state for online
+      }
+      return { status: 'offline' }; // Otherwise, it's offline
     }
 
     // Find the most recently modified file
@@ -76,7 +83,7 @@ async function isMinerOnline(dbStatus) {
       const stats = await fs.stat(filePath);
 
       if (stats.mtimeMs > latestMtime) {
-        latestMtime = stats.mtimeMs;
+        latestMtime = stats.mtimeMs; // This is in UTC
         latestFile = filePath;
       }
     }
