@@ -42,7 +42,10 @@ module.exports = ({ define }) => {
 
 async function isMinerOnline(dbStatus) {
   try {
-    const statsDir = path.resolve(__dirname, '../../../../backend/apollo-miner/');
+    const statsDir = path.resolve(
+      __dirname,
+      '../../../../backend/apollo-miner/'
+    );
     const statsFilePattern = /^apollo-miner.*$/; // Regex to match stats file names
 
     // Define thresholds
@@ -52,7 +55,9 @@ async function isMinerOnline(dbStatus) {
 
     // Get current time and requested time
     const currentTime = Date.now();
-    const requestedAtTime = new Date(dbStatus.requestedAt).getTime();
+    const requestedAtTime = dbStatus.requestedAt
+      ? new Date(dbStatus.requestedAt).getTime()
+      : 0; // Default to 0 if requestedAt is null
 
     // List all files in the stats directory
     const files = await fs.readdir(statsDir);

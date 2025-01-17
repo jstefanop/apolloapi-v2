@@ -58,7 +58,7 @@ const createRpcClient = async (knex) => {
       }`,
     auth: {
       username: process.env.BITCOIN_NODE_USER || 'futurebit',
-      password: process.env.BITCOIN_NODE_PASS || settings.nodeRpcPassword,
+      password: process.env.BITCOIN_NODE_PASS || settings[0]?.nodeRpcPassword,
     },
     timeout: 30000,
   });
