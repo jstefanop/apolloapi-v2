@@ -56,6 +56,14 @@ async function initServiceStatusRows() {
  */
 async function fetchStatistics() {
   try {
+    const minserService = await knex('service_status')
+      .select('status')
+      .where({ service_name: 'miner' })
+      .first();
+
+    // If the miner is not online, return
+    if (minserService.status !== 'online') return;
+
     const data = await store.dispatch('api/miner/stats', { useAuth: false });
     if (!data || !data.stats) return;
 

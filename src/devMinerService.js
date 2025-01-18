@@ -5,11 +5,27 @@ let devMinerInterval = null;
 const statsDir = path.resolve(__dirname, '../backend/apollo-miner/');
 let statsFilePath = null;
 
+// Helper function to delete files starting with "apollo-miner" in the directory
+const clearApolloMinerFiles = async (directory) => {
+  if (fs.existsSync(directory)) {
+    const files = fs.readdirSync(directory);
+    for (const file of files) {
+      if (file.startsWith('apollo-miner')) {
+        fs.unlinkSync(path.join(directory, file));
+        console.log(`Deleted file: ${file}`);
+      }
+    }
+  }
+};
+
 // Start the dev miner
 const startDevMiner = async () => {
   if (!devMinerInterval) {
     console.log('Starting dev miner...');
     await delay(5_000); // Simulate startup delay
+
+    // Clear existing apollo-miner files
+    await clearApolloMinerFiles(statsDir);
 
     const statsFileName = `apollo-miner-v2.${Date.now()}`;
     statsFilePath = path.join(statsDir, statsFileName);

@@ -39,8 +39,8 @@ module.exports = ({ define }) => {
 async function isNodeOnline(dbStatus, rpcClient) {
   try {
     // Define thresholds
-    const pendingThresholdMs = 30000; // Pending timeout for "online" request
-    const pendingStopTimeoutMs = 5000; // Pending timeout for "offline" request
+    const pendingThresholdMs = 45000; // Pending timeout for "online" request
+    const pendingStopTimeoutMs = 10000; // Pending timeout for "offline" request
 
     // Get current time and requested time
     const currentTime = Date.now();
@@ -82,6 +82,6 @@ async function isNodeOnline(dbStatus, rpcClient) {
     return { status: 'error' }; // Catch-all fallback for unexpected cases
   } catch (error) {
     console.error('Error checking node status:', error.message);
-    return { status: 'error' }; // Handle unexpected errors
+    return { status: 'error' };
   }
 }
