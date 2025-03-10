@@ -25,19 +25,33 @@ const startDevMiner = async () => {
     await delay(5_000); // Simulate startup delay
 
     // Clear existing apollo-miner files
-    await clearApolloMinerFiles(statsDir);
+    try {
+      await clearApolloMinerFiles(statsDir);
+    } catch (error) {
+      console.error(`Error clearing apollo-miner files: ${error.message}`);
+      return;
+    }
 
     const statsFileName = `apollo-miner-v2.${Date.now()}`;
     statsFilePath = path.join(statsDir, statsFileName);
 
     if (!fs.existsSync(statsDir)) {
-      fs.mkdirSync(statsDir, { recursive: true });
+      try {
+        fs.mkdirSync(statsDir, { recursive: true });
+      } catch (error) {
+        console.error(`Error creating directory ${statsDir}: ${error.message}`);
+        return;
+      }
     }
 
     devMinerInterval = setInterval(() => {
-      const stats = generateDevStats();
-      fs.writeFileSync(statsFilePath, JSON.stringify(stats, null, 2));
-      console.log(`Dev miner stats written to ${statsFilePath}`);
+      try {
+        const stats = generateDevStats();
+        fs.writeFileSync(statsFilePath, JSON.stringify(stats, null, 2));
+        console.log(`Dev miner stats written to ${statsFilePath}`);
+      } catch (error) {
+        console.error(`Error writing dev miner stats: ${error.message}`);
+      }
     }, 10_000);
 
     console.log('Dev miner started.');
