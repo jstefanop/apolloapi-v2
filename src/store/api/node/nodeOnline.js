@@ -39,7 +39,7 @@ module.exports = ({ define }) => {
 async function isNodeOnline(dbStatus, rpcClient) {
   try {
     // Define thresholds
-    const pendingThresholdMs = 45000; // Pending timeout for "online" request
+    const pendingThresholdMs = 120000; // Pending timeout for "online" request
     const pendingStopTimeoutMs = 10000; // Pending timeout for "offline" request
 
     // Get current time and requested time
