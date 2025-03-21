@@ -55,7 +55,7 @@ module.exports = ({ define }) => {
               try {
                 // Try to access screen output for the miner
                 const { stdout } = await execPromise(
-                  `sudo screen -S apollo-miner -X hardcopy /tmp/miner_screen.log && cat /tmp/miner_screen.log | tail -n ${safeLines}`
+                  `sudo screen -S miner -X hardcopy /tmp/miner_screen.log && cat /tmp/miner_screen.log | tail -n ${safeLines}`
                 );
                 return {
                   content: stdout || 'No miner screen output available.',
