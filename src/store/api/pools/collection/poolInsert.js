@@ -6,18 +6,25 @@ const updateFields = {
   username: 'username',
   password: 'password',
   proxy: 'proxy',
-  index: 'index'
-}
+  index: 'index',
+};
 
 module.exports = ({ define }) => {
   define('insert', async (data = {}, { dispatch, knex, errors, utils }) => {
-    const insertData = {}
-    Object.keys(data).forEach(key => {
+    const insertData = {};
+    Object.keys(data).forEach((key) => {
       if (updateFields[key]) {
-        insertData[updateFields[key]] = data[key]
+        insertData[updateFields[key]] = data[key];
       }
-    })
-    // insertData.index = knex('pools').select(knex.raw('coalesce(max(??), -1) + ?', ['index', 1]))
-    return await knex('pools').insert(insertData).returning('*')
-  })
-}
+    });
+
+    // Ensure index is set if not provided
+    if (!insertData.index) {
+      const maxIndex = await knex('pools').max('index as maxIndex').first();
+      insertData.index = (maxIndex.maxIndex || 0) + 1;
+    }
+
+    const ids = await knex('pools').insert(insertData);
+    return Array.isArray(ids) ? ids : [ids];
+  });
+};
