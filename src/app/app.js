@@ -1,18 +1,23 @@
-const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const _ = require('lodash');
-const { knex } = require('../db');
-const store = require('./../store');
-const graphqlApp = require('./graphqlApp');
+const setupApolloServer = require('./graphqlApp');
 
-// Run the scheduler
-require('./scheduler');
-
+// Create Express app
 const app = express();
-
 app.use(cors());
 
-app.use('/api/graphql', graphqlApp);
+// Setup Apollo Server and apply middleware
+async function initializeApp() {
+  const appWithApollo = await setupApolloServer(app);
 
-module.exports = app;
+  // Run the scheduler
+  require('./scheduler');
+
+  return appWithApollo;
+}
+
+// Initialize the app
+const appPromise = initializeApp();
+
+// Export the app promise
+module.exports = appPromise;

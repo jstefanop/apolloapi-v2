@@ -1,0 +1,451 @@
+const fs = require('fs').promises;
+const path = require('path');
+const { exec } = require('child_process');
+const _ = require('lodash');
+const moment = require('moment');
+const { GraphQLError } = require('graphql');
+
+// Import the dev miner service for development mode
+const devMinerService = process.env.NODE_ENV === 'development'
+  ? require('../devMinerService')
+  : null;
+
+class MinerService {
+  constructor(knex, utils) {
+    this.knex = knex;
+    this.utils = utils;
+  }
+
+  // Start the miner
+  async start() {
+    try {
+      // Update service status in the database
+      await this.knex('service_status').where({ service_name: 'miner' }).update({
+        status: 'pending',
+        requested_status: 'online',
+        requested_at: new Date()
+      });
+
+      // Start the miner based on environment
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Starting dev miner...');
+        await devMinerService.startDevMiner();
+      } else {
+        await this._execCommand('sudo systemctl start apollo-miner');
+      }
+    } catch (error) {
+      throw new GraphQLError(`Failed to start miner: ${error.message}`);
+    }
+  }
+
+  // Stop the miner
+  async stop() {
+    try {
+      // Update service status in the database
+      await this.knex('service_status').where({ service_name: 'miner' }).update({
+        status: 'pending',
+        requested_status: 'offline',
+        requested_at: new Date()
+      });
+
+      // Stop the miner based on environment
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Stopping dev miner...');
+        await devMinerService.stopDevMiner();
+      } else {
+        await this._execCommand('sudo systemctl stop apollo-miner');
+      }
+    } catch (error) {
+      throw new GraphQLError(`Failed to stop miner: ${error.message}`);
+    }
+  }
+
+  // Restart the miner
+  async restart() {
+    try {
+      // Update service status in the database
+      await this.knex('service_status').where({ service_name: 'miner' }).update({
+        status: 'pending',
+        requested_status: 'online',
+        requested_at: new Date()
+      });
+
+      // Restart the miner based on environment
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Restarting dev miner...');
+        await devMinerService.restartDevMiner();
+      } else {
+        await this._execCommand('sudo systemctl restart apollo-miner');
+      }
+    } catch (error) {
+      throw new GraphQLError(`Failed to restart miner: ${error.message}`);
+    }
+  }
+
+  // Get miner statistics
+  async getStats() {
+    try {
+      // Fetch settings and pools
+      const settingsService = require('./settings')(this.knex, this.utils);
+      const poolsService = require('./pools')(this.knex, this.utils);
+
+      const settings = await settingsService.read();
+      const pools = await poolsService.list();
+
+      // Get miner stats
+      const stats = await this._getMinerStats(settings, pools.pools);
+      const ckpool = await this._getCkpoolStats(settings, pools.pools);
+
+      return { stats, ckpool };
+    } catch (error) {
+      throw new GraphQLError(`Failed to get miner stats: ${error.message}`);
+    }
+  }
+
+  // Check if miner is online
+  async checkOnline() {
+    try {
+      // Initialize default values
+      const initialUserStatus = {
+        requestedStatus: null,
+        requestedAt: null
+      };
+
+      // Fetch requested status from database
+      let dbStatus = await this.knex('service_status')
+        .select(
+          'requested_status as requestedStatus',
+          'requested_at as requestedAt'
+        )
+        .where({ service_name: 'miner' })
+        .first();
+
+      if (!dbStatus) {
+        dbStatus = initialUserStatus;
+      }
+
+      // Check if miner is online
+      const online = await this._isMinerOnline(dbStatus);
+      online.timestamp = new Date().toISOString();
+
+      return { online };
+    } catch (error) {
+      throw new GraphQLError(`Failed to check miner status: ${error.message}`);
+    }
+  }
+
+  // Helper method to check if miner is online
+  async _isMinerOnline(dbStatus) {
+    try {
+      const statsDir = path.resolve(
+        __dirname,
+        '../../backend/apollo-miner/'
+      );
+      const statsFilePattern = /^apollo-miner.*$/;
+
+      // Define thresholds
+      const recentThresholdMs = 15000; // 15 seconds
+      const pendingThresholdMs = 60000; // 60 seconds
+      const pendingStopTimeoutMs = 5000; // 5 seconds
+
+      // Get current time
+      const currentTime = Date.now();
+      const requestedAtTime = dbStatus.requestedAt
+        ? new Date(dbStatus.requestedAt).getTime()
+        : 0;
+
+      // Check if the directory exists
+      try {
+        await fs.access(statsDir, fs.constants.F_OK);
+      } catch (err) {
+        // Directory does not exist
+        if (err.code === 'ENOENT') {
+          // If request is to start the miner and within pending threshold, return pending
+          if (
+            dbStatus.requestedStatus === 'online' &&
+            currentTime - requestedAtTime <= pendingThresholdMs
+          ) {
+            return { status: 'pending' };
+          }
+          // Otherwise, return offline
+          return { status: 'offline' };
+        }
+        throw err;
+      }
+
+      // List all files in the directory
+      const files = await fs.readdir(statsDir);
+      const statsFiles = files.filter((file) => statsFilePattern.test(file));
+
+      // If no stats files, check requested status and pending threshold
+      if (statsFiles.length === 0) {
+        if (
+          dbStatus.requestedStatus === 'online' &&
+          currentTime - requestedAtTime <= pendingThresholdMs
+        ) {
+          return { status: 'pending' };
+        }
+        return { status: 'offline' };
+      }
+
+      // Find the most recently modified file
+      let latestFile = null;
+      let latestMtime = 0;
+
+      for (const file of statsFiles) {
+        const filePath = path.join(statsDir, file);
+        const stats = await fs.stat(filePath);
+
+        if (stats.mtimeMs > latestMtime) {
+          latestMtime = stats.mtimeMs;
+          latestFile = filePath;
+        }
+      }
+
+      if (!latestFile) {
+        return { status: 'offline' };
+      }
+
+      // Check how recently the file was updated
+      const timeSinceLastUpdate = currentTime - latestMtime;
+
+      // Determine status based on requested status and file update time
+      if (dbStatus.requestedStatus === 'online') {
+        if (timeSinceLastUpdate <= recentThresholdMs) {
+          return { status: 'online' };
+        } else if (currentTime - requestedAtTime <= pendingThresholdMs) {
+          return { status: 'pending' };
+        } else {
+          return { status: 'offline' };
+        }
+      }
+
+      if (dbStatus.requestedStatus === 'offline') {
+        if (timeSinceLastUpdate > recentThresholdMs) {
+          return { status: 'offline' };
+        } else if (currentTime - requestedAtTime <= pendingStopTimeoutMs) {
+          return { status: 'pending' };
+        } else {
+          return { status: 'offline' };
+        }
+      }
+
+      return { status: 'error' };
+    } catch (error) {
+      console.error('Error checking miner status:', error.message);
+      return { status: 'error' };
+    }
+  }
+
+  // Helper method to get miner stats
+  async _getMinerStats(settings, pools) {
+    return new Promise((resolve, reject) => {
+      (async () => {
+        try {
+          const statsDir = path.resolve(
+            __dirname,
+            '../../backend/apollo-miner/'
+          );
+          const statsFilePattern = 'apollo-miner.*';
+
+          // Get list of stats files
+          let statsFiles = await fs.readdir(statsDir);
+          statsFiles = statsFiles.filter((f) => f.match(statsFilePattern));
+
+          let stats = [];
+
+          // Parse file details (version and ID)
+          const findFileDetails = (fileName) => {
+            const match = fileName.match(/^(apollo-miner)(?:-v(\d+))?\.(.+)$/);
+            if (match) {
+              const [, , version, id] = match;
+              const fileVersion = version ? 'v' + version : 'v1';
+              return { version: fileVersion, id };
+            } else {
+              return null;
+            }
+          };
+
+          // Process each stats file
+          await Promise.all(
+            statsFiles.map(async (file) => {
+              const data = await fs.readFile(`${statsDir}/${file}`);
+              let received = data.toString('utf8').trim();
+
+              // Clean JSON data
+              received = received
+                .replace(/\-nan/g, '0')
+                .replace(/[^\x00-\x7F]/g, '')
+                .replace('}{', '},{')
+                .replace(String.fromCharCode(0), '')
+                .replace(/[^\}]+$/, '');
+
+              received = JSON.parse(received);
+
+              // Add file details to the stats
+              const fileDetails = findFileDetails(file);
+              received.uuid = fileDetails.id;
+              received.version = fileDetails.version;
+
+              // Rename interval keys
+              received.master.intervals = _.mapKeys(
+                received.master.intervals,
+                (value, name) => `int_${name}`
+              );
+
+              received.pool.intervals = _.mapKeys(
+                received.pool.intervals,
+                (value, name) => `int_${name}`
+              );
+
+              received.fans = _.mapKeys(
+                received.fans,
+                (value, name) => `int_${name}`
+              );
+
+              received.slots = _.mapKeys(
+                received.slots,
+                (value, name) => `int_${name}`
+              );
+
+              // Format date with timezone
+              let offset = new Date().getTimezoneOffset();
+              offset *= -1;
+              received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss')
+                .utcOffset(offset)
+                .format();
+
+              stats.push(received);
+            })
+          );
+
+          resolve(stats);
+        } catch (err) {
+          reject(err);
+        }
+      })();
+    });
+  }
+
+  // Helper method to get ckpool stats
+  async _getCkpoolStats(settings, pools) {
+    return new Promise((resolve, reject) => {
+      (async () => {
+        // Get ckpool data
+        let ckpoolData = null;
+
+        try {
+          if (settings?.nodeEnableSoloMining) {
+            const ckpoolPoolStatsFile = path.resolve(
+              __dirname,
+              '../../backend/ckpool/logs/pool/pool.status'
+            );
+
+            const ckpoolUsersStatsDir = path.resolve(
+              __dirname,
+              '../../backend/ckpool/logs/users/'
+            );
+
+            try {
+              // Check if the directory exists
+              await fs.stat(ckpoolUsersStatsDir);
+            } catch (err) {
+              if (err.code === 'ENOENT') {
+                // Directory does not exist
+                resolve(ckpoolData); // Resolve with null data
+                return;
+              }
+              throw err; // Re-throw other errors
+            }
+
+            // Get list of user files
+            let filenames = await fs.readdir(ckpoolUsersStatsDir);
+            filenames = filenames.filter((filename) => {
+              if (!filename.match(/\.ds_store/i)) return filename;
+            });
+
+            // Process each user file
+            const usersDataPromises = filenames.map(async (filename) => {
+              const ckpoolUsersStatsFile = path.resolve(
+                ckpoolUsersStatsDir,
+                filename
+              );
+              const ckpoolUsersData = await fs.readFile(
+                ckpoolUsersStatsFile,
+                'utf8'
+              );
+
+              return JSON.parse(ckpoolUsersData);
+            });
+
+            const usersData = await Promise.all(usersDataPromises);
+
+            // Parse pool stats file
+            ckpoolData = {
+              pool: await this._parseFileToJsonArray(ckpoolPoolStatsFile),
+              users: usersData,
+            };
+          }
+
+          resolve(ckpoolData);
+        } catch (err) {
+          reject(err);
+        }
+      })();
+    });
+  }
+
+  // Helper method to parse file to JSON array
+  async _parseFileToJsonArray(filePath) {
+    try {
+      // Read the file content
+      const fileContent = await fs.readFile(filePath, 'utf8');
+
+      // Divide the file content into lines
+      const lines = fileContent.split('\n');
+
+      const allKeys = {};
+
+      // Analyze each line
+      lines.forEach((line) => {
+        if (line.trim() !== '') {
+          try {
+            const jsonObject = JSON.parse(line);
+
+            // Add the keys to the allKeys object
+            Object.entries(jsonObject).forEach(([key, value]) => {
+              if (!allKeys[key]) {
+                allKeys[key] = null;
+              }
+              allKeys[key] = value;
+            });
+          } catch (error) {
+            console.error(
+              `Error during the parsing of the line: ${error.message}`
+            );
+          }
+        }
+      });
+
+      return allKeys;
+    } catch (error) {
+      console.error(`Error during the reading of the file: ${error.message}`);
+      return {};
+    }
+  }
+
+  // Helper method to execute shell commands
+  _execCommand(command) {
+    return new Promise((resolve, reject) => {
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(stdout.trim());
+      });
+    });
+  }
+}
+
+module.exports = (knex, utils) => new MinerService(knex, utils);

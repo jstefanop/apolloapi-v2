@@ -1,31 +1,31 @@
 const { knex } = require('../db');
-const store = require('./../store');
 const _ = require('lodash');
+const services = require('../services');
 
-// Services to check (miner, node)
-const SERVICES = ['miner', 'node'];
+// Servizi da monitorare (miner, node)
+const SERVICE_NAMES = ['miner', 'node'];
 
 /**
- * This function updates the service status in the DB
+ * Questa funzione aggiorna lo stato dei servizi nel DB
  */
 async function updateServiceStatus(serviceName, status) {
-  await knex('service_status')
-    .where({ service_name: serviceName })
-    .update({
-      status,
-      last_checked: new Date()
-    });
+  await knex('service_status').where({ service_name: serviceName }).update({
+    status,
+    last_checked: new Date(),
+  });
 }
 
 /**
- * This function checks and updates all services
+ * Questa funzione controlla e aggiorna lo stato di tutti i servizi
  */
 async function checkAndUpdateServices() {
   try {
-    const minerStatus = await store.dispatch('api/miner/online', { useAuth: false });
+    // Controlla lo stato del miner
+    const minerStatus = await services.miner.checkOnline();
     await updateServiceStatus('miner', minerStatus?.online?.status);
 
-    const nodeStatus = await store.dispatch('api/node/online', { useAuth: false });
+    // Controlla lo stato del nodo
+    const nodeStatus = await services.node.checkOnline();
     await updateServiceStatus('node', nodeStatus?.online?.status);
   } catch (error) {
     console.error('Error checking services:', error);
@@ -33,10 +33,10 @@ async function checkAndUpdateServices() {
 }
 
 /**
- * Initialize the DB rows if not existing
+ * Inizializza le righe del DB se non esistono
  */
 async function initServiceStatusRows() {
-  for (const service of SERVICES) {
+  for (const service of SERVICE_NAMES) {
     const record = await knex('service_status')
       .where({ service_name: service })
       .first();
@@ -45,29 +45,32 @@ async function initServiceStatusRows() {
       await knex('service_status').insert({
         service_name: service,
         status: 'offline',
-        last_checked: new Date()
+        last_checked: new Date(),
       });
     }
   }
 }
 
 /**
- * This function handles fetching statistics from the miner
+ * Questa funzione si occupa di raccogliere le statistiche dal miner
  */
 async function fetchStatistics() {
   try {
+    // Verifica se il miner è online
     const minserService = await knex('service_status')
       .select('status')
       .where({ service_name: 'miner' })
       .first();
 
-    // If the miner is not online, return
+    // Se il miner non è online, return
     if (minserService.status !== 'online') return;
 
-    const data = await store.dispatch('api/miner/stats', { useAuth: false });
-    if (!data || !data.stats) return;
+    // Ottieni le statistiche del miner
+    const { stats } = await services.miner.getStats();
+    if (!stats || stats.length === 0) return;
 
-    const boards = data.stats.map((board) => {
+    // Elabora i dati per ogni scheda
+    const boards = stats.map((board) => {
       const {
         master: {
           boardsI: voltage,
@@ -107,7 +110,7 @@ async function fetchStatistics() {
       };
     });
 
-    // Calculate totals
+    // Calcola i totali
     const totals = boards.reduce(
       (acc, board) => {
         acc.hashrateInGh += parseFloat(board.hashrateInGh);
@@ -141,9 +144,9 @@ async function fetchStatistics() {
     totals.fanRpm = _.meanBy(boards, 'fanRpm');
     boards.push(totals);
 
-    // Insert into DB in a transaction
+    // Inserisci i dati nel DB in una transazione
     await knex.transaction(async (trx) => {
-      // Clean old data
+      // Elimina i dati vecchi (più di 7 giorni)
       const rowsBefore = await trx('time_series_data').count('* as count');
       console.log('Rows before deletion:', rowsBefore[0].count);
 
@@ -155,34 +158,34 @@ async function fetchStatistics() {
       const rowsAfter = await trx('time_series_data').count('* as count');
       console.log('Rows after deletion:', rowsAfter[0].count);
 
-      // Insert new data
+      // Inserisci i nuovi dati
       await trx('time_series_data').insert(boards);
     });
 
     console.log('Time series data inserted');
   } catch (error) {
-    console.error('Error while fetching statistics from the miner via API:', error);
+    console.error('Error while fetching statistics from the miner:', error);
   }
 }
 
 /**
- * The main function that starts all scheduled tasks
+ * La funzione principale che avvia tutti i task schedulati
  */
 async function startAllSchedulers() {
   try {
-    // Initialize DB rows for miner/node status
+    // Inizializza le righe del DB per lo stato dei servizi
     await initServiceStatusRows();
 
-    // Immediately check the first time
+    // Controlla immediatamente la prima volta
     await checkAndUpdateServices();
-    
-    // Then set intervals
-    setInterval(checkAndUpdateServices, 5000);
-    setInterval(fetchStatistics, 30000);
+
+    // Poi imposta gli intervalli
+    setInterval(checkAndUpdateServices, 5000); // Controlla ogni 5 secondi
+    setInterval(fetchStatistics, 30000); // Raccoglie statistiche ogni 30 secondi
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }
 }
 
-// Immediately invoke or export the function
+// Avvia immediatamente gli scheduler
 startAllSchedulers();

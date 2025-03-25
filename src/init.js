@@ -59,9 +59,15 @@ const runGenerateBitcoinPassword = async (settings) => {
   }
 };
 
-initEnvFile();
-runMigrations().then(startServer);
-
-function startServer() {
-  require('./server');
+// Funzione principale di avvio
+async function initializeApp() {
+  await initEnvFile();
+  await runMigrations();
+  return require('./server');
 }
+
+// Avvia l'applicazione e gestisci eventuali errori
+initializeApp().catch(error => {
+  console.error('Failed to initialize app:', error);
+  process.exit(1);
+});
