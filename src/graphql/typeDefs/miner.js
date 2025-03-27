@@ -179,7 +179,7 @@ module.exports = gql`
     wattPerGHs: Float
     tmpAlert: MinerStatsTmpAlert
     osc: Int
-    oscStopChip: Int
+    oscStopChip: String
   }
 
   type MinerStatsTmpAlert {
