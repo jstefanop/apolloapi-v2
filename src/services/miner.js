@@ -6,9 +6,8 @@ const moment = require('moment');
 const { GraphQLError } = require('graphql');
 
 // Import the dev miner service for development mode
-const devMinerService = process.env.NODE_ENV === 'development'
-  ? require('../devMinerService')
-  : null;
+const devMinerService =
+  process.env.NODE_ENV === 'development' ? require('../devMinerService') : null;
 
 class MinerService {
   constructor(knex, utils) {
@@ -20,11 +19,13 @@ class MinerService {
   async start() {
     try {
       // Update service status in the database
-      await this.knex('service_status').where({ service_name: 'miner' }).update({
-        status: 'pending',
-        requested_status: 'online',
-        requested_at: new Date()
-      });
+      await this.knex('service_status')
+        .where({ service_name: 'miner' })
+        .update({
+          status: 'pending',
+          requested_status: 'online',
+          requested_at: new Date(),
+        });
 
       // Start the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -42,11 +43,13 @@ class MinerService {
   async stop() {
     try {
       // Update service status in the database
-      await this.knex('service_status').where({ service_name: 'miner' }).update({
-        status: 'pending',
-        requested_status: 'offline',
-        requested_at: new Date()
-      });
+      await this.knex('service_status')
+        .where({ service_name: 'miner' })
+        .update({
+          status: 'pending',
+          requested_status: 'offline',
+          requested_at: new Date(),
+        });
 
       // Stop the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -64,11 +67,13 @@ class MinerService {
   async restart() {
     try {
       // Update service status in the database
-      await this.knex('service_status').where({ service_name: 'miner' }).update({
-        status: 'pending',
-        requested_status: 'online',
-        requested_at: new Date()
-      });
+      await this.knex('service_status')
+        .where({ service_name: 'miner' })
+        .update({
+          status: 'pending',
+          requested_status: 'online',
+          requested_at: new Date(),
+        });
 
       // Restart the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -108,7 +113,7 @@ class MinerService {
       // Initialize default values
       const initialUserStatus = {
         requestedStatus: null,
-        requestedAt: null
+        requestedAt: null,
       };
 
       // Fetch requested status from database
@@ -134,13 +139,34 @@ class MinerService {
     }
   }
 
+  // Reset the block found flag
+  async resetBlockFoundFlag() {
+    try {
+      const blockFoundFlagFile = path.resolve(
+        __dirname,
+        '../../backend/ckpool/logs/BLOCKFOUND.log'
+      );
+
+      try {
+        // Check if file exists before attempting to delete it
+        await fs.access(blockFoundFlagFile, fs.constants.F_OK);
+        await fs.unlink(blockFoundFlagFile);
+        console.log('Block found flag reset successfully');
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          // Only throw if error is not "file not found"
+          throw err;
+        }
+      }
+    } catch (error) {
+      throw new GraphQLError(`Failed to reset block found flag: ${error.message}`);
+    }
+  }
+
   // Helper method to check if miner is online
   async _isMinerOnline(dbStatus) {
     try {
-      const statsDir = path.resolve(
-        __dirname,
-        '../../backend/apollo-miner/'
-      );
+      const statsDir = path.resolve(__dirname, '../../backend/apollo-miner/');
       const statsFilePattern = /^apollo-miner.*$/;
 
       // Define thresholds
@@ -328,11 +354,14 @@ class MinerService {
   }
 
   // Helper method to get ckpool stats
+  // Enhancement to the _getCkpoolStats method in src/services/node.js
+
   async _getCkpoolStats(settings, pools) {
     return new Promise((resolve, reject) => {
       (async () => {
         // Get ckpool data
         let ckpoolData = null;
+        let blockFound = false;
 
         try {
           if (settings?.nodeEnableSoloMining) {
@@ -345,6 +374,42 @@ class MinerService {
               __dirname,
               '../../backend/ckpool/logs/users/'
             );
+
+            // Check for block found in ckpool log
+            const ckpoolLogFile = path.resolve(
+              __dirname,
+              '../../backend/ckpool/logs/ckpool.log'
+            );
+
+            const blockFoundFlagFile = path.resolve(
+              __dirname,
+              '../../backend/ckpool/logs/BLOCKFOUND.log'
+            );
+
+            try {
+              // Check if block found flag exists
+              await fs.access(blockFoundFlagFile, fs.constants.F_OK);
+              blockFound = true;
+            } catch (err) {
+              // Flag file doesn't exist, check log for "BLOCK ACCEPTED"
+              if (err.code === 'ENOENT') {
+                try {
+                  const logContent = await fs.readFile(ckpoolLogFile, 'utf8');
+                  if (logContent.includes('BLOCK ACCEPTED')) {
+                    // Block found! Create the flag file
+                    await fs.writeFile(
+                      blockFoundFlagFile,
+                      new Date().toISOString()
+                    );
+                    blockFound = true;
+                  }
+                } catch (logErr) {
+                  console.error('Error reading ckpool log:', logErr.message);
+                }
+              } else {
+                throw err;
+              }
+            }
 
             try {
               // Check if the directory exists
@@ -384,6 +449,7 @@ class MinerService {
             ckpoolData = {
               pool: await this._parseFileToJsonArray(ckpoolPoolStatsFile),
               users: usersData,
+              blockFound: blockFound,
             };
           }
 

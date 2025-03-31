@@ -1,6 +1,6 @@
 module.exports = {
   Query: {
-    Miner: () => ({})
+    Miner: () => ({}),
   },
 
   MinerActions: {
@@ -47,6 +47,15 @@ module.exports = {
       } catch (error) {
         return { result: null, error: { message: error.message } };
       }
-    }
-  }
+    },
+
+    resetBlockFoundFlag: async (_, __, { services }) => {
+      try {
+        await services.miner.resetBlockFoundFlag();
+        return { error: null };
+      } catch (error) {
+        return { error: { message: error.message } };
+      }
+    },
+  },
 };

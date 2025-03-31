@@ -11,6 +11,7 @@ module.exports = gql`
     restart: EmptyOutput! @auth
     stats: MinerStatsOutput!
     online: MinerOnlineOutput!
+    resetBlockFoundFlag: EmptyOutput! @auth
   }
 
   type EmptyOutput {
@@ -201,6 +202,7 @@ module.exports = gql`
   type MinerStatsCkpool {
     pool: MinerStatsCkpoolPool
     users: [MinerStatsCkpoolUsers]
+    blockFound: Boolean
   }
 
   type MinerStatsCkpoolPool {
