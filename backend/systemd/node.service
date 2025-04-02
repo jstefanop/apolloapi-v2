@@ -13,6 +13,9 @@ ExecStart=/opt/apolloapi/backend/node/node_start.sh
 #Stop:
 TimeoutStartSec=300
 ExecStop=/opt/apolloapi/backend/node/node_stop.sh
+#Restart
+Restart=always
+RestartSec=30s
 
 [Install]
 WantedBy=multi-user.target
