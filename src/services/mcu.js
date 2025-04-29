@@ -84,14 +84,23 @@ class McuService {
   // Get application version
   async getVersion() {
     try {
+      // First try to get remote version
       const gitAppVersion = await axios.get(
         `https://raw.githubusercontent.com/jstefanop/apolloui-v2/${process.env.NODE_ENV === 'development' ? 'dev' : 'main'
         }/package.json`
       );
 
-      return gitAppVersion && gitAppVersion.data
-        ? gitAppVersion.data.version
-        : null;
+      if (gitAppVersion && gitAppVersion.data) {
+        return gitAppVersion.data.version;
+      }
+    } catch (error) {
+      console.log('Failed to get remote version, falling back to local version:', error.message);
+    }
+
+    // If remote version fails, return local version
+    try {
+      const localPackageJson = require('../../package.json');
+      return localPackageJson.version;
     } catch (error) {
       throw new GraphQLError(`Failed to get application version: ${error.message}`);
     }
@@ -104,7 +113,8 @@ class McuService {
       if (process.env.NODE_ENV === 'development') scriptName = 'update.fake';
 
       const updateScript = join(__dirname, '../../backend', scriptName);
-      const cmd = spawn('sudo', ['bash', updateScript]);
+      const cmd = spawn(process.env.NODE_ENV === 'development' ? 'bash' : 'sudo', 
+        process.env.NODE_ENV === 'development' ? [updateScript] : ['bash', updateScript]);
 
       cmd.stdout.on('data', (data) => {
         console.log(`stdout: ${data}`);
