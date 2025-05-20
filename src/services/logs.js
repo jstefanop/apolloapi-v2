@@ -54,18 +54,46 @@ class LogsService {
           }
           break;
         case 'MINER':
-          // The miner is run in a screen session, so we need to capture its output differently
+          // The miner is run in multiple screen sessions, so we need to capture output from all of them
           if (process.env.NODE_ENV === 'production') {
             try {
               // Safely limit the number of lines
               const safeLines = Math.min(Math.max(parseInt(lines) || 100, 1), 1000);
 
-              // Try to access screen output for the miner
-              const { stdout } = await execPromise(
-                `sudo screen -S miner -X hardcopy /tmp/miner_screen.log && cat /tmp/miner_screen.log | tail -n ${safeLines}`
+              // First, get list of all miner screen sessions
+              const { stdout: screenList } = await execPromise('sudo screen -ls | grep "miner"');
+              
+              // Extract session IDs from the output
+              const sessionMatches = screenList.match(/\d+\.miner/g) || [];
+              
+              if (sessionMatches.length === 0) {
+                return {
+                  content: 'No miner screen sessions found.',
+                  timestamp: new Date().toISOString(),
+                };
+              }
+
+              // Read logs from each session and merge them
+              const allLogs = await Promise.all(
+                sessionMatches.map(async (session) => {
+                  try {
+                    const { stdout } = await execPromise(
+                      `sudo screen -S ${session} -X hardcopy /tmp/miner_screen_${session}.log && cat /tmp/miner_screen_${session}.log | tail -n ${safeLines}`
+                    );
+                    return stdout || `No output available for session ${session}`;
+                  } catch (error) {
+                    return `Error reading session ${session}: ${error.message}`;
+                  }
+                })
               );
+
+              // Merge all logs with session identifiers
+              const mergedLogs = allLogs
+                .map((log, index) => `=== Session ${sessionMatches[index]} ===\n${log}`)
+                .join('\n\n');
+
               return {
-                content: stdout || 'No miner screen output available.',
+                content: mergedLogs || 'No miner screen output available.',
                 timestamp: new Date().toISOString(),
               };
             } catch (error) {
@@ -73,7 +101,7 @@ class LogsService {
                 `Error getting miner screen output: ${error.message}`
               );
               return {
-                content: `Unable to retrieve miner screen output: ${error.message}. The miner might not be running in a screen session named 'apollo-miner'.`,
+                content: `Unable to retrieve miner screen output: ${error.message}. No miner screen sessions found.`,
                 timestamp: new Date().toISOString(),
               };
             }

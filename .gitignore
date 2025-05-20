@@ -79,6 +79,7 @@ backend/apollo-miner/futurebit-miner
 backend/node/bitcoind
 backend/node/bitcoin.conf
 backend/ckpool/ckpool.conf
+backend/ckpool/logs
 backend/start_swap.sh
 backend/apollo-miner/mode
 .claudeignore
