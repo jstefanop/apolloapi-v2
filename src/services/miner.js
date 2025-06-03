@@ -425,9 +425,22 @@ class MinerService {
 
             // Get list of user files
             let filenames = await fs.readdir(ckpoolUsersStatsDir);
-            filenames = filenames.filter((filename) => {
-              if (!filename.match(/\.ds_store/i)) return filename;
+            filenames = filenames.filter(async (filename) => {
+              // Skip .DS_Store files
+              if (filename.match(/\.ds_store/i)) return false;
+              
+              // Check file modification time
+              const filePath = path.join(ckpoolUsersStatsDir, filename);
+              const stats = await fs.stat(filePath);
+              const fileAge = Date.now() - stats.mtimeMs;
+              const oneDayInMs = 24 * 60 * 60 * 1000;
+              
+              // Skip files older than 1 day
+              return fileAge <= oneDayInMs;
             });
+            
+            // Wait for all async filter operations to complete
+            filenames = await Promise.all(filenames);
 
             // Process each user file
             const usersDataPromises = filenames.map(async (filename) => {
