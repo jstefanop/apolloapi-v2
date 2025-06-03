@@ -21,7 +21,7 @@ const clearApolloMinerFiles = async (directory) => {
 
 // Generate random hashrate in TH/s
 const generateRandomHashrate = () => {
-  const value = (Math.random() * 10 + 1).toFixed(2);
+  const value = (Math.random() * 4 + 14).toFixed(2); // Random between 14 and 18
   return `${value}T`;
 };
 
@@ -74,8 +74,8 @@ const generateUserData = (wallet) => {
   const hashrate1d = generateRandomHashrateG();
   const hashrate7d = generateRandomHashrateG();
   const bestshare = Math.random() * 10000000;
-  // Make lastshare less than 1 hour old
-  const lastshare = now - Math.floor(Math.random() * 3600 * 25); // Random seconds between 0 and 3600 (1 hour)
+  // Make lastshare between 1 and 5 minutes old
+  const lastshare = now - (60 + Math.floor(Math.random() * 240)); // Random seconds between 60 (1 min) and 300 (5 min)
 
   return {
     hashrate1m,
