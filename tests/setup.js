@@ -170,6 +170,7 @@ beforeAll(async () => {
         table.integer('node_max_connections').defaultTo(64);
         table.boolean('node_allow_lan').defaultTo(false);
         table.string('btcsig').defaultTo('/mined by FutureBit Apollo/');
+        table.string('node_software').defaultTo('core-latest');
         table.timestamps(true, true);
       });
     }

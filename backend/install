@@ -95,7 +95,19 @@ arch=$(uname -m)
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
 
 ### Bitcoind ###
-cp $APOLLO_DIR/backend/node/bin/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+# Get node_software from database
+NODE_SOFTWARE=$(sqlite3 $APOLLO_DIR/backend/futurebit.sqlite "SELECT node_software FROM settings ORDER BY created_at DESC, id DESC LIMIT 1")
+if [ -z "$NODE_SOFTWARE" ]; then
+  NODE_SOFTWARE="core-latest"
+fi
+
+# Copy the correct bitcoind binary based on node_software
+if [[ "$NODE_SOFTWARE" == "knots-latest" ]]; then
+  cp $APOLLO_DIR/backend/node/bin/knots/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+else
+  cp $APOLLO_DIR/backend/node/bin/core/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+fi
+
 cp $APOLLO_DIR/backend/node/bin/bitcoin.conf $APOLLO_DIR/backend/node/bitcoin.conf
 
 ### TOR ###

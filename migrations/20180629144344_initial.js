@@ -58,6 +58,7 @@ exports.up = async function (knex) {
 }
 
 exports.down = async function (knex) {
-  await knex.raw('drop schema if exists public cascade')
-  await knex.raw('create schema public')
+  await knex.schema.dropTableIfExists('pools')
+  await knex.schema.dropTableIfExists('settings')
+  await knex.schema.dropTableIfExists('setup')
 }

@@ -309,6 +309,28 @@ module.exports.auth = {
         return;
       }
 
+      // Get architecture
+      const arch = os.machine();
+
+      // Copy the correct bitcoind binary based on node_software
+      if (settings.nodeSoftware) {
+        try {
+          const apolloDir = '/opt/apolloapi';
+          const sourceDir = settings.nodeSoftware === 'knots-latest' ? 'knots' : 'core';
+          const sourcePath = `${apolloDir}/backend/node/bin/${sourceDir}/${arch}/bitcoind`;
+          const destPath = `${apolloDir}/backend/node/bitcoind`;
+
+          if (isProduction()) {
+            await execWithSudo(`cp ${sourcePath} ${destPath}`);
+            console.log(`Copied ${sourcePath} to ${destPath}`);
+          } else {
+            console.log(`[DEV] Would copy ${sourcePath} to ${destPath}`);
+          }
+        } catch (copyErr) {
+          console.log('Error copying bitcoind binary:', copyErr.message);
+        }
+      }
+
       // Create directories if they don't exist
       try {
         const configDir = path.dirname(configBitcoinFilePath);

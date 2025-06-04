@@ -47,7 +47,8 @@ class SettingsService {
         oldSettings.nodeRpcPassword !== newSettings.nodeRpcPassword ||
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
-        oldSettings.btcsig !== newSettings.btcsig
+        oldSettings.btcsig !== newSettings.btcsig ||
+        oldSettings.nodeSoftware !== newSettings.nodeSoftware
       ) {
         await this.utils.auth.manageBitcoinConf(newSettings);
       }
@@ -86,7 +87,8 @@ class SettingsService {
         'node_enable_solo_mining as nodeEnableSoloMining',
         'node_max_connections as nodeMaxConnections',
         'node_allow_lan as nodeAllowLan',
-        'btcsig'
+        'btcsig',
+        'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
@@ -125,7 +127,8 @@ class SettingsService {
       'node_enable_solo_mining as nodeEnableSoloMining',
       'node_max_connections as nodeMaxConnections',
       'node_allow_lan as nodeAllowLan',
-      'btcsig'
+      'btcsig',
+      'node_software as nodeSoftware'
     );
 
     readQ.orderBy('created_at', 'desc');
@@ -168,7 +171,8 @@ class SettingsService {
       nodeEnableSoloMining: 'node_enable_solo_mining',
       nodeMaxConnections: 'node_max_connections',
       nodeAllowLan: 'node_allow_lan',
-      btcsig: 'btcsig'
+      btcsig: 'btcsig',
+      nodeSoftware: 'node_software'
     };
 
     // Get current settings

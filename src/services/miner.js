@@ -98,12 +98,28 @@ class MinerService {
       const pools = await poolsService.list();
 
       // Get miner stats
-      const stats = await this._getMinerStats(settings, pools.pools);
-      const ckpool = await this._getCkpoolStats(settings, pools.pools);
+      let stats = [];
+      let ckpool = null;
+
+      try {
+        stats = await this._getMinerStats(settings, pools.pools);
+      } catch (statsError) {
+        console.error('Error getting miner stats:', statsError);
+        // Continue with empty stats array instead of failing completely
+      }
+
+      try {
+        ckpool = await this._getCkpoolStats(settings, pools.pools);
+      } catch (ckpoolError) {
+        console.error('Error getting ckpool stats:', ckpoolError);
+        // Continue with null ckpool data instead of failing completely
+      }
 
       return { stats, ckpool };
     } catch (error) {
-      throw new GraphQLError(`Failed to get miner stats: ${error.message}`);
+      console.error('Error in getStats:', error);
+      // Return empty data instead of throwing error
+      return { stats: [], ckpool: null };
     }
   }
 
@@ -295,53 +311,80 @@ class MinerService {
           // Process each stats file
           await Promise.all(
             statsFiles.map(async (file) => {
-              const data = await fs.readFile(`${statsDir}/${file}`);
-              let received = data.toString('utf8').trim();
+              try {
+                const data = await fs.readFile(`${statsDir}/${file}`);
+                let received = data.toString('utf8').trim();
 
-              // Clean JSON data
-              received = received
-                .replace(/\-nan/g, '0')
-                .replace(/[^\x00-\x7F]/g, '')
-                .replace('}{', '},{')
-                .replace(String.fromCharCode(0), '')
-                .replace(/[^\}]+$/, '');
+                // Skip empty files
+                if (!received) {
+                  console.log(`Skipping empty file: ${file}`);
+                  return;
+                }
 
-              received = JSON.parse(received);
+                // Clean JSON data
+                received = received
+                  .replace(/\-nan/g, '0')
+                  .replace(/[^\x00-\x7F]/g, '')
+                  .replace('}{', '},{')
+                  .replace(String.fromCharCode(0), '')
+                  .replace(/[^\}]+$/, '');
 
-              // Add file details to the stats
-              const fileDetails = findFileDetails(file);
-              received.uuid = fileDetails.id;
-              received.version = fileDetails.version;
+                // Validate JSON before parsing
+                if (!received.startsWith('{') || !received.endsWith('}')) {
+                  console.log(`Invalid JSON format in file ${file}, skipping...`);
+                  return;
+                }
 
-              // Rename interval keys
-              received.master.intervals = _.mapKeys(
-                received.master.intervals,
-                (value, name) => `int_${name}`
-              );
+                try {
+                  received = JSON.parse(received);
+                } catch (parseError) {
+                  console.log(`Failed to parse JSON in file ${file}: ${parseError.message}`);
+                  return;
+                }
 
-              received.pool.intervals = _.mapKeys(
-                received.pool.intervals,
-                (value, name) => `int_${name}`
-              );
+                // Add file details to the stats
+                const fileDetails = findFileDetails(file);
+                if (!fileDetails) {
+                  console.log(`Could not extract details from filename ${file}, skipping...`);
+                  return;
+                }
 
-              received.fans = _.mapKeys(
-                received.fans,
-                (value, name) => `int_${name}`
-              );
+                received.uuid = fileDetails.id;
+                received.version = fileDetails.version;
 
-              received.slots = _.mapKeys(
-                received.slots,
-                (value, name) => `int_${name}`
-              );
+                // Rename interval keys
+                received.master.intervals = _.mapKeys(
+                  received.master.intervals,
+                  (value, name) => `int_${name}`
+                );
 
-              // Format date with timezone
-              let offset = new Date().getTimezoneOffset();
-              offset *= -1;
-              received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss')
-                .utcOffset(offset)
-                .format();
+                received.pool.intervals = _.mapKeys(
+                  received.pool.intervals,
+                  (value, name) => `int_${name}`
+                );
 
-              stats.push(received);
+                received.fans = _.mapKeys(
+                  received.fans,
+                  (value, name) => `int_${name}`
+                );
+
+                received.slots = _.mapKeys(
+                  received.slots,
+                  (value, name) => `int_${name}`
+                );
+
+                // Format date with timezone
+                let offset = new Date().getTimezoneOffset();
+                offset *= -1;
+                received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss')
+                  .utcOffset(offset)
+                  .format();
+
+                stats.push(received);
+              } catch (fileError) {
+                console.log(`Error processing file ${file}: ${fileError.message}`);
+                // Continue with other files instead of failing completely
+              }
             })
           );
 
@@ -444,23 +487,55 @@ class MinerService {
 
             // Process each user file
             const usersDataPromises = filenames.map(async (filename) => {
-              const ckpoolUsersStatsFile = path.resolve(
-                ckpoolUsersStatsDir,
-                filename
-              );
-              const ckpoolUsersData = await fs.readFile(
-                ckpoolUsersStatsFile,
-                'utf8'
-              );
+              try {
+                const ckpoolUsersStatsFile = path.join(ckpoolUsersStatsDir, filename);
+                const ckpoolUsersData = await fs.readFile(ckpoolUsersStatsFile, 'utf8');
+                
+                // Skip empty files
+                if (!ckpoolUsersData.trim()) {
+                  console.log(`Skipping empty ckpool file: ${filename}`);
+                  return null;
+                }
 
-              return JSON.parse(ckpoolUsersData);
+                // Clean and validate JSON data
+                let cleanedData = ckpoolUsersData
+                  .trim()
+                  .replace(/\-nan/g, '0')
+                  .replace(/[^\x00-\x7F]/g, '')
+                  .replace('}{', '},{')
+                  .replace(String.fromCharCode(0), '')
+                  .replace(/[^\}]+$/, '');
+
+                // Validate JSON structure
+                if (!cleanedData.startsWith('{') || !cleanedData.endsWith('}')) {
+                  console.log(`Invalid JSON format in ckpool file ${filename}, skipping...`);
+                  return null;
+                }
+
+                try {
+                  return JSON.parse(cleanedData);
+                } catch (parseError) {
+                  console.log(`Failed to parse JSON in ckpool file ${filename}: ${parseError.message}`);
+                  return null;
+                }
+              } catch (fileError) {
+                console.log(`Error processing ckpool file ${filename}: ${fileError.message}`);
+                return null;
+              }
             });
 
-            const usersData = await Promise.all(usersDataPromises);
+            const usersData = (await Promise.all(usersDataPromises)).filter(data => data !== null);
 
             // Parse pool stats file
+            let poolData = {};
+            try {
+              poolData = await this._parseFileToJsonArray(ckpoolPoolStatsFile);
+            } catch (poolError) {
+              console.log(`Error parsing pool stats file: ${poolError.message}`);
+            }
+
             ckpoolData = {
-              pool: await this._parseFileToJsonArray(ckpoolPoolStatsFile),
+              pool: poolData,
               users: usersData,
               blockFound: blockFound,
             };

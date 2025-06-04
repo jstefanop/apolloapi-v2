@@ -27,6 +27,7 @@ const runMigrations = async () => {
   try {
     console.log('Run migrations');
     await knex.migrate.latest();
+    
     const [settings] = await knex('settings')
       .select([
         'node_rpc_password as nodeRpcPassword',
@@ -36,6 +37,7 @@ const runMigrations = async () => {
         'node_max_connections as nodeMaxConnections',
         'node_allow_lan as nodeAllowLan',
         'btcsig',
+        'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
@@ -43,7 +45,7 @@ const runMigrations = async () => {
     await utils.auth.manageBitcoinConf(settings);
     await runGenerateBitcoinPassword(settings);
   } catch (err) {
-    console.log(err);
+    console.log('Error in runMigrations:', err);
   }
 };
 
