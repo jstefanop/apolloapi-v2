@@ -61,14 +61,40 @@ get_interface_status() {
   fi
 }
 
-# Retrieve IP, MAC and status of eth0 and wlan0 interfaces
-ETH_IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f 1)
-ETH_MAC=$(ip link show eth0 | awk '/ether/ {print $2}')
-ETH_STATUS=$(get_interface_status eth0)
+# Retrieve IP, MAC and status of eth0 and wlan0 interfaces (backward compatible)
+# First try eth0/wlan0, if they don't exist, search dynamically
 
-WLAN_IP=$(ip addr show wlan0 | awk '/inet / {print $2}' | cut -d/ -f 1)
-WLAN_MAC=$(ip link show wlan0 | awk '/ether/ {print $2}')
-WLAN_STATUS=$(get_interface_status wlan0)
+# Ethernet
+if ip link show eth0 > /dev/null 2>&1; then
+  ETH_IF="eth0"
+else
+  ETH_IF=$(ip -o link show | awk -F': ' '{print $2}' | grep -Ev 'lo|docker|br-|veth' | grep -E '^en|^eth' | head -n1)
+fi
+if [ -n "$ETH_IF" ]; then
+  ETH_IP=$(ip addr show "$ETH_IF" | awk '/inet / {print $2}' | cut -d/ -f 1)
+  ETH_MAC=$(ip link show "$ETH_IF" | awk '/ether/ {print $2}')
+  ETH_STATUS=$(get_interface_status "$ETH_IF")
+else
+  ETH_IP=""
+  ETH_MAC=""
+  ETH_STATUS="false"
+fi
+
+# WiFi
+if ip link show wlan0 > /dev/null 2>&1; then
+  WLAN_IF="wlan0"
+else
+  WLAN_IF=$(ip -o link show | awk -F': ' '{print $2}' | grep -Ev 'lo|docker|br-|veth' | grep -E '^wl' | head -n1)
+fi
+if [ -n "$WLAN_IF" ]; then
+  WLAN_IP=$(ip addr show "$WLAN_IF" | awk '/inet / {print $2}' | cut -d/ -f 1)
+  WLAN_MAC=$(ip link show "$WLAN_IF" | awk '/ether/ {print $2}')
+  WLAN_STATUS=$(get_interface_status "$WLAN_IF")
+else
+  WLAN_IP=""
+  WLAN_MAC=""
+  WLAN_STATUS="false"
+fi
 
 # Variable to track the first IP of wlx interfaces
 FIRST_WLX_IP=""
