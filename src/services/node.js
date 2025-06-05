@@ -247,6 +247,7 @@ class NodeService {
         blockTime: unrefinedBlockchainInfo.blockTime,
         headers: unrefinedBlockchainInfo.headers,
         sizeOnDisk: unrefinedBlockchainInfo.size_on_disk.toString(),
+        verificationprogress: unrefinedBlockchainInfo.verificationprogress,
       };
     } catch (error) {
       throw error;
@@ -281,6 +282,8 @@ class NodeService {
         version: unrefinedNetworkInfo.version,
         subversion: unrefinedNetworkInfo.subversion,
         localaddresses: unrefinedNetworkInfo.localaddresses,
+        connections_in: unrefinedNetworkInfo.connections_in,
+        connections_out: unrefinedNetworkInfo.connections_out,
       };
     } catch (error) {
       throw error;

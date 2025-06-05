@@ -39,6 +39,7 @@ module.exports = gql`
     blockTime: Int
     headers: Int
     sizeOnDisk: String
+    verificationprogress: Float
   }
 
   type MiningInfo {
@@ -55,6 +56,8 @@ module.exports = gql`
     version: String
     subversion: String
     localaddresses: [LocalAddress]
+    connections_in: Int
+    connections_out: Int
   }
 
   type LocalAddress {
