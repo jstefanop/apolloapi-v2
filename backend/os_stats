@@ -29,11 +29,49 @@ OS=$(lsb_release -s -i -c -r | sed ':a;N;$!ba;s/\n/ /g')
 UPTIME=$(uptime -s)
 LOADAVG=$(cat /proc/loadavg)
 ARCHITECTURE=$(uname -m)
-if [ -f "/sys/devices/virtual/thermal/thermal_zone0/temp" ]; then
-  TEMP=$(cat /sys/devices/virtual/thermal/thermal_zone0/temp)
-else
-  TEMP="0"
+
+# Get average temperature from CPU sensors only
+TEMP="0"
+TEMP_COUNT=0
+TEMP_SUM=0
+
+# First try hwmon sensors, looking specifically for CPU temperature sensors
+for hwmon in /sys/class/hwmon/hwmon*; do
+  # Only use CPU temperature sensors
+  if [ -f "$hwmon/name" ] && grep -q "coretemp\|k10temp\|cpu\|soc" "$hwmon/name"; then
+    for temp_file in "$hwmon"/temp*_input; do
+      if [ -f "$temp_file" ]; then
+        temp_value=$(cat "$temp_file")
+        if [ "$temp_value" -gt 0 ]; then
+          TEMP_SUM=$((TEMP_SUM + temp_value))
+          TEMP_COUNT=$((TEMP_COUNT + 1))
+        fi
+      fi
+    done
+  fi
+done
+
+# Then try thermal zones, but only use CPU-related ones
+for zone in /sys/devices/virtual/thermal/thermal_zone*/temp; do
+  if [ -f "$zone" ]; then
+    # Get the type of thermal zone
+    zone_type=$(cat "${zone%/temp}/type")
+    # Only use CPU temperature sensors
+    if echo "$zone_type" | grep -q "cpu\|soc\|core"; then
+      temp_value=$(cat "$zone")
+      if [ "$temp_value" -gt 0 ]; then
+        TEMP_SUM=$((TEMP_SUM + temp_value))
+        TEMP_COUNT=$((TEMP_COUNT + 1))
+      fi
+    fi
+  fi
+done
+
+# Calculate average if we found any sensors
+if [ $TEMP_COUNT -gt 0 ]; then
+  TEMP=$((TEMP_SUM / TEMP_COUNT))
 fi
+
 ACTIVE_WIFI=$(nmcli -t -f name c show --active | sed -z 's/\n/,/g;s/,$/\n/')
 
 MINER_TEMP="0"
