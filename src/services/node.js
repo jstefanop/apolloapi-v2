@@ -63,7 +63,7 @@ class NodeService {
       const unrefinedStats = await this._getNodeStats(rpcClient);
 
       // Format the statistics
-      const blockchainInfo = await this._formatBlockchainInfo(rpcClient, unrefinedStats[0]);
+      const blockchainInfo = this._formatBlockchainInfo(unrefinedStats[0], unrefinedStats[5]);
       const miningInfo = this._formatMiningInfo(unrefinedStats[2]);
       const peerInfo = this._formatPeerInfo(unrefinedStats[3]);
       const networkInfo = this._formatNetworkInfo(unrefinedStats[4]);
@@ -194,7 +194,7 @@ class NodeService {
         username: process.env.BITCOIN_NODE_USER || 'futurebit',
         password: process.env.BITCOIN_NODE_PASS || settings[0]?.nodeRpcPassword,
       },
-      timeout: 30000,
+      timeout: 60000,
     });
   }
 
@@ -216,37 +216,70 @@ class NodeService {
   // Helper method to get node statistics
   async _getNodeStats(rpcClient) {
     try {
+      // First get blockchain info to get the best block hash
       const blockchainInfo = await this._callRpcMethod(rpcClient, 'getblockchaininfo');
-      const connectionCount = await this._callRpcMethod(rpcClient, 'getconnectioncount');
-      const miningInfo = await this._callRpcMethod(rpcClient, 'getmininginfo');
-      const peerInfo = await this._callRpcMethod(rpcClient, 'getpeerinfo');
-      const networkInfo = await this._callRpcMethod(rpcClient, 'getnetworkinfo');
+      
+      const batch = [
+        { jsonrpc: '2.0', id: 1, method: 'getconnectioncount', params: [] },
+        { jsonrpc: '2.0', id: 2, method: 'getmininginfo', params: [] },
+        { jsonrpc: '2.0', id: 3, method: 'getpeerinfo', params: [] },
+        { jsonrpc: '2.0', id: 4, method: 'getnetworkinfo', params: [] },
+        { jsonrpc: '2.0', id: 5, method: 'getblock', params: [blockchainInfo.bestblockhash] }
+      ];
 
+      const results = await rpcClient.post('', batch);
+      
+      if (!results.data || !Array.isArray(results.data)) {
+        throw new Error('Invalid RPC response format');
+      }
+
+      // Check for errors in each response
+      const errors = results.data.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('RPC Batch Errors:', errors);
+        throw new Error(`RPC batch errors: ${errors.map(e => e.error.message).join(', ')}`);
+      }
+
+      // Extract results from the batch response with fallback values
+      const [connectionCount, miningInfo, peerInfo, networkInfo, block] = results.data.map(r => {
+        if (!r.result) {
+          console.warn(`Missing result for RPC call ${r.id}`);
+          return null;
+        }
+        return r.result;
+      });
+
+      // Validate and provide fallback values for each result
       return [
         blockchainInfo,
-        connectionCount,
-        miningInfo,
-        peerInfo,
-        networkInfo,
+        connectionCount ?? 0, // Fallback to 0 if connection count is missing
+        miningInfo ?? { difficulty: 0, networkhashps: 0 }, // Fallback mining info
+        peerInfo ?? [], // Fallback to empty array if peer info is missing
+        networkInfo ?? { version: '0', subversion: 'unknown', localaddresses: [], connections_in: 0, connections_out: 0 }, // Fallback network info
+        block ?? { time: Math.floor(Date.now() / 1000) } // Fallback to current time if block info is missing
       ];
     } catch (error) {
+      console.error('Error in _getNodeStats:', error.message);
+      if (error.response) {
+        console.error('RPC Error Response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        });
+      }
       throw error;
     }
   }
 
   // Helper method to format blockchain info
-  async _formatBlockchainInfo(rpcClient, unrefinedBlockchainInfo) {
+  _formatBlockchainInfo(unrefinedBlockchainInfo, block) {
     try {
-      const bestBlockHash = unrefinedBlockchainInfo.bestblockhash;
-      const block = await this._callRpcMethod(rpcClient, 'getblock', [bestBlockHash]);
-
-      unrefinedBlockchainInfo.blockTime = block.time;
-
       return {
         blocks: unrefinedBlockchainInfo.blocks,
-        blockTime: unrefinedBlockchainInfo.blockTime,
+        blockTime: block.time,
         headers: unrefinedBlockchainInfo.headers,
         sizeOnDisk: unrefinedBlockchainInfo.size_on_disk.toString(),
+        verificationprogress: unrefinedBlockchainInfo.verificationprogress,
       };
     } catch (error) {
       throw error;
@@ -256,34 +289,64 @@ class NodeService {
   // Helper method to format mining info
   _formatMiningInfo(unrefinedMiningInfo) {
     try {
+      if (!unrefinedMiningInfo) {
+        return { difficulty: 0, networkhashps: 0 };
+      }
       return {
-        difficulty: unrefinedMiningInfo.difficulty,
-        networkhashps: unrefinedMiningInfo.networkhashps,
+        difficulty: unrefinedMiningInfo.difficulty ?? 0,
+        networkhashps: unrefinedMiningInfo.networkhashps ?? 0,
       };
     } catch (error) {
-      throw error;
+      console.error('Error in _formatMiningInfo:', error.message);
+      return { difficulty: 0, networkhashps: 0 };
     }
   }
 
   // Helper method to format peer info
   _formatPeerInfo(unrefinedPeerInfo) {
     try {
-      return unrefinedPeerInfo.map(({ addr, subver }) => ({ addr, subver }));
+      if (!unrefinedPeerInfo || !Array.isArray(unrefinedPeerInfo)) {
+        console.log('Invalid peer info:', unrefinedPeerInfo);
+        return [];
+      }
+      return unrefinedPeerInfo.map(peer => ({
+        addr: peer?.addr ?? 'unknown',
+        subver: peer?.subver ?? 'unknown'
+      }));
     } catch (error) {
-      throw error;
+      console.error('Error in _formatPeerInfo:', error.message);
+      return [];
     }
   }
 
   // Helper method to format network info
   _formatNetworkInfo(unrefinedNetworkInfo) {
     try {
+      if (!unrefinedNetworkInfo) {
+        return {
+          version: '0',
+          subversion: 'unknown',
+          localaddresses: [],
+          connections_in: 0,
+          connections_out: 0
+        };
+      }
       return {
-        version: unrefinedNetworkInfo.version,
-        subversion: unrefinedNetworkInfo.subversion,
-        localaddresses: unrefinedNetworkInfo.localaddresses,
+        version: unrefinedNetworkInfo.version ?? '0',
+        subversion: unrefinedNetworkInfo.subversion ?? 'unknown',
+        localaddresses: unrefinedNetworkInfo.localaddresses ?? [],
+        connections_in: unrefinedNetworkInfo.connections_in ?? 0,
+        connections_out: unrefinedNetworkInfo.connections_out ?? 0,
       };
     } catch (error) {
-      throw error;
+      console.error('Error in _formatNetworkInfo:', error.message);
+      return {
+        version: '0',
+        subversion: 'unknown',
+        localaddresses: [],
+        connections_in: 0,
+        connections_out: 0
+      };
     }
   }
 
