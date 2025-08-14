@@ -33,11 +33,30 @@ class SettingsService {
       // Get existing settings before update
       const oldSettings = await this._readSettings();
 
+      // Check if Bitcoin software is being changed
+      const isBitcoinSoftwareChanging = oldSettings.nodeSoftware !== settingsInput.nodeSoftware;
+
       // Update settings in database
       await this._updateSettings(settingsInput);
 
       // Read updated settings
       const newSettings = await this._readSettings();
+
+      // If Bitcoin software is changing, handle it separately
+      if (isBitcoinSoftwareChanging && newSettings.nodeSoftware) {
+        try {
+          console.log(`Bitcoin software changing from ${oldSettings.nodeSoftware} to ${newSettings.nodeSoftware}`);
+          const switchResult = await this.utils.auth.switchBitcoinSoftware(newSettings.nodeSoftware);
+          
+          if (!switchResult.success) {
+            console.log('Warning: Bitcoin software switch failed:', switchResult.message);
+            // Continue with normal configuration management
+          }
+        } catch (switchErr) {
+          console.log('Error during Bitcoin software switch:', switchErr.message);
+          // Continue with normal configuration management
+        }
+      }
 
       // If specific settings have changed, manage Bitcoin configuration
       if (
@@ -48,7 +67,7 @@ class SettingsService {
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
         oldSettings.btcsig !== newSettings.btcsig ||
-        oldSettings.nodeSoftware !== newSettings.nodeSoftware
+        (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
       ) {
         await this.utils.auth.manageBitcoinConf(newSettings);
       }

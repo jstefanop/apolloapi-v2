@@ -309,25 +309,19 @@ module.exports.auth = {
         return;
       }
 
-      // Get architecture
-      const arch = os.machine();
-
       // Copy the correct bitcoind binary based on node_software
       if (settings.nodeSoftware) {
         try {
-          const apolloDir = '/opt/apolloapi';
-          const sourceDir = settings.nodeSoftware === 'knots-latest' ? 'knots' : 'core';
-          const sourcePath = `${apolloDir}/backend/node/bin/${sourceDir}/${arch}/bitcoind`;
-          const destPath = `${apolloDir}/backend/node/bitcoind`;
-
-          if (isProduction()) {
-            await execWithSudo(`cp ${sourcePath} ${destPath}`);
-            console.log(`Copied ${sourcePath} to ${destPath}`);
-          } else {
-            console.log(`[DEV] Would copy ${sourcePath} to ${destPath}`);
+          console.log(`Switching Bitcoin software to ${settings.nodeSoftware}...`);
+          const switchResult = await this.switchBitcoinSoftware(settings.nodeSoftware);
+          
+          if (!switchResult.success) {
+            console.log('Warning: Bitcoin software switch failed:', switchResult.message);
+            // Continue with configuration management even if switch failed
           }
-        } catch (copyErr) {
-          console.log('Error copying bitcoind binary:', copyErr.message);
+        } catch (switchErr) {
+          console.log('Error during Bitcoin software switch:', switchErr.message);
+          // Continue with configuration management even if switch failed
         }
       }
 
@@ -412,10 +406,11 @@ module.exports.auth = {
       }
 
       // Configure max connections
-      if (settings.nodeMaxConnections)
+      if (settings.nodeMaxConnections) {
         conf += `\nmaxconnections=${settings.nodeMaxConnections}`;
-      else
+      } else {
         conf += '\nmaxconnections=64';
+      }
 
       // Configure LAN access
       if (settings.nodeAllowLan) {
@@ -455,27 +450,157 @@ module.exports.auth = {
       // Only write the file if there are changes
       if (currentConfBase64 === confBase64) {
         console.log('No changes to bitcoin.conf file');
-        return;
-      }
+      } else {
+        console.log('Writing Bitcoin conf file');
 
-      console.log('Writing Bitcoin conf file');
-
-      try {
-        // Write the configuration file
-        await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
-        console.log('Bitcoin configuration saved successfully');
-
-        // Restart the node service
-        if (isProduction()) {
-          await execWithSudo('sleep 3 && systemctl restart node');
-        } else {
-          console.log('[DEV] Would restart node service after 3 seconds');
+        try {
+          // Write the configuration file
+          await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
+          console.log('Bitcoin configuration saved successfully');
+        } catch (writeErr) {
+          console.log('Error writing Bitcoin configuration:', writeErr.message);
         }
-      } catch (writeErr) {
-        console.log('Error writing Bitcoin configuration:', writeErr.message);
       }
+
     } catch (err) {
       console.log('Error in manageBitcoinConf:', err.message);
+    }
+  },
+
+  // Safely switch Bitcoin software
+  async switchBitcoinSoftware(targetSoftware) {
+    try {
+      // Validate target software
+      if (!['core-latest', 'knots-latest'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-latest, knots-latest`);
+      }
+
+      console.log(`Switching Bitcoin software to ${targetSoftware}...`);
+
+      if (!isProduction()) {
+        console.log(`[DEV] Would switch to ${targetSoftware}`);
+        return { success: true, message: `[DEV] Would switch to ${targetSoftware}` };
+      }
+
+      // Check initial service state
+      let wasServiceRunning = false;
+      let wasServiceEnabled = false;
+      
+      try {
+        wasServiceRunning = await execWithSudo('systemctl is-active node') === 'active';
+        wasServiceEnabled = await execWithSudo('systemctl is-enabled node') === 'enabled';
+        console.log(`Initial service state - Running: ${wasServiceRunning}, Enabled: ${wasServiceEnabled}`);
+      } catch (statusErr) {
+        console.log('Could not check initial service status:', statusErr.message);
+      }
+
+      // Stop node service if running
+      if (wasServiceRunning) {
+        try {
+          console.log('Stopping node service...');
+          await execWithSudo('systemctl stop node');
+          
+          // Wait for service to stop
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Check if service is actually stopped
+          const statusCheck = await execWithSudo('systemctl is-active node');
+          if (statusCheck === 'active') {
+            console.log('Warning: Node service is still running, forcing stop...');
+            await execWithSudo('systemctl kill node');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          console.log('Node service stopped successfully');
+        } catch (stopErr) {
+          console.log('Warning: Could not stop node service:', stopErr.message);
+          throw new Error(`Failed to stop node service: ${stopErr.message}`);
+        }
+      } else {
+        console.log('Node service was not running, no need to stop it');
+      }
+
+      // Get architecture
+      const arch = os.machine();
+      const apolloDir = '/opt/apolloapi';
+      const sourceDir = targetSoftware === 'knots-latest' ? 'knots' : 'core';
+      const sourcePath = `${apolloDir}/backend/node/bin/${sourceDir}/${arch}/bitcoind`;
+      const destPath = `${apolloDir}/backend/node/bitcoind`;
+
+      // Check if source binary exists
+      try {
+        await execWithSudo(`test -f ${sourcePath}`);
+      } catch (testErr) {
+        throw new Error(`Source binary not found: ${sourcePath}`);
+      }
+
+      // Create backup of current binary
+      try {
+        await execWithSudo(`cp ${destPath} ${destPath}.backup`);
+        console.log('Created backup of current bitcoind binary');
+      } catch (backupErr) {
+        console.log('Could not create backup:', backupErr.message);
+      }
+
+      // Copy new binary
+      try {
+        await execWithSudo(`cp ${sourcePath} ${destPath}`);
+        await execWithSudo(`chmod +x ${destPath}`);
+        console.log(`Copied ${sourcePath} to ${destPath}`);
+      } catch (copyErr) {
+        console.log('Error copying binary:', copyErr.message);
+        
+        // Try to restore backup if copy failed
+        try {
+          await execWithSudo(`cp ${destPath}.backup ${destPath}`);
+          console.log('Restored backup binary after copy failure');
+        } catch (restoreErr) {
+          console.log('Could not restore backup:', restoreErr.message);
+        }
+        throw new Error(`Failed to copy binary: ${copyErr.message}`);
+      }
+
+      // Start node service only if it was running initially
+      if (wasServiceRunning && wasServiceEnabled) {
+        try {
+          console.log('Starting node service (was running initially)...');
+          await execWithSudo('systemctl start node');
+          
+          // Wait and check if service started successfully
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const statusCheck = await execWithSudo('systemctl is-active node');
+          if (statusCheck === 'active') {
+            console.log('Node service started successfully');
+          } else {
+            console.log('Warning: Node service may not have started properly');
+            console.log('Check logs with: journalctl -u node.service');
+          }
+        } catch (startErr) {
+          console.log('Warning: Could not start node service:', startErr.message);
+          console.log('You may need to start it manually with: systemctl start node');
+        }
+      } else if (wasServiceEnabled && !wasServiceRunning) {
+        console.log('Node service is enabled but was not running initially, not starting it');
+      } else {
+        console.log('Node service is not enabled, not starting it');
+      }
+
+      console.log(`Successfully switched to ${targetSoftware}`);
+      return { success: true, message: `Successfully switched to ${targetSoftware}` };
+
+    } catch (err) {
+      console.log('Error in switchBitcoinSoftware:', err.message);
+      
+      // Try to start the service if something went wrong and it was running initially
+      if (isProduction() && wasServiceRunning && wasServiceEnabled) {
+        try {
+          console.log('Attempting to start node service after error (was running initially)...');
+          await execWithSudo('systemctl start node');
+        } catch (recoveryErr) {
+          console.log('Could not start node service in recovery:', recoveryErr.message);
+        }
+      }
+      
+      return { success: false, message: err.message };
     }
   },
 };

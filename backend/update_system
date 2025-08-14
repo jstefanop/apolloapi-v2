@@ -21,6 +21,14 @@ cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/
 
 ### Bitcoind ###
 #########################
+echo -e "${YELLOW} ---> Updating Bitcoin node${NC}"
+
+# Stop node service if running
+if systemctl is-active --quiet node.service; then
+    echo -e "${YELLOW} ---> Stopping node service${NC}"
+    systemctl stop node.service
+fi
+
 # Get node_software from database
 NODE_SOFTWARE=$(sqlite3 $APOLLO_DIR/backend/futurebit.sqlite "SELECT node_software FROM settings ORDER BY created_at DESC, id DESC LIMIT 1")
 if [ -z "$NODE_SOFTWARE" ]; then
@@ -30,11 +38,19 @@ fi
 # Copy the correct bitcoind binary based on node_software
 if [[ "$NODE_SOFTWARE" == "knots-latest" ]]; then
   cp $APOLLO_DIR/backend/node/bin/knots/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+  echo -e "${YELLOW} ---> Updated to Knots bitcoind binary${NC}"
 else
   cp $APOLLO_DIR/backend/node/bin/core/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+  echo -e "${YELLOW} ---> Updated to Core bitcoind binary${NC}"
 fi
 
 cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
+
+# Start node service if it was running before
+if systemctl is-enabled --quiet node.service; then
+    echo -e "${YELLOW} ---> Starting node service${NC}"
+    systemctl start node.service
+fi
 
 ### ckpool ###
 #########################
