@@ -469,6 +469,10 @@ module.exports.auth = {
 
   // Safely switch Bitcoin software
   async switchBitcoinSoftware(targetSoftware) {
+    // Check initial service state
+    let wasServiceRunning = false;
+    let wasServiceEnabled = false;
+    
     try {
       // Validate target software
       if (!['core-latest', 'knots-latest'].includes(targetSoftware)) {
@@ -482,16 +486,15 @@ module.exports.auth = {
         return { success: true, message: `[DEV] Would switch to ${targetSoftware}` };
       }
 
-      // Check initial service state
-      let wasServiceRunning = false;
-      let wasServiceEnabled = false;
-      
       try {
         wasServiceRunning = await execWithSudo('systemctl is-active node') === 'active';
         wasServiceEnabled = await execWithSudo('systemctl is-enabled node') === 'enabled';
         console.log(`Initial service state - Running: ${wasServiceRunning}, Enabled: ${wasServiceEnabled}`);
       } catch (statusErr) {
         console.log('Could not check initial service status:', statusErr.message);
+        // Set default values if we can't check status
+        wasServiceRunning = false;
+        wasServiceEnabled = false;
       }
 
       // Stop node service if running
@@ -504,16 +507,21 @@ module.exports.auth = {
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           // Check if service is actually stopped
-          const statusCheck = await execWithSudo('systemctl is-active node');
-          if (statusCheck === 'active') {
-            console.log('Warning: Node service is still running, forcing stop...');
-            await execWithSudo('systemctl kill node');
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          try {
+            const statusCheck = await execWithSudo('systemctl is-active node');
+            if (statusCheck === 'active') {
+              console.log('Warning: Node service is still running, forcing stop...');
+              await execWithSudo('systemctl kill node');
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            console.log('Node service stopped successfully');
+          } catch (statusCheckErr) {
+            console.log('Could not verify if service stopped, but continuing...');
           }
-          console.log('Node service stopped successfully');
         } catch (stopErr) {
           console.log('Warning: Could not stop node service:', stopErr.message);
-          throw new Error(`Failed to stop node service: ${stopErr.message}`);
+          // Don't throw error, just continue with the switch
+          console.log('Continuing with software switch...');
         }
       } else {
         console.log('Node service was not running, no need to stop it');
