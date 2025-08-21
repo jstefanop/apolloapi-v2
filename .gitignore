@@ -82,5 +82,9 @@ backend/ckpool/ckpool.conf
 backend/ckpool/logs
 backend/start_swap.sh
 backend/apollo-miner/mode
+
+# Frontend symbolic link
+apolloui-v2/
+
 .claudeignore
 .claudesync

@@ -17,13 +17,15 @@ class SoloService {
   async start() {
     try {
       // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'solo' })
-        .update({
-          status: 'pending',
-          requested_status: 'online',
-          requested_at: new Date(),
-        });
+      if (this.knex) {
+        await this.knex('service_status')
+          .where({ service_name: 'solo' })
+          .update({
+            status: 'pending',
+            requested_status: 'online',
+            requested_at: new Date(),
+          });
+      }
 
       // Start the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -32,7 +34,12 @@ class SoloService {
       } else {
         await this._execCommand('sudo systemctl start ckpool');
       }
+
+      // Update status to online after successful start
+      await this._updateServiceStatus('online');
     } catch (error) {
+      // Update status to offline if start failed
+      await this._updateServiceStatus('offline');
       throw new GraphQLError(`Failed to start solo pool: ${error.message}`);
     }
   }
@@ -41,13 +48,15 @@ class SoloService {
   async stop() {
     try {
       // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'solo' })
-        .update({
-          status: 'pending',
-          requested_status: 'offline',
-          requested_at: new Date(),
-        });
+      if (this.knex) {
+        await this.knex('service_status')
+          .where({ service_name: 'solo' })
+          .update({
+            status: 'pending',
+            requested_status: 'offline',
+            requested_at: new Date(),
+          });
+      }
 
       // Stop the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -56,7 +65,11 @@ class SoloService {
       } else {
         await this._execCommand('sudo systemctl stop ckpool');
       }
+
+      // Update status to offline after successful stop
+      await this._updateServiceStatus('offline');
     } catch (error) {
+      // Keep status as pending if stop failed
       throw new GraphQLError(`Failed to stop solo pool: ${error.message}`);
     }
   }
@@ -65,13 +78,15 @@ class SoloService {
   async restart() {
     try {
       // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'solo' })
-        .update({
-          status: 'pending',
-          requested_status: 'online',
-          requested_at: new Date(),
-        });
+      if (this.knex) {
+        await this.knex('service_status')
+          .where({ service_name: 'solo' })
+          .update({
+            status: 'pending',
+            requested_status: 'online',
+            requested_at: new Date(),
+          });
+      }
 
       // Restart the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -80,7 +95,12 @@ class SoloService {
       } else {
         await this._execCommand('sudo systemctl restart ckpool');
       }
+
+      // Update status to online after successful restart
+      await this._updateServiceStatus('online');
     } catch (error) {
+      // Update status to offline if restart failed
+      await this._updateServiceStatus('offline');
       throw new GraphQLError(`Failed to restart solo pool: ${error.message}`);
     }
   }
@@ -88,13 +108,21 @@ class SoloService {
   // Get solo pool status
   async getStatus() {
     try {
+      let status;
       if (process.env.NODE_ENV === 'development') {
-        return devSoloService.getStatus();
+        status = devSoloService.getStatus();
       } else {
         const { stdout } = await this._execCommand('systemctl is-active ckpool');
-        return stdout.trim();
+        status = stdout.trim();
       }
+
+      // Update last_checked timestamp
+      await this._updateLastChecked();
+
+      return status;
     } catch (error) {
+      // Update last_checked even on error
+      await this._updateLastChecked();
       return 'inactive';
     }
   }
@@ -311,6 +339,37 @@ class SoloService {
     } catch (error) {
       console.error(`Error parsing file ${filePath}:`, error);
       return {};
+    }
+  }
+
+  // Helper method to update service status
+  async _updateServiceStatus(newStatus) {
+    try {
+      if (this.knex) {
+        await this.knex('service_status')
+          .where({ service_name: 'solo' })
+          .update({
+            status: newStatus,
+            last_checked: Date.now()
+          });
+      }
+    } catch (error) {
+      console.error('Error updating service status:', error);
+    }
+  }
+
+  // Helper method to update last_checked timestamp
+  async _updateLastChecked() {
+    try {
+      if (this.knex) {
+        await this.knex('service_status')
+          .where({ service_name: 'solo' })
+          .update({
+            last_checked: Date.now()
+          });
+      }
+    } catch (error) {
+      console.error('Error updating last_checked:', error);
     }
   }
 
