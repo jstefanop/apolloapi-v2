@@ -2,7 +2,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('config');
 const { exec } = require('child_process');
-const generator = require('generate-password');
 const { AuthenticationError } = require('@apollo/server');
 
 class AuthService {

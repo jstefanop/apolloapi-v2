@@ -11,6 +11,7 @@ const mcuService = require('./mcu')(knex, utils);
 const timeSeriesService = require('./timeSeries')(knex);
 const servicesService = require('./services')(knex);
 const logsService = require('./logs')(knex);
+const soloService = require('./solo')(knex, utils);
 
 // Export all services
 module.exports = {
@@ -22,5 +23,6 @@ module.exports = {
   mcu: mcuService,
   timeSeries: timeSeriesService,
   services: servicesService,
-  logs: logsService
+  logs: logsService,
+  solo: soloService
 };
