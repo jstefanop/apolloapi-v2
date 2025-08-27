@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to install Apollo on Ubuntu 22.04 LTS
+# Script to install Apollo on Armbian 24.2.1 Jamm
 
 #### SETUP ####
 #########################
@@ -16,6 +16,9 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+# Set DEBIAN_FRONTEND to noninteractive to avoid prompts during installation
+export DEBIAN_FRONTEND=noninteractive
+
 #### SYSTEM PACKAGES ####
 #########################
 echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
@@ -24,7 +27,7 @@ echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
 apt-get update
 apt-get -y upgrade
 
-DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python2-dev python-dev-is-python3 vim git sudo iptables network-manager
+apt-get -y install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 vim git sudo iptables network-manager
 
 #### SYSTEM SETUP ####
 #########################
@@ -48,10 +51,17 @@ echo -e "${YELLOW} ---> Cloning Apollo app${NC}"
 mkdir -p $APOLLO_DIR
 
 if [ "$1" = "dev" ]; then
-	echo -e "${YELLOW} ---> Using DEV branch${NC}"
-	git clone --single-branch --branch dev https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
+	# If dev is specified, check if a custom branch is provided
+	if [ -n "$2" ]; then
+		BRANCH="$2"
+		echo -e "${YELLOW} ---> Using DEV mode with custom branch: $BRANCH${NC}"
+	else
+		BRANCH="dev"
+		echo -e "${YELLOW} ---> Using DEV mode with default branch: $BRANCH${NC}"
+	fi
+	git clone --single-branch --branch $BRANCH https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
 	rm -rf $APOLLO_DIR/apolloui
-	git clone --single-branch --branch dev https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+	git clone --single-branch --branch $BRANCH https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
 else
 	echo -e "${YELLOW} ---> Using PRODUCTION branch${NC}"
 	git clone --single-branch --branch main https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
@@ -162,7 +172,21 @@ echo -e "${GREEN} ---> Project built using yarn${NC}"
 #########################
 echo -e "${YELLOW} ---> Starting firewall${NC}"
 
+# Check if iptables is available
+if ! command -v iptables &> /dev/null; then
+    echo -e "${RED} ---> iptables not found. Installing iptables-persistent...${NC}"
+    apt-get -y install iptables-persistent
+fi
+
+# Execute firewall
 bash $APOLLO_DIR/backend/firewall
+
+# Verify that rules have been applied
+if iptables -L INPUT -n | grep -q "dpt:80"; then
+    echo -e "${GREEN} ---> Firewall configured successfully${NC}"
+else
+    echo -e "${RED} ---> Error in firewall configuration${NC}"
+fi
 
 #### MINER SETUP ####
 #########################
