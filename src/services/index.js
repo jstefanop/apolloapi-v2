@@ -9,6 +9,7 @@ const nodeService = require('./node')(knex, utils);
 const settingsService = require('./settings')(knex, utils);
 const mcuService = require('./mcu')(knex, utils);
 const timeSeriesService = require('./timeSeries')(knex);
+const serviceMonitor = require('./serviceMonitor')(knex);
 const servicesService = require('./services')(knex);
 const logsService = require('./logs')(knex);
 const soloService = require('./solo')(knex, utils);
@@ -24,5 +25,6 @@ module.exports = {
   timeSeries: timeSeriesService,
   services: servicesService,
   logs: logsService,
-  solo: soloService
+  solo: soloService,
+  serviceMonitor: serviceMonitor
 };

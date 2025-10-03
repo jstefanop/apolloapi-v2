@@ -2,11 +2,25 @@ const { knex } = require('../db');
 const _ = require('lodash');
 const services = require('../services');
 
-// Servizi da monitorare (miner, node)
+// Services to monitor (miner, node)
 const SERVICE_NAMES = ['miner', 'node'];
 
 /**
- * Questa funzione aggiorna lo stato dei servizi nel DB
+ * This function starts the service monitor for systemd services
+ */
+async function startServiceMonitor() {
+  try {
+    if (services.serviceMonitor) {
+      await services.serviceMonitor.start();
+      console.log('Service monitor started automatically');
+    }
+  } catch (error) {
+    console.error('Error starting service monitor:', error);
+  }
+}
+
+/**
+ * This function updates service status in the DB
  */
 async function updateServiceStatus(serviceName, status) {
   await knex('service_status').where({ service_name: serviceName }).update({
@@ -16,24 +30,33 @@ async function updateServiceStatus(serviceName, status) {
 }
 
 /**
- * Questa funzione controlla e aggiorna lo stato di tutti i servizi
+ * This function checks and updates the status of all services
  */
 async function checkAndUpdateServices() {
   try {
-    // Controlla lo stato del miner
+    // Check miner status
     const minerStatus = await services.miner.checkOnline();
     await updateServiceStatus('miner', minerStatus?.online?.status);
 
-    // Controlla lo stato del nodo
-    const nodeStatus = await services.node.checkOnline();
-    await updateServiceStatus('node', nodeStatus?.online?.status);
+    // Check node status only if it's local (not remote)
+    // Remote nodes are handled by the service monitor
+    const nodeHost = process.env.BITCOIN_NODE_HOST;
+    const isRemoteNode = nodeHost && nodeHost !== '127.0.0.1' && nodeHost !== 'localhost';
+    
+    if (!isRemoteNode) {
+      // Only check local nodes with RPC
+      const nodeStatus = await services.node.checkOnline();
+      await updateServiceStatus('node', nodeStatus?.online?.status);
+    } else {
+      console.log('Skipping node RPC check - remote node handled by service monitor');
+    }
   } catch (error) {
     console.error('Error checking services:', error);
   }
 }
 
 /**
- * Inizializza le righe del DB se non esistono
+ * Initialize DB rows if they don't exist
  */
 async function initServiceStatusRows() {
   for (const service of SERVICE_NAMES) {
@@ -52,24 +75,24 @@ async function initServiceStatusRows() {
 }
 
 /**
- * Questa funzione si occupa di raccogliere le statistiche dal miner
+ * This function collects statistics from the miner
  */
 async function fetchStatistics() {
   try {
-    // Verifica se il miner è online
+    // Check if miner is online
     const minserService = await knex('service_status')
       .select('status')
       .where({ service_name: 'miner' })
       .first();
 
-    // Se il miner non è online, return
+    // If miner is not online, return
     if (minserService.status !== 'online') return;
 
-    // Ottieni le statistiche del miner
+    // Get miner statistics
     const { stats } = await services.miner.getStats();
     if (!stats || stats.length === 0) return;
 
-    // Elabora i dati per ogni scheda
+    // Process data for each board
     const boards = stats.map((board) => {
       const {
         master: {
@@ -110,7 +133,7 @@ async function fetchStatistics() {
       };
     });
 
-    // Calcola i totali
+    // Calculate totals
     const totals = boards.reduce(
       (acc, board) => {
         acc.hashrateInGh += parseFloat(board.hashrateInGh);
@@ -144,9 +167,9 @@ async function fetchStatistics() {
     totals.fanRpm = _.meanBy(boards, 'fanRpm');
     boards.push(totals);
 
-    // Inserisci i dati nel DB in una transazione
+    // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
-      // Elimina i dati vecchi (più di 7 giorni)
+      // Delete old data (older than 7 days)
       const rowsBefore = await trx('time_series_data').count('* as count');
       console.log('Rows before deletion:', rowsBefore[0].count);
 
@@ -158,7 +181,7 @@ async function fetchStatistics() {
       const rowsAfter = await trx('time_series_data').count('* as count');
       console.log('Rows after deletion:', rowsAfter[0].count);
 
-      // Inserisci i nuovi dati
+      // Insert new data
       await trx('time_series_data').insert(boards);
     });
 
@@ -169,23 +192,26 @@ async function fetchStatistics() {
 }
 
 /**
- * La funzione principale che avvia tutti i task schedulati
+ * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
   try {
-    // Inizializza le righe del DB per lo stato dei servizi
+    // Initialize DB rows for service status
     await initServiceStatusRows();
 
-    // Controlla immediatamente la prima volta
+    // Start service monitor for systemd services
+    await startServiceMonitor();
+
+    // Check immediately the first time
     await checkAndUpdateServices();
 
-    // Poi imposta gli intervalli
-    setInterval(checkAndUpdateServices, 5000); // Controlla ogni 5 secondi
-    setInterval(fetchStatistics, 30000); // Raccoglie statistiche ogni 30 secondi
+    // Then set intervals
+    setInterval(checkAndUpdateServices, 5000); // Check every 5 seconds
+    setInterval(fetchStatistics, 30000); // Collect statistics every 30 seconds
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }
 }
 
-// Avvia immediatamente gli scheduler
+// Start schedulers immediately
 startAllSchedulers();

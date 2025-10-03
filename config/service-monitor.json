@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "checkInterval": 10000,
+  "services": [
+    "apollo-miner",
+    "node",
+    "ckpool",
+    "apollo-api",
+    "apollo-ui-v2"
+  ],
+  "logLevel": "info",
+  "autoStart": true,
+  "systemdIntegration": true
+}
+
