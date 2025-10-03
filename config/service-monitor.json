@@ -8,7 +8,7 @@
     "apollo-api",
     "apollo-ui-v2"
   ],
-  "logLevel": "debug",
+  "logLevel": "info",
   "autoStart": true,
   "systemdIntegration": true
 }

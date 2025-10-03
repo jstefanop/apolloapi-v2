@@ -191,11 +191,6 @@ class ServiceMonitor {
       const { stdout } = await execAsync(`systemctl is-active ${serviceName}`);
       const status = stdout.trim();
       
-      // Debug logging
-      if (this.config.logLevel === 'debug') {
-        console.log(`systemctl is-active ${serviceName} returned: "${status}"`);
-      }
-      
       // Map systemd status to internal status
       let mappedStatus = 'unknown';
       let requestedStatus = null;
