@@ -109,9 +109,21 @@ class ServiceMonitor {
   }
 
   // Check if Bitcoin node is remote (not localhost)
-  isRemoteNode() {
+  async isRemoteNode() {
     const nodeHost = process.env.BITCOIN_NODE_HOST;
-    return nodeHost && nodeHost !== '127.0.0.1' && nodeHost !== 'localhost';
+    
+    // If NODE_ENV is development, always consider local
+    if (this.isDevelopment()) {
+      return false;
+    }
+    
+    // If BITCOIN_NODE_HOST is not set or is localhost, it's local
+    if (!nodeHost || nodeHost === '127.0.0.1' || nodeHost === 'localhost') {
+      return false;
+    }
+    
+    // If BITCOIN_NODE_HOST is set to a different IP, it's remote
+    return true;
   }
 
   // Check network connectivity to remote node
@@ -165,7 +177,7 @@ class ServiceMonitor {
       const dbServiceName = this.getDatabaseServiceName(serviceName);
 
       // Special handling for Bitcoin node when it's remote
-      if (serviceName === 'node' && this.isRemoteNode()) {
+      if (serviceName === 'node' && await this.isRemoteNode()) {
         const connectivity = await this.checkRemoteNodeConnectivity();
         await this.updateServiceStatus(dbServiceName, connectivity.status, null);
         return { 
@@ -178,6 +190,11 @@ class ServiceMonitor {
       // Standard systemctl check for local services
       const { stdout } = await execAsync(`systemctl is-active ${serviceName}`);
       const status = stdout.trim();
+      
+      // Debug logging
+      if (this.config.logLevel === 'debug') {
+        console.log(`systemctl is-active ${serviceName} returned: "${status}"`);
+      }
       
       // Map systemd status to internal status
       let mappedStatus = 'unknown';
@@ -312,7 +329,7 @@ class ServiceMonitor {
   }
 
   // Get remote node information for debugging
-  getRemoteNodeInfo() {
+  async getRemoteNodeInfo() {
     if (this.isDevelopment()) {
       return { 
         isRemote: false, 
@@ -321,7 +338,8 @@ class ServiceMonitor {
       };
     }
     
-    if (!this.isRemoteNode()) {
+    const isRemote = await this.isRemoteNode();
+    if (!isRemote) {
       return { isRemote: false, message: 'Node is local' };
     }
     

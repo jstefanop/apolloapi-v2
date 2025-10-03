@@ -38,18 +38,9 @@ async function checkAndUpdateServices() {
     const minerStatus = await services.miner.checkOnline();
     await updateServiceStatus('miner', minerStatus?.online?.status);
 
-    // Check node status only if it's local (not remote)
-    // Remote nodes are handled by the service monitor
-    const nodeHost = process.env.BITCOIN_NODE_HOST;
-    const isRemoteNode = nodeHost && nodeHost !== '127.0.0.1' && nodeHost !== 'localhost';
-    
-    if (!isRemoteNode) {
-      // Only check local nodes with RPC
-      const nodeStatus = await services.node.checkOnline();
-      await updateServiceStatus('node', nodeStatus?.online?.status);
-    } else {
-      console.log('Skipping node RPC check - remote node handled by service monitor');
-    }
+    // Skip node status check - handled by service monitor
+    // The service monitor uses systemctl which is more reliable than RPC calls
+    console.log('Skipping node RPC check - handled by service monitor');
   } catch (error) {
     console.error('Error checking services:', error);
   }
