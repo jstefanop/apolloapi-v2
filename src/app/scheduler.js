@@ -2,8 +2,9 @@ const { knex } = require('../db');
 const _ = require('lodash');
 const services = require('../services');
 
-// Services to monitor (miner, node)
-const SERVICE_NAMES = ['miner', 'node'];
+// Services to monitor - all services that need DB initialization
+// Note: miner and node are checked by scheduler, solo/apollo-api/apollo-ui-v2 by service monitor
+const SERVICE_NAMES = ['miner', 'node', 'solo', 'apollo-api', 'apollo-ui-v2'];
 
 /**
  * This function starts the service monitor for systemd services
@@ -37,10 +38,13 @@ async function checkAndUpdateServices() {
     // Check miner status
     const minerStatus = await services.miner.checkOnline();
     await updateServiceStatus('miner', minerStatus?.online?.status);
-
-    // Skip node status check - handled by service monitor
-    // The service monitor uses systemctl which is more reliable than RPC calls
-    console.log('Skipping node RPC check - handled by service monitor');
+    
+    // Check node status
+    const nodeStatus = await services.node.checkOnline();
+    await updateServiceStatus('node', nodeStatus?.online?.status);
+    
+    // Note: solo, apollo-api and apollo-ui-v2 are handled by the service monitor
+    // since they are systemd services, not custom services
   } catch (error) {
     console.error('Error checking services:', error);
   }
