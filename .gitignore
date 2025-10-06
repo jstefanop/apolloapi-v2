@@ -84,7 +84,6 @@ backend/start_swap.sh
 backend/apollo-miner/mode
 
 # Frontend symbolic link
-apolloui-v2/
 
 .claudeignore
 .claudesync
