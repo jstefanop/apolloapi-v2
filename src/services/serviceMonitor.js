@@ -225,6 +225,11 @@ class ServiceMonitor {
         }
       }
 
+      // Get current requested status from database (needed for both status mapping and auto-start)
+      const existing = await this.knex('service_status')
+        .where({ service_name: dbServiceName })
+        .first();
+
       // Map systemd status to internal status
       let mappedStatus = 'unknown';
       let requestedStatus = null;
@@ -244,10 +249,6 @@ class ServiceMonitor {
           break;
         case 'failed':
           // Check if this service was requested to be offline (stopped from UI)
-          const existing = await this.knex('service_status')
-            .where({ service_name: dbServiceName })
-            .first();
-
           if (existing && existing.requested_status === 'offline') {
             // If service was stopped from UI, treat failed as offline
             mappedStatus = 'offline';
@@ -258,6 +259,76 @@ class ServiceMonitor {
           break;
         default:
           mappedStatus = 'unknown';
+      }
+
+      // Auto-start/stop logic if enabled
+      if (this.config.autoStart && existing) {
+        // If service is offline but requested to be online, start it
+        if (
+          mappedStatus === 'offline' &&
+          existing.requested_status === 'online' &&
+          status === 'inactive'
+        ) {
+          console.log(
+            `Auto-starting service ${serviceName} (${dbServiceName}) - requested online but currently offline`
+          );
+          try {
+            await execAsync(`sudo systemctl start ${serviceName}`);
+            console.log(`Successfully started service ${serviceName}`);
+            // Update status to pending as it's starting
+            mappedStatus = 'pending';
+          } catch (startError) {
+            console.error(
+              `Failed to auto-start service ${serviceName}:`,
+              startError.message
+            );
+            // Keep status as offline if start failed
+          }
+        }
+        // If service is in failed state but requested to be online, restart it
+        else if (
+          mappedStatus === 'error' &&
+          existing.requested_status === 'online' &&
+          status === 'failed'
+        ) {
+          console.log(
+            `Auto-restarting service ${serviceName} (${dbServiceName}) - requested online but currently failed`
+          );
+          try {
+            await execAsync(`sudo systemctl restart ${serviceName}`);
+            console.log(`Successfully restarted service ${serviceName}`);
+            // Update status to pending as it's restarting
+            mappedStatus = 'pending';
+          } catch (restartError) {
+            console.error(
+              `Failed to auto-restart service ${serviceName}:`,
+              restartError.message
+            );
+            // Keep status as error if restart failed
+          }
+        }
+        // If service is online but requested to be offline, stop it
+        else if (
+          mappedStatus === 'online' &&
+          existing.requested_status === 'offline' &&
+          status === 'active'
+        ) {
+          console.log(
+            `Auto-stopping service ${serviceName} (${dbServiceName}) - requested offline but currently online`
+          );
+          try {
+            await execAsync(`sudo systemctl stop ${serviceName}`);
+            console.log(`Successfully stopped service ${serviceName}`);
+            // Update status to pending as it's stopping
+            mappedStatus = 'pending';
+          } catch (stopError) {
+            console.error(
+              `Failed to auto-stop service ${serviceName}:`,
+              stopError.message
+            );
+            // Keep status as online if stop failed
+          }
+        }
       }
 
       // Update database only if status changed
