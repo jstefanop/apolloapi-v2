@@ -497,6 +497,12 @@ module.exports.auth = {
         wasServiceEnabled = false;
       }
 
+      // Get architecture and paths first
+      const arch = os.machine();
+      const apolloDir = '/opt/apolloapi';
+      const sourcePath = `${apolloDir}/backend/node/bin/${targetSoftware}/${arch}/bitcoind`;
+      const destPath = `${apolloDir}/backend/node/bitcoind`;
+
       // Stop node service if running
       if (wasServiceRunning) {
         try {
@@ -504,19 +510,91 @@ module.exports.auth = {
           await execWithSudo('systemctl stop node');
           
           // Wait for service to stop
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
           // Check if service is actually stopped
-          try {
-            const statusCheck = await execWithSudo('systemctl is-active node');
-            if (statusCheck === 'active') {
-              console.log('Warning: Node service is still running, forcing stop...');
-              await execWithSudo('systemctl kill node');
-              await new Promise(resolve => setTimeout(resolve, 1000));
+          let maxRetries = 10;
+          let retryCount = 0;
+          let serviceStopped = false;
+          
+          while (retryCount < maxRetries && !serviceStopped) {
+            try {
+              const statusCheck = await execWithSudo('systemctl is-active node');
+              if (statusCheck.trim() === 'active') {
+                console.log(`Service still active, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retryCount++;
+              } else {
+                serviceStopped = true;
+                console.log('Node service stopped successfully');
+              }
+            } catch (statusCheckErr) {
+              // If command fails, service is likely stopped
+              serviceStopped = true;
+              console.log('Node service appears to be stopped');
             }
-            console.log('Node service stopped successfully');
-          } catch (statusCheckErr) {
-            console.log('Could not verify if service stopped, but continuing...');
+          }
+          
+          // If service is still running, force kill
+          if (!serviceStopped) {
+            console.log('Warning: Node service is still running, forcing stop...');
+            try {
+              await execWithSudo('systemctl kill node');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (killErr) {
+              console.log('Could not force kill service:', killErr.message);
+            }
+          }
+          
+          // Wait for bitcoind process to fully terminate and file to be available
+          console.log('Waiting for bitcoind process to terminate...');
+          maxRetries = 15;
+          retryCount = 0;
+          let fileAvailable = false;
+          
+          while (retryCount < maxRetries && !fileAvailable) {
+            try {
+              // Check if file is in use using fuser (more reliable than lsof)
+              const fuserCheck = await execWithSudo(`fuser ${destPath} 2>/dev/null || true`);
+              if (!fuserCheck.trim()) {
+                // File is not in use, verify we can access it
+                try {
+                  await execWithSudo(`test -f ${destPath}`);
+                  fileAvailable = true;
+                  console.log('File is no longer in use and available');
+                } catch (testErr) {
+                  console.log(`File check failed, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  retryCount++;
+                }
+              } else {
+                console.log(`File still in use, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retryCount++;
+              }
+            } catch (checkErr) {
+              // If fuser fails, try a different approach - check if process exists
+              try {
+                const pgrepCheck = await execWithSudo(`pgrep -f "bitcoind.*datadir" || true`);
+                if (!pgrepCheck.trim()) {
+                  fileAvailable = true;
+                  console.log('No bitcoind process found, file should be available');
+                } else {
+                  console.log(`Bitcoind process still running, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  retryCount++;
+                }
+              } catch (pgrepErr) {
+                // If all checks fail, assume file is available after a wait
+                console.log('Could not verify file status, waiting before proceeding...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                fileAvailable = true;
+              }
+            }
+          }
+          
+          if (!fileAvailable) {
+            console.log('Warning: File may still be in use, but proceeding with copy attempt...');
           }
         } catch (stopErr) {
           console.log('Warning: Could not stop node service:', stopErr.message);
@@ -526,12 +604,6 @@ module.exports.auth = {
       } else {
         console.log('Node service was not running, no need to stop it');
       }
-
-      // Get architecture
-      const arch = os.machine();
-      const apolloDir = '/opt/apolloapi';
-      const sourcePath = `${apolloDir}/backend/node/bin/${targetSoftware}/${arch}/bitcoind`;
-      const destPath = `${apolloDir}/backend/node/bitcoind`;
 
       // Check if source binary exists
       try {

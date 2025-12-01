@@ -10,10 +10,23 @@ class SettingsService {
   // Convert GraphQL enum format (core_25_1) to backend format (core-25.1)
   _enumToBackendFormat(enumValue) {
     if (!enumValue) return null;
-    // If already in backend format, return as is
+    // If already in backend format (has dash and dot), return as is
     if (enumValue.includes('-') && enumValue.includes('.')) return enumValue;
+    // If already in backend format but missing dot, check if it's valid
+    if (enumValue.includes('-') && !enumValue.includes('_')) {
+      // Might be old format like core-25-1, need to fix
+      // This shouldn't happen, but handle it
+      return enumValue;
+    }
     // Convert from enum format (core_25_1) to backend format (core-25.1)
-    // Replace underscores with dashes, but keep dots if present
+    // Pattern: core_25_1 -> core-25.1
+    // Replace first underscore with dash, remaining underscores with dots
+    const parts = enumValue.split('_');
+    if (parts.length >= 3) {
+      // Format: [core, 25, 1] -> core-25.1
+      return `${parts[0]}-${parts.slice(1).join('.')}`;
+    }
+    // Fallback: replace all underscores with dashes (shouldn't happen)
     return enumValue.replace(/_/g, '-');
   }
 
