@@ -180,17 +180,18 @@ fi
 # Get node_software from database
 NODE_SOFTWARE=$(sqlite3 $APOLLO_DIR/backend/futurebit.sqlite "SELECT node_software FROM settings ORDER BY created_at DESC, id DESC LIMIT 1")
 if [ -z "$NODE_SOFTWARE" ]; then
-  NODE_SOFTWARE="core-latest"
+  NODE_SOFTWARE="core-28.1"
+fi
+
+# Validate and set default if invalid
+if [[ "$NODE_SOFTWARE" != "core-25.1" && "$NODE_SOFTWARE" != "core-28.1" && "$NODE_SOFTWARE" != "knots-29.2" ]]; then
+  echo -e "${YELLOW} ---> Invalid node_software value: $NODE_SOFTWARE, defaulting to core-28.1${NC}"
+  NODE_SOFTWARE="core-28.1"
 fi
 
 # Copy the correct bitcoind binary based on node_software
-if [[ "$NODE_SOFTWARE" == "knots-latest" ]]; then
-  cp $APOLLO_DIR/backend/node/bin/knots/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
-  echo -e "${GREEN} ---> Copied Knots bitcoind binary${NC}"
-else
-  cp $APOLLO_DIR/backend/node/bin/core/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
-  echo -e "${GREEN} ---> Copied Core bitcoind binary${NC}"
-fi
+cp $APOLLO_DIR/backend/node/bin/$NODE_SOFTWARE/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+echo -e "${GREEN} ---> Copied $NODE_SOFTWARE bitcoind binary${NC}"
 
 cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
 

@@ -7,6 +7,35 @@ class SettingsService {
     this.utils = utils;
   }
 
+  // Convert GraphQL enum format (core_25_1) to backend format (core-25.1)
+  _enumToBackendFormat(enumValue) {
+    if (!enumValue) return null;
+    // If already in backend format, return as is
+    if (enumValue.includes('-') && enumValue.includes('.')) return enumValue;
+    // Convert from enum format (core_25_1) to backend format (core-25.1)
+    // Replace underscores with dashes, but keep dots if present
+    return enumValue.replace(/_/g, '-');
+  }
+
+  // Convert backend format (core-25.1) to GraphQL enum format (core_25_1)
+  _backendToEnumFormat(backendValue) {
+    if (!backendValue) return null;
+    // Handle different formats that might be in the database
+    // Format 1: core-25.1 (backend format) -> core_25_1
+    // Format 2: core_28.1 (old format with underscore and dot) -> core_28_1
+    // Format 3: core_25_1 (already enum format) -> return as is
+    
+    // If already in correct enum format (has underscores and no dashes), return as is
+    if (backendValue.includes('_') && !backendValue.includes('-')) {
+      // But need to replace dots with underscores if present
+      return backendValue.replace(/\./g, '_');
+    }
+    
+    // Convert from backend format (core-25.1) to enum format (core_25_1)
+    // Replace dashes with underscores, and ensure dots are also underscores
+    return backendValue.replace(/-/g, '_').replace(/\./g, '_');
+  }
+
   // List all settings
   async list() {
     try {
@@ -33,11 +62,19 @@ class SettingsService {
       // Get existing settings before update
       const oldSettings = await this._readSettings();
 
+      // Convert nodeSoftware from GraphQL enum format to backend format if present
+      const convertedInput = { ...settingsInput };
+      if (convertedInput.nodeSoftware) {
+        convertedInput.nodeSoftware = this._enumToBackendFormat(convertedInput.nodeSoftware);
+      }
+
       // Check if Bitcoin software is being changed
-      const isBitcoinSoftwareChanging = oldSettings.nodeSoftware !== settingsInput.nodeSoftware;
+      // Convert oldSettings.nodeSoftware to backend format for comparison
+      const oldSoftwareBackend = oldSettings.nodeSoftware ? this._enumToBackendFormat(oldSettings.nodeSoftware) : null;
+      const isBitcoinSoftwareChanging = oldSoftwareBackend !== convertedInput.nodeSoftware;
 
       // Update settings in database
-      await this._updateSettings(settingsInput);
+      await this._updateSettings(convertedInput);
 
       // Read updated settings
       const newSettings = await this._readSettings();
@@ -45,8 +82,10 @@ class SettingsService {
       // If Bitcoin software is changing, handle it separately
       if (isBitcoinSoftwareChanging && newSettings.nodeSoftware) {
         try {
-          console.log(`Bitcoin software changing from ${oldSettings.nodeSoftware} to ${newSettings.nodeSoftware}`);
-          const switchResult = await this.utils.auth.switchBitcoinSoftware(newSettings.nodeSoftware);
+          // Convert to backend format for the switch function
+          const backendFormat = this._enumToBackendFormat(newSettings.nodeSoftware);
+          console.log(`Bitcoin software changing from ${oldSettings.nodeSoftware} to ${backendFormat}`);
+          const switchResult = await this.utils.auth.switchBitcoinSoftware(backendFormat);
           
           if (!switchResult.success) {
             console.log('Warning: Bitcoin software switch failed:', switchResult.message);
@@ -59,6 +98,12 @@ class SettingsService {
       }
 
       // If specific settings have changed, manage Bitcoin configuration
+      // Convert settings to backend format for manageBitcoinConf
+      const backendSettings = { ...newSettings };
+      if (backendSettings.nodeSoftware) {
+        backendSettings.nodeSoftware = this._enumToBackendFormat(backendSettings.nodeSoftware);
+      }
+      
       if (
         oldSettings.nodeEnableTor !== newSettings.nodeEnableTor ||
         oldSettings.nodeUserConf !== newSettings.nodeUserConf ||
@@ -69,7 +114,7 @@ class SettingsService {
         oldSettings.btcsig !== newSettings.btcsig ||
         (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
       ) {
-        await this.utils.auth.manageBitcoinConf(newSettings);
+        await this.utils.auth.manageBitcoinConf(backendSettings);
       }
 
       // Generate miner configuration
@@ -112,6 +157,11 @@ class SettingsService {
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .limit(1);
+
+    // Convert nodeSoftware from backend format to GraphQL enum format
+    if (settings && settings.nodeSoftware) {
+      settings.nodeSoftware = this._backendToEnumFormat(settings.nodeSoftware);
+    }
 
     return settings;
   }
@@ -158,6 +208,13 @@ class SettingsService {
     }
 
     const items = await readQ;
+
+    // Convert nodeSoftware from backend format to GraphQL enum format for all items
+    items.forEach(item => {
+      if (item.nodeSoftware) {
+        item.nodeSoftware = this._backendToEnumFormat(item.nodeSoftware);
+      }
+    });
 
     if (one) {
       return items[0] || null;

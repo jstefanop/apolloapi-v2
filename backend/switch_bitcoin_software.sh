@@ -13,14 +13,14 @@ TARGET_SOFTWARE=$1
 
 # Check if target software is specified
 if [ -z "$TARGET_SOFTWARE" ]; then
-    echo -e "${RED}Usage: $0 <core-latest|knots-latest>${NC}"
+    echo -e "${RED}Usage: $0 <core-25.1|core-28.1|knots-29.2>${NC}"
     exit 1
 fi
 
 # Validate target software
-if [[ "$TARGET_SOFTWARE" != "core-latest" && "$TARGET_SOFTWARE" != "knots-latest" ]]; then
+if [[ "$TARGET_SOFTWARE" != "core-25.1" && "$TARGET_SOFTWARE" != "core-28.1" && "$TARGET_SOFTWARE" != "knots-29.2" ]]; then
     echo -e "${RED}Invalid software: $TARGET_SOFTWARE${NC}"
-    echo -e "${RED}Valid options: core-latest, knots-latest${NC}"
+    echo -e "${RED}Valid options: core-25.1, core-28.1, knots-29.2${NC}"
     exit 1
 fi
 
@@ -30,11 +30,7 @@ echo -e "${YELLOW} ---> Switching Bitcoin software to $TARGET_SOFTWARE${NC}"
 arch=$(uname -m)
 
 # Check if target binary exists
-if [[ "$TARGET_SOFTWARE" == "knots-latest" ]]; then
-    SOURCE_BINARY="$APOLLO_DIR/backend/node/bin/knots/$arch/bitcoind"
-else
-    SOURCE_BINARY="$APOLLO_DIR/backend/node/bin/core/$arch/bitcoind"
-fi
+SOURCE_BINARY="$APOLLO_DIR/backend/node/bin/$TARGET_SOFTWARE/$arch/bitcoind"
 
 if [ ! -f "$SOURCE_BINARY" ]; then
     echo -e "${RED}Error: Source binary not found: $SOURCE_BINARY${NC}"

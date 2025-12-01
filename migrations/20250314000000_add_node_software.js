@@ -6,7 +6,7 @@ exports.up = async function(knex) {
   const hasColumn = await knex.schema.hasColumn('settings', 'node_software');
   if (!hasColumn) {
     await knex.schema.table('settings', function (t) {
-      t.string('node_software').defaultTo('core-latest').notNullable();
+      t.string('node_software').defaultTo('core-28.1').notNullable();
     });
   }
 };

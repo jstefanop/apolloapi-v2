@@ -229,18 +229,18 @@ describe('manageBitcoinConf', () => {
     it('should call switchBitcoinSoftware when nodeSoftware is provided', async () => {
       const settings = {
         nodeRpcPassword: 'test123',
-        nodeSoftware: 'knots-latest'
+        nodeSoftware: 'knots-29.2'
       };
 
       await utils.auth.manageBitcoinConf(settings);
 
-      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('knots-latest');
+      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('knots-29.2');
     });
 
     it('should continue with configuration even if software switch fails', async () => {
       const settings = {
         nodeRpcPassword: 'test123',
-        nodeSoftware: 'core-latest'
+        nodeSoftware: 'core-28.1'
       };
 
       utils.auth.switchBitcoinSoftware.mockResolvedValue({ 
@@ -313,13 +313,13 @@ describe('manageBitcoinConf', () => {
         nodeAllowLan: true,
         nodeMaxConnections: 256,
         nodeUserConf: 'addnode=1.2.3.4\nmaxuploadtarget=10000',
-        nodeSoftware: 'knots-latest'
+        nodeSoftware: 'knots-29.2'
       };
 
       await utils.auth.manageBitcoinConf(settings);
 
       // Should call software switch
-      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('knots-latest');
+      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('knots-29.2');
 
       // Should write configuration with all features
       const writtenContent = fs.writeFile.mock.calls[0][1];
@@ -338,13 +338,13 @@ describe('manageBitcoinConf', () => {
         nodeAllowLan: false,
         nodeMaxConnections: null,
         nodeUserConf: null,
-        nodeSoftware: 'core-latest'
+        nodeSoftware: 'core-28.1'
       };
 
       await utils.auth.manageBitcoinConf(settings);
 
       // Should call software switch
-      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('core-latest');
+      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('core-28.1');
 
       // Should write minimal configuration
       const writtenContent = fs.writeFile.mock.calls[0][1];

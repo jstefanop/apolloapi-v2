@@ -22,20 +22,26 @@ describe('Bitcoin Software Switching', () => {
       expect(result.message).toContain('Invalid software');
     });
 
-    it('should handle core-latest software', async () => {
-      const result = await utils.auth.switchBitcoinSoftware('core-latest');
+    it('should handle core-28.1 software', async () => {
+      const result = await utils.auth.switchBitcoinSoftware('core-28.1');
       expect(result.success).toBe(true);
-      expect(result.message).toContain('core-latest');
+      expect(result.message).toContain('core-28.1');
     });
 
-    it('should handle knots-latest software', async () => {
-      const result = await utils.auth.switchBitcoinSoftware('knots-latest');
+    it('should handle core-25.1 software', async () => {
+      const result = await utils.auth.switchBitcoinSoftware('core-25.1');
       expect(result.success).toBe(true);
-      expect(result.message).toContain('knots-latest');
+      expect(result.message).toContain('core-25.1');
+    });
+
+    it('should handle knots-29.2 software', async () => {
+      const result = await utils.auth.switchBitcoinSoftware('knots-29.2');
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('knots-29.2');
     });
 
     it('should return dev mode message in development', async () => {
-      const result = await utils.auth.switchBitcoinSoftware('core-latest');
+      const result = await utils.auth.switchBitcoinSoftware('core-28.1');
       expect(result.message).toContain('[DEV]');
     });
   });
@@ -57,7 +63,7 @@ describe('Bitcoin Software Switching', () => {
 
     it('should handle settings with nodeSoftware', async () => {
       const settings = {
-        nodeSoftware: 'core-latest',
+        nodeSoftware: 'core-28.1',
         nodeRpcPassword: 'test123',
         nodeEnableTor: false,
         nodeUserConf: '',

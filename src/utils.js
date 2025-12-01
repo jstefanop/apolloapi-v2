@@ -475,8 +475,8 @@ module.exports.auth = {
     
     try {
       // Validate target software
-      if (!['core-latest', 'knots-latest'].includes(targetSoftware)) {
-        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-latest, knots-latest`);
+      if (!['core-25.1', 'core-28.1', 'knots-29.2'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, knots-29.2`);
       }
 
       console.log(`Switching Bitcoin software to ${targetSoftware}...`);
@@ -530,8 +530,7 @@ module.exports.auth = {
       // Get architecture
       const arch = os.machine();
       const apolloDir = '/opt/apolloapi';
-      const sourceDir = targetSoftware === 'knots-latest' ? 'knots' : 'core';
-      const sourcePath = `${apolloDir}/backend/node/bin/${sourceDir}/${arch}/bitcoind`;
+      const sourcePath = `${apolloDir}/backend/node/bin/${targetSoftware}/${arch}/bitcoind`;
       const destPath = `${apolloDir}/backend/node/bitcoind`;
 
       // Check if source binary exists
