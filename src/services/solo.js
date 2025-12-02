@@ -138,7 +138,7 @@ class SoloService {
       try {
         ckpoolData = await this._getCkpoolStats();
       } catch (ckpoolError) {
-        console.error('Error getting ckpool stats:', ckpoolError);
+        console.error('Error getting solo stats:', ckpoolError);
         // Continue with null ckpool data instead of failing completely
       }
 
@@ -210,7 +210,7 @@ class SoloService {
               blockFound = true;
             }
           } catch (logErr) {
-            console.error('Error reading ckpool log:', logErr.message);
+            console.error('Error reading solo log:', logErr.message);
           }
         }
       }
@@ -265,13 +265,13 @@ class SoloService {
 
               // Validate JSON structure
               if (!cleanedData.startsWith('{') || !cleanedData.endsWith('}')) {
-                console.log(`Invalid JSON format in ckpool file ${filename}, skipping...`);
+                console.log(`Invalid JSON format in solo file ${filename}, skipping...`);
                 return null;
               }
 
               return JSON.parse(cleanedData);
             } catch (fileError) {
-              console.log(`Error processing ckpool file ${filename}: ${fileError.message}`);
+              console.log(`Error processing solo file ${filename}: ${fileError.message}`);
               return null;
             }
           });
