@@ -373,6 +373,18 @@ class NodeService {
         ? new Date(dbStatus.requestedAt).getTime()
         : 0;
 
+      // Handle case where requested_status is null (e.g., fresh installation)
+      // In this case, just check if the node responds without any pending logic
+      if (!dbStatus.requestedStatus || dbStatus.requestedStatus === null) {
+        try {
+          await this._callRpcMethod(rpcClient, 'getblockchaininfo');
+          return { status: 'online' };
+        } catch (err) {
+          console.log('Node not responding and no requested status:', err.message);
+          return { status: 'offline' };
+        }
+      }
+
       if (dbStatus.requestedStatus === 'online') {
         try {
           // Call RPC method to check if the node responds

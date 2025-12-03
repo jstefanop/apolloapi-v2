@@ -2,8 +2,9 @@ const { knex } = require('../db');
 const _ = require('lodash');
 const services = require('../services');
 
-// Services to monitor - all services that need DB initialization
-// Note: miner and node are checked by scheduler, solo/apollo-api/apollo-ui-v2 by service monitor
+// Services that need DB initialization
+// All service status updates are handled by ServiceMonitor (single source of truth)
+// Scheduler only reads statuses and performs actions (e.g., collect statistics)
 const SERVICE_NAMES = ['miner', 'node', 'solo', 'apollo-api', 'apollo-ui-v2'];
 
 /**
@@ -21,30 +22,22 @@ async function startServiceMonitor() {
 }
 
 /**
- * This function updates service status in the DB
+ * This function checks service statuses (read-only)
+ * Status updates are handled by the ServiceMonitor
  */
-async function updateServiceStatus(serviceName, status) {
-  await knex('service_status').where({ service_name: serviceName }).update({
-    status,
-    last_checked: new Date(),
-  });
-}
-
-/**
- * This function checks and updates the status of all services
- */
-async function checkAndUpdateServices() {
+async function checkServices() {
   try {
-    // Check miner status
-    const minerStatus = await services.miner.checkOnline();
-    await updateServiceStatus('miner', minerStatus?.online?.status);
+    // Just verify services are responding - no DB updates
+    // The ServiceMonitor is the single source of truth for status updates
     
-    // Check node status
-    const nodeStatus = await services.node.checkOnline();
-    await updateServiceStatus('node', nodeStatus?.online?.status);
+    // We can log status for debugging but don't update DB
+    const statuses = await knex('service_status')
+      .select('service_name', 'status')
+      .whereIn('service_name', ['miner', 'node']);
     
-    // Note: solo, apollo-api and apollo-ui-v2 are handled by the service monitor
-    // since they are systemd services, not custom services
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Current service statuses:', statuses);
+    }
   } catch (error) {
     console.error('Error checking services:', error);
   }
@@ -52,6 +45,7 @@ async function checkAndUpdateServices() {
 
 /**
  * Initialize DB rows if they don't exist
+ * Sets default requested_status to prevent race conditions
  */
 async function initServiceStatusRows() {
   for (const service of SERVICE_NAMES) {
@@ -60,11 +54,21 @@ async function initServiceStatusRows() {
       .first();
 
     if (!record) {
+      // Set default requested_status based on service type
+      // This prevents the race condition where requested_status is null
+      const defaultRequestedStatus = (service === 'apollo-api' || service === 'apollo-ui-v2') 
+        ? 'online'  // API and UI should always be online
+        : null;     // Other services start as not requested (user will decide)
+      
       await knex('service_status').insert({
         service_name: service,
-        status: 'offline',
+        status: 'unknown',  // Start as unknown until ServiceMonitor checks
+        requested_status: defaultRequestedStatus,
+        requested_at: defaultRequestedStatus ? new Date() : null,
         last_checked: new Date(),
       });
+      
+      console.log(`Initialized service status for ${service} with requested_status=${defaultRequestedStatus}`);
     }
   }
 }
@@ -194,14 +198,14 @@ async function startAllSchedulers() {
     // Initialize DB rows for service status
     await initServiceStatusRows();
 
-    // Start service monitor for systemd services
+    // Start service monitor - this is the single source of truth for status updates
     await startServiceMonitor();
 
-    // Check immediately the first time
-    await checkAndUpdateServices();
+    // Optional: Check services for logging (read-only, no DB updates)
+    await checkServices();
 
-    // Then set intervals
-    setInterval(checkAndUpdateServices, 5000); // Check every 5 seconds
+    // Service status checks are now handled by ServiceMonitor
+    // We only need to collect statistics periodically
     setInterval(fetchStatistics, 30000); // Collect statistics every 30 seconds
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);

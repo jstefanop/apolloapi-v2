@@ -8,13 +8,14 @@ const net = require('net');
 const execAsync = promisify(exec);
 
 class ServiceMonitor {
-  constructor(knex) {
+  constructor(knex, services) {
     this.knex = knex;
+    this.services = services || {};
     this.monitoring = false;
     this.interval = null;
     this.config = this.loadConfig();
     this.checkInterval = this.config.checkInterval || 10000; // 10 seconds default
-    this.services = this.config.services || [
+    this.systemdServices = this.config.services || [
       'apollo-miner',
       'node',
       'ckpool',
@@ -207,6 +208,24 @@ class ServiceMonitor {
         };
       }
 
+      // For miner and node, also check if they respond to API calls
+      // This provides better status detection than just systemd
+      let applicationOnline = null;
+      if ((serviceName === 'apollo-miner' || serviceName === 'node') && this.services) {
+        try {
+          if (serviceName === 'apollo-miner' && this.services.miner) {
+            const minerStatus = await this.services.miner.checkOnline();
+            applicationOnline = minerStatus?.online?.status;
+          } else if (serviceName === 'node' && this.services.node) {
+            const nodeStatus = await this.services.node.checkOnline();
+            applicationOnline = nodeStatus?.online?.status;
+          }
+        } catch (error) {
+          console.log(`Application check failed for ${serviceName}:`, error.message);
+          // Continue with systemd check as fallback
+        }
+      }
+
       // Standard systemctl check for local services
       let status;
       try {
@@ -229,6 +248,17 @@ class ServiceMonitor {
       const existing = await this.knex('service_status')
         .where({ service_name: dbServiceName })
         .first();
+
+      // If we have application status from API, use it as priority
+      // This handles the case where systemd says 'active' but app is not responding
+      if (applicationOnline) {
+        await this.updateServiceStatus(dbServiceName, applicationOnline, null);
+        return {
+          serviceName: dbServiceName,
+          status: applicationOnline,
+          systemdStatus: status,
+        };
+      }
 
       // Map systemd status to internal status
       let mappedStatus = 'unknown';
@@ -359,7 +389,7 @@ class ServiceMonitor {
   // Check all services
   async checkAllServices() {
     try {
-      const promises = this.services.map((service) =>
+      const promises = this.systemdServices.map((service) =>
         this.checkServiceStatus(service)
       );
       const results = await Promise.all(promises);
@@ -443,7 +473,7 @@ class ServiceMonitor {
   // Get current status of all services
   async getCurrentStatuses() {
     try {
-      const promises = this.services.map((service) =>
+      const promises = this.systemdServices.map((service) =>
         this.checkServiceStatus(service)
       );
       return await Promise.all(promises);
@@ -463,7 +493,7 @@ class ServiceMonitor {
   reloadConfig() {
     this.config = this.loadConfig();
     this.checkInterval = this.config.checkInterval || 10000;
-    this.services = this.config.services || this.services;
+    this.systemdServices = this.config.services || this.systemdServices;
 
     if (this.monitoring && this.interval) {
       // Restart monitor with new configuration
@@ -500,4 +530,4 @@ class ServiceMonitor {
   }
 }
 
-module.exports = (knex) => new ServiceMonitor(knex);
+module.exports = (knex, services) => new ServiceMonitor(knex, services);

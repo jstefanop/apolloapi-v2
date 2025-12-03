@@ -251,6 +251,16 @@ class MinerService {
       // Check how recently the file was updated
       const timeSinceLastUpdate = currentTime - latestMtime;
 
+      // Handle case where requested_status is null (e.g., fresh installation)
+      // In this case, just check if files are being updated without pending logic
+      if (!dbStatus.requestedStatus || dbStatus.requestedStatus === null) {
+        if (timeSinceLastUpdate <= recentThresholdMs) {
+          return { status: 'online' };
+        } else {
+          return { status: 'offline' };
+        }
+      }
+
       // Determine status based on requested status and file update time
       if (dbStatus.requestedStatus === 'online') {
         if (timeSinceLastUpdate <= recentThresholdMs) {
