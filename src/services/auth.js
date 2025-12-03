@@ -59,8 +59,10 @@ class AuthService {
       password: hashedPassword
     });
 
-    // Also update the system password
-    await this._changeSystemPassword(password);
+    // Also update the system password (only in production)
+    if (process.env.NODE_ENV !== 'development') {
+      await this._changeSystemPassword(password);
+    }
   }
 
   // Initial setup
@@ -82,7 +84,9 @@ class AuthService {
       });
 
       // Set the system password
-      await this._changeSystemPassword(password);
+      if (process.env.NODE_ENV !== 'development') {
+        await this._changeSystemPassword(password);
+      }
     } catch (err) {
       console.log('ERROR', err);
       throw err;

@@ -69,9 +69,37 @@ class SettingsService {
     }
   }
 
+  // Validate btcsig format
+  _validateBtcsig(btcsig) {
+    if (!btcsig) {
+      return; // Allow empty/null values
+    }
+
+    // Check if it starts and ends with '/'
+    if (!btcsig.startsWith('/') || !btcsig.endsWith('/')) {
+      throw new Error('btcsig must start and end with "/" (e.g., /FutureBit-Apollo/)');
+    }
+
+    // Check maximum length (100 bytes limit for coinbase signature)
+    if (btcsig.length > 100) {
+      throw new Error('btcsig must not exceed 100 characters');
+    }
+
+    // Check for printable ASCII characters only (32-126)
+    const isPrintableAscii = /^[\x20-\x7E]*$/.test(btcsig);
+    if (!isPrintableAscii) {
+      throw new Error('btcsig must contain only printable ASCII characters');
+    }
+  }
+
   // Update settings
   async update(settingsInput) {
     try {
+      // Validate btcsig if provided
+      if (settingsInput.btcsig !== undefined) {
+        this._validateBtcsig(settingsInput.btcsig);
+      }
+
       // Get existing settings before update
       const oldSettings = await this._readSettings();
 

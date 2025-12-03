@@ -212,4 +212,69 @@ describe('Settings API', () => {
       expect(result.error.message).toBe('Invalid settings configuration');
     });
   });
+
+  describe('btcsig validation', () => {
+    const services = require('../src/services');
+    const utils = require('../src/utils');
+    const settingsService = services.settings(knex, utils);
+
+    it('should accept valid btcsig format', async () => {
+      const result = await settingsService.update({
+        btcsig: '/FutureBit-Apollo/'
+      });
+
+      expect(result.btcsig).toBe('/FutureBit-Apollo/');
+    });
+
+    it('should accept btcsig with spaces and special characters', async () => {
+      const result = await settingsService.update({
+        btcsig: '/mined by FutureBit Apollo #123!/'
+      });
+
+      expect(result.btcsig).toBe('/mined by FutureBit Apollo #123!/');
+    });
+
+    it('should reject btcsig without leading slash', async () => {
+      await expect(
+        settingsService.update({
+          btcsig: 'FutureBit-Apollo/'
+        })
+      ).rejects.toThrow('btcsig must start and end with "/"');
+    });
+
+    it('should reject btcsig without trailing slash', async () => {
+      await expect(
+        settingsService.update({
+          btcsig: '/FutureBit-Apollo'
+        })
+      ).rejects.toThrow('btcsig must start and end with "/"');
+    });
+
+    it('should reject btcsig exceeding 100 characters', async () => {
+      const longString = '/a'.repeat(50) + '/'; // Creates a string > 100 chars
+      
+      await expect(
+        settingsService.update({
+          btcsig: longString
+        })
+      ).rejects.toThrow('btcsig must not exceed 100 characters');
+    });
+
+    it('should reject btcsig with non-ASCII characters', async () => {
+      await expect(
+        settingsService.update({
+          btcsig: '/FutureBit-Apollo-🚀/'
+        })
+      ).rejects.toThrow('btcsig must contain only printable ASCII characters');
+    });
+
+    it('should accept empty btcsig', async () => {
+      const result = await settingsService.update({
+        btcsig: null
+      });
+
+      // Should use default value
+      expect(result).toBeDefined();
+    });
+  });
 });

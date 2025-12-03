@@ -169,7 +169,7 @@ beforeAll(async () => {
         table.boolean('node_enable_solo_mining').defaultTo(false);
         table.integer('node_max_connections').defaultTo(64);
         table.boolean('node_allow_lan').defaultTo(false);
-        table.string('btcsig').defaultTo('/mined by FutureBit Apollo/');
+        table.string('btcsig').defaultTo('/FutureBit-Apollo/');
         table.string('node_software').defaultTo('core-28.1');
         table.timestamps(true, true);
       });

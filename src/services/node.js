@@ -81,11 +81,21 @@ class NodeService {
 
       return { stats };
     } catch (error) {
+      // Extract the real error message from RPC response if available
+      let errorMessage = error.message;
+      let errorCode = error.code || 'UNKNOWN';
+
+      // Check if we have a more specific error from the RPC response
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error.message || errorMessage;
+        errorCode = error.response.data.error.code?.toString() || errorCode;
+      }
+
       // Return error information
       const stats = {
         error: {
-          code: error.code || 'UNKNOWN',
-          message: error.message,
+          code: errorCode,
+          message: errorMessage,
         },
         timestamp: new Date().toISOString(),
       };

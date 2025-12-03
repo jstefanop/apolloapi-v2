@@ -277,7 +277,7 @@ module.exports.auth = {
           },
         ],
         logdir: '/opt/apolloapi/backend/ckpool/logs',
-        btcsig: settings.btcsig || '/mined by Solo FutureBit Apollo/',
+        btcsig: settings.btcsig || '/FutureBit-Apollo/',
         zmqblock: 'tcp://127.0.0.1:28332',
       };
 
