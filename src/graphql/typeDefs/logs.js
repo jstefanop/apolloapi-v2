@@ -9,6 +9,7 @@ module.exports = gql`
     CKPOOL
     MINER
     NODE
+    SYSLOG
   }
 
   type LogsActions {
