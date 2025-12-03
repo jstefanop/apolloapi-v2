@@ -262,7 +262,7 @@ module.exports.auth = {
     try {
       // Ensure settings is valid
       if (!settings) {
-        console.log('No settings found for ckpool configuration');
+        console.log('No settings found for solo configuration');
         return;
       }
 
@@ -291,9 +291,9 @@ module.exports.auth = {
           configCkpoolFilePath,
           JSON.stringify(ckpoolConf, null, 2)
         );
-        console.log('ckpool configuration saved successfully');
+        console.log('solo configuration saved successfully');
       } catch (writeErr) {
-        console.log('Error writing ckpool configuration:', writeErr.message);
+        console.log('Error writing solo configuration:', writeErr.message);
       }
     } catch (err) {
       console.log('Error in manageCkpoolConf:', err.message);

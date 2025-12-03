@@ -132,16 +132,16 @@ const updateCkpoolLogs = () => {
       fs.writeFileSync(userFilePath, JSON.stringify(generateUserData(wallet), null, 2));
     });
 
-    console.log('CKPool log files updated successfully');
+    console.log('Solo log files updated successfully');
   } catch (error) {
-    console.error('Error updating CKPool log files:', error);
+    console.error('Error updating Solo log files:', error);
   }
 };
 
 // Start the dev solo pool (ckpool)
 const startDevSolo = async () => {
   if (!devSoloInterval) {
-    console.log('Starting dev solo pool (ckpool)...');
+    console.log('Starting dev solo pool...');
     await delay(3000); // Simulate startup delay
 
     isRunning = true;

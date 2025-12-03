@@ -289,28 +289,72 @@ class ServiceMonitor {
 
       // Detect manual actions FIRST using systemd status (source of truth for manual actions)
       // This ensures the UI reflects reality instead of fighting user actions
+      let isWithinGracePeriod = false;
+      
       if (existing) {
+        // Get time since last request (if any)
+        const currentTime = Date.now();
+        const requestedAtTime = existing.requested_at 
+          ? new Date(existing.requested_at).getTime() 
+          : 0;
+        const timeSinceRequest = currentTime - requestedAtTime;
+        
+        // Grace period for services to start/stop (don't interfere during this time)
+        const startGracePeriod = 90000; // 60 seconds for service to become active
+        const stopGracePeriod = 30000;   // 30 seconds for service to stop
+        
         // MANUAL START: Systemd is active/activating but was requested to be offline
         // → User started it manually (CLI or other means)
+        // BUT: Only if not within stop grace period (service might still be stopping)
         if (
           (status === 'active' || status === 'activating') &&
           existing.requested_status === 'offline'
         ) {
-          console.log(
-            `🔄 Service ${serviceName} (${dbServiceName}) started manually (systemd: ${status}) - updating requested_status to 'online'`
-          );
-          requestedStatus = 'online';
+          // Check if service was recently requested to stop (within grace period)
+          const isWithinStopGracePeriod = timeSinceRequest <= stopGracePeriod;
+          const wasStopping = existing.status === 'pending';
+          
+          if (isWithinStopGracePeriod && wasStopping) {
+            // Still within grace period and was stopping - don't interfere
+            console.log(
+              `⏳ Service ${serviceName} (${dbServiceName}) still stopping (${Math.round(timeSinceRequest/1000)}s since request)`
+            );
+            isWithinGracePeriod = true;
+            mappedStatus = 'pending'; // Override to keep it pending
+          } else {
+            // Outside grace period or wasn't stopping - must be manual start
+            console.log(
+              `🔄 Service ${serviceName} (${dbServiceName}) started manually (systemd: ${status}) - updating requested_status to 'online'`
+            );
+            requestedStatus = 'online';
+          }
         }
         // MANUAL STOP: Systemd is inactive but was requested to be online
         // → User stopped it manually (not a crash)
+        // BUT: Only if not within grace period (service might still be starting)
         else if (
           status === 'inactive' &&
           existing.requested_status === 'online'
         ) {
-          console.log(
-            `🔄 Service ${serviceName} (${dbServiceName}) stopped manually (systemd: inactive) - updating requested_status to 'offline'`
-          );
-          requestedStatus = 'offline';
+          // Check if service was recently requested to start (within grace period)
+          const isWithinStartGracePeriod = timeSinceRequest <= startGracePeriod;
+          const wasStarting = existing.status === 'pending';
+          
+          if (isWithinStartGracePeriod && wasStarting) {
+            // Still within grace period and was starting - don't interfere
+            // Keep status as pending and don't change requested_status
+            console.log(
+              `⏳ Service ${serviceName} (${dbServiceName}) still starting (${Math.round(timeSinceRequest/1000)}s since request)`
+            );
+            isWithinGracePeriod = true;
+            mappedStatus = 'pending'; // Override to keep it pending
+          } else {
+            // Outside grace period or wasn't starting - must be manual stop
+            console.log(
+              `🔄 Service ${serviceName} (${dbServiceName}) stopped manually (systemd: inactive) - updating requested_status to 'offline'`
+            );
+            requestedStatus = 'offline';
+          }
         }
         // AUTO-RESTART: Service failed but was requested to be online
         // → Auto-restart if enabled
@@ -338,11 +382,15 @@ class ServiceMonitor {
       }
 
       // Now determine final status for UI/DB
-      // Priority: application status (if available and reliable), then systemd mapped status
+      // Priority: grace period > application status > systemd mapped status
       let finalStatus;
       
+      // If within grace period, keep as pending regardless of other checks
+      if (isWithinGracePeriod) {
+        finalStatus = 'pending';
+      }
       // Special handling for services with application check (miner, node)
-      if (applicationOnline) {
+      else if (applicationOnline) {
         // If systemd says active but app says offline/pending, service is probably starting up
         if ((status === 'active' || status === 'activating') && 
             (applicationOnline === 'offline' || applicationOnline === 'error')) {

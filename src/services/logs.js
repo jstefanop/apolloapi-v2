@@ -37,19 +37,19 @@ class LogsService {
               logPath = p;
               break;
             } catch (e) {
-              console.log(`CKPOOL log not found at: ${p}`);
+              console.log(`Solo log not found at: ${p}`);
             }
           }
 
           if (!logPath) {
             console.log(
-              'Could not find CKPOOL log file in any of the expected locations'
+              'Could not find Solo log file in any of the expected locations'
             );
             // In development, proceed with a fake path for sample data
             if (process.env.NODE_ENV !== 'production') {
               logPath = possiblePaths[0];
             } else {
-              throw new GraphQLError('CKPOOL log file not found');
+              throw new GraphQLError('Solo log file not found');
             }
           }
           break;
@@ -116,6 +116,9 @@ class LogsService {
         case 'NODE':
           logPath = '/media/nvme/Bitcoin/debug.log';
           break;
+        case 'SYSLOG':
+          logPath = '/var/log/syslog';
+          break;
         default:
           throw new GraphQLError('Invalid log type');
       }
@@ -129,14 +132,25 @@ class LogsService {
 
       if (process.env.NODE_ENV === 'production') {
         try {
-          // First check if file exists
-          await fs.access(logPath, fs.constants.R_OK);
+          // Check if we need sudo for this log type
+          const needsSudo = logType === 'SYSLOG';
+          
+          if (needsSudo) {
+            // Use sudo tail for syslog
+            const { stdout } = await execPromise(
+              `sudo tail -n ${safeLines} ${logPath}`
+            );
+            content = stdout || `No content found in ${logPath}`;
+          } else {
+            // First check if file exists
+            await fs.access(logPath, fs.constants.R_OK);
 
-          // Use -f flag to not fail if file doesn't exist
-          const { stdout } = await execPromise(
-            `tail -n ${safeLines} -f ${logPath} 2>/dev/null | head -n ${safeLines}`
-          );
-          content = stdout || `No content found in ${logPath}`;
+            // Use -f flag to not fail if file doesn't exist
+            const { stdout } = await execPromise(
+              `tail -n ${safeLines} -f ${logPath} 2>/dev/null | head -n ${safeLines}`
+            );
+            content = stdout || `No content found in ${logPath}`;
+          }
         } catch (error) {
           console.error(`Error executing tail command: ${error.message}`);
           content = `Error reading log file: ${error.message}`;

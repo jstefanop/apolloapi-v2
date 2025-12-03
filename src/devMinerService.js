@@ -146,9 +146,9 @@ const updateCkpoolLogs = () => {
     const userFilePath2 = path.join(usersDir, wallet2);
     fs.writeFileSync(userFilePath2, JSON.stringify(generateUserData(wallet2), null, 2));
 
-    console.log('CKPool log files updated successfully');
+    console.log('Solo log files updated successfully');
   } catch (error) {
-    console.error('Error updating CKPool log files:', error);
+    console.error('Error updating Solo log files:', error);
   }
 };
 

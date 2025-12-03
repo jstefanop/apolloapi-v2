@@ -31,6 +31,16 @@ class MinerService {
       if (process.env.NODE_ENV === 'development') {
         console.log('Starting dev miner...');
         await devMinerService.startDevMiner();
+        
+        // In development, update status to online after devMiner starts
+        // (ServiceMonitor is disabled in dev)
+        await this.knex('service_status')
+          .where({ service_name: 'miner' })
+          .update({
+            status: 'online',
+            last_checked: new Date(),
+          });
+        console.log('Dev miner started - status updated to online');
       } else {
         await this._execCommand('sudo systemctl start apollo-miner');
       }
@@ -55,6 +65,16 @@ class MinerService {
       if (process.env.NODE_ENV === 'development') {
         console.log('Stopping dev miner...');
         await devMinerService.stopDevMiner();
+        
+        // In development, update status to offline after devMiner stops
+        // (ServiceMonitor is disabled in dev)
+        await this.knex('service_status')
+          .where({ service_name: 'miner' })
+          .update({
+            status: 'offline',
+            last_checked: new Date(),
+          });
+        console.log('Dev miner stopped - status updated to offline');
       } else {
         await this._execCommand('sudo systemctl stop apollo-miner');
       }
@@ -79,6 +99,16 @@ class MinerService {
       if (process.env.NODE_ENV === 'development') {
         console.log('Restarting dev miner...');
         await devMinerService.restartDevMiner();
+        
+        // In development, update status to online after devMiner restarts
+        // (ServiceMonitor is disabled in dev)
+        await this.knex('service_status')
+          .where({ service_name: 'miner' })
+          .update({
+            status: 'online',
+            last_checked: new Date(),
+          });
+        console.log('Dev miner restarted - status updated to online');
       } else {
         await this._execCommand('sudo systemctl restart apollo-miner');
       }
@@ -503,7 +533,7 @@ class MinerService {
                 
                 // Skip empty files
                 if (!ckpoolUsersData.trim()) {
-                  console.log(`Skipping empty ckpool file: ${filename}`);
+                  console.log(`Skipping empty solo file: ${filename}`);
                   return null;
                 }
 
@@ -518,18 +548,18 @@ class MinerService {
 
                 // Validate JSON structure
                 if (!cleanedData.startsWith('{') || !cleanedData.endsWith('}')) {
-                  console.log(`Invalid JSON format in ckpool file ${filename}, skipping...`);
+                  console.log(`Invalid JSON format in solo file ${filename}, skipping...`);
                   return null;
                 }
 
                 try {
                   return JSON.parse(cleanedData);
                 } catch (parseError) {
-                  console.log(`Failed to parse JSON in ckpool file ${filename}: ${parseError.message}`);
+                  console.log(`Failed to parse JSON in solo file ${filename}: ${parseError.message}`);
                   return null;
                 }
               } catch (fileError) {
-                console.log(`Error processing ckpool file ${filename}: ${fileError.message}`);
+                console.log(`Error processing solo file ${filename}: ${fileError.message}`);
                 return null;
               }
             });
