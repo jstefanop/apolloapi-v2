@@ -91,11 +91,19 @@ class ServiceMonitor {
     this.monitoring = true;
 
     // First immediate check
-    await this.checkAllServices();
+    try {
+      await this.checkAllServices();
+    } catch (error) {
+      console.error('Error during initial service check:', error);
+    }
 
     // Then periodic checks
     this.interval = setInterval(async () => {
-      await this.checkAllServices();
+      try {
+        await this.checkAllServices();
+      } catch (error) {
+        console.error('Error during periodic service check:', error);
+      }
     }, this.checkInterval);
 
     console.log(
@@ -176,13 +184,13 @@ class ServiceMonitor {
   }
 
   // Check status of a single service
+  // This method now respects manual actions (CLI starts/stops) by detecting
+  // discrepancies between actual status and requested_status, and updating
+  // requested_status to reflect reality instead of fighting user actions.
   async checkServiceStatus(serviceName) {
     try {
       // Skip systemd checks in development environment
       if (this.isDevelopment()) {
-        console.log(
-          `Skipping systemd check for ${serviceName} in development environment`
-        );
         return {
           serviceName,
           status: 'unknown',
@@ -221,7 +229,6 @@ class ServiceMonitor {
             applicationOnline = nodeStatus?.online?.status;
           }
         } catch (error) {
-          console.log(`Application check failed for ${serviceName}:`, error.message);
           // Continue with systemd check as fallback
         }
       }
@@ -248,17 +255,6 @@ class ServiceMonitor {
       const existing = await this.knex('service_status')
         .where({ service_name: dbServiceName })
         .first();
-
-      // If we have application status from API, use it as priority
-      // This handles the case where systemd says 'active' but app is not responding
-      if (applicationOnline) {
-        await this.updateServiceStatus(dbServiceName, applicationOnline, null);
-        return {
-          serviceName: dbServiceName,
-          status: applicationOnline,
-          systemdStatus: status,
-        };
-      }
 
       // Map systemd status to internal status
       let mappedStatus = 'unknown';
@@ -291,90 +287,95 @@ class ServiceMonitor {
           mappedStatus = 'unknown';
       }
 
-      // Auto-start/stop logic if enabled
-      if (this.config.autoStart && existing) {
-        // If service is offline but requested to be online, start it
+      // Detect manual actions FIRST using systemd status (source of truth for manual actions)
+      // This ensures the UI reflects reality instead of fighting user actions
+      if (existing) {
+        // MANUAL START: Systemd is active/activating but was requested to be offline
+        // → User started it manually (CLI or other means)
         if (
-          mappedStatus === 'offline' &&
-          existing.requested_status === 'online' &&
-          status === 'inactive'
+          (status === 'active' || status === 'activating') &&
+          existing.requested_status === 'offline'
         ) {
           console.log(
-            `Auto-starting service ${serviceName} (${dbServiceName}) - requested online but currently offline`
+            `🔄 Service ${serviceName} (${dbServiceName}) started manually (systemd: ${status}) - updating requested_status to 'online'`
           );
-          try {
-            await execAsync(`sudo systemctl start ${serviceName}`);
-            console.log(`Successfully started service ${serviceName}`);
-            // Update status to pending as it's starting
-            mappedStatus = 'pending';
-          } catch (startError) {
-            console.error(
-              `Failed to auto-start service ${serviceName}:`,
-              startError.message
-            );
-            // Keep status as offline if start failed
-          }
+          requestedStatus = 'online';
         }
-        // If service is in failed state but requested to be online, restart it
+        // MANUAL STOP: Systemd is inactive but was requested to be online
+        // → User stopped it manually (not a crash)
         else if (
-          mappedStatus === 'error' &&
-          existing.requested_status === 'online' &&
-          status === 'failed'
+          status === 'inactive' &&
+          existing.requested_status === 'online'
         ) {
           console.log(
-            `Auto-restarting service ${serviceName} (${dbServiceName}) - requested online but currently failed`
+            `🔄 Service ${serviceName} (${dbServiceName}) stopped manually (systemd: inactive) - updating requested_status to 'offline'`
+          );
+          requestedStatus = 'offline';
+        }
+        // AUTO-RESTART: Service failed but was requested to be online
+        // → Auto-restart if enabled
+        else if (
+          status === 'failed' &&
+          existing.requested_status === 'online' &&
+          this.config.autoStart
+        ) {
+          console.log(
+            `🔄 Auto-restarting failed service ${serviceName} (${dbServiceName})`
           );
           try {
             await execAsync(`sudo systemctl restart ${serviceName}`);
-            console.log(`Successfully restarted service ${serviceName}`);
-            // Update status to pending as it's restarting
+            console.log(`✅ Successfully restarted service ${serviceName}`);
+            // Override status to pending as it's restarting
             mappedStatus = 'pending';
           } catch (restartError) {
             console.error(
-              `Failed to auto-restart service ${serviceName}:`,
+              `❌ Failed to auto-restart service ${serviceName}:`,
               restartError.message
             );
-            // Keep status as error if restart failed
-          }
-        }
-        // If service is online but requested to be offline, stop it
-        else if (
-          mappedStatus === 'online' &&
-          existing.requested_status === 'offline' &&
-          status === 'active'
-        ) {
-          console.log(
-            `Auto-stopping service ${serviceName} (${dbServiceName}) - requested offline but currently online`
-          );
-          try {
-            await execAsync(`sudo systemctl stop ${serviceName}`);
-            console.log(`Successfully stopped service ${serviceName}`);
-            // Update status to pending as it's stopping
-            mappedStatus = 'pending';
-          } catch (stopError) {
-            console.error(
-              `Failed to auto-stop service ${serviceName}:`,
-              stopError.message
-            );
-            // Keep status as online if stop failed
+            mappedStatus = 'error';
           }
         }
       }
 
-      // Update database only if status changed
+      // Now determine final status for UI/DB
+      // Priority: application status (if available and reliable), then systemd mapped status
+      let finalStatus;
+      
+      // Special handling for services with application check (miner, node)
+      if (applicationOnline) {
+        // If systemd says active but app says offline/pending, service is probably starting up
+        if ((status === 'active' || status === 'activating') && 
+            (applicationOnline === 'offline' || applicationOnline === 'error')) {
+          finalStatus = 'pending';
+        }
+        // If systemd says inactive/failed, trust that over app status
+        else if (status === 'inactive' || status === 'failed') {
+          finalStatus = mappedStatus;
+        }
+        // Otherwise use app status (most accurate)
+        else {
+          finalStatus = applicationOnline;
+        }
+      } else {
+        // No application check, use systemd mapped status
+        finalStatus = mappedStatus;
+      }
+
+      // Update database with final status
       await this.updateServiceStatus(
         dbServiceName,
-        mappedStatus,
+        finalStatus,
         requestedStatus
       );
 
       return {
         serviceName: dbServiceName,
-        status: mappedStatus,
+        status: finalStatus,
         systemdStatus: status,
       };
     } catch (error) {
       console.error(`Error checking service ${serviceName}:`, error.message);
+      console.error(`Error stack for ${serviceName}:`, error.stack);
       // Only mark as unknown if there's a real error (not systemctl exit codes)
       const dbServiceName = this.getDatabaseServiceName(serviceName);
       await this.updateServiceStatus(dbServiceName, 'unknown', null);
@@ -394,15 +395,41 @@ class ServiceMonitor {
       );
       const results = await Promise.all(promises);
 
-      if (this.config.logLevel === 'debug') {
-        console.log(
-          'Service status updated:',
-          results.map((r) => `${r.serviceName}: ${r.status}`)
-        );
+      // Always log service status summary for monitoring
+      console.log('Service Status:');
+      for (const result of results) {
+        console.log(`  - ${result.serviceName}: ${result.status} (systemd: ${result.systemdStatus})`);
       }
+
+      // Check for discrepancies with requested status
+      const discrepancies = [];
+      for (const result of results) {
+        const dbRecord = await this.knex('service_status')
+          .where({ service_name: result.serviceName })
+          .first();
+        
+        if (dbRecord && dbRecord.requested_status) {
+          if (dbRecord.requested_status !== result.status) {
+            discrepancies.push({
+              service: result.serviceName,
+              requested: dbRecord.requested_status,
+              actual: result.status
+            });
+          }
+        }
+      }
+
+      if (discrepancies.length > 0) {
+        console.log('⚠️  Discrepancies:');
+        for (const d of discrepancies) {
+          console.log(`  - ${d.service}: requested=${d.requested}, actual=${d.actual}`);
+        }
+      }
+
       return results;
     } catch (error) {
       console.error('Error checking services:', error);
+      console.error('Error stack:', error.stack);
     }
   }
 
