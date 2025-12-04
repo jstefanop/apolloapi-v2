@@ -12,12 +12,23 @@
 # By default this script does nothing.
 
 /opt/apolloapi/backend/firewall
-#configure gpios
-gpio mode 1 out
-gpio write 1 0
-gpio mode 0 out
-gpio write 0 1
-#configure cpu
-cpufreq-set -c0 -u 1.2GHz -g CONSERVATIVE
+# Detect board type from Armbian release file
+if [ -f /etc/armbian-release ]; then
+    . /etc/armbian-release
+fi
+
+if [ "$BOARD_NAME" = "Solo Node" ]; then
+    # Run Solo Node UI mode detector
+    /opt/apolloapi/backend/utils/set_UI_mode.sh
+else
+    # Configure GPIOs for non–Solo Node boards
+    gpio mode 1 out
+    gpio write 1 0
+    gpio mode 0 out
+    gpio write 0 1
+
+    # Configure CPU for non–Solo Node boards
+    cpufreq-set -c0 -u 1.2GHz -g CONSERVATIVE
+fi
 #mount nvme drive
 /opt/apolloapi/backend/first_run
