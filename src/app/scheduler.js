@@ -2,6 +2,32 @@ const { knex } = require('../db');
 const _ = require('lodash');
 const services = require('../services');
 
+/**
+ * Parse hashrate string (e.g., "810M", "3.2T", "1.5G") to GH/s
+ * @param {string} hashrateStr - Hashrate string with suffix (K, M, G, T, P)
+ * @returns {number} - Hashrate in GH/s
+ */
+function parseHashrateToGhs(hashrateStr) {
+  if (!hashrateStr || typeof hashrateStr !== 'string') return 0;
+
+  const match = hashrateStr.match(/^([\d.]+)([KMGTP]?)$/i);
+  if (!match) return 0;
+
+  const value = parseFloat(match[1]);
+  const suffix = match[2].toUpperCase();
+
+  // Convert to GH/s
+  const multipliers = {
+    K: 1e-6,  // Kilo to Giga
+    M: 1e-3,  // Mega to Giga
+    G: 1,     // Giga (base)
+    T: 1e3,   // Tera to Giga
+    P: 1e6,   // Peta to Giga
+  };
+
+  return value * (multipliers[suffix] || 1);
+}
+
 // Services that need DB initialization
 // All service status updates are handled by ServiceMonitor (single source of truth)
 // Scheduler only reads statuses and performs actions (e.g., collect statistics)
@@ -191,6 +217,62 @@ async function fetchStatistics() {
 }
 
 /**
+ * This function collects statistics from the solo pool (ckpool)
+ */
+async function fetchSoloStatistics() {
+  try {
+    // Check if solo is online
+    const soloService = await knex('service_status')
+      .select('status')
+      .where({ service_name: 'solo' })
+      .first();
+
+    // If solo is not online, return
+    if (!soloService || soloService.status !== 'online') return;
+
+    // Get solo pool statistics
+    const stats = await services.solo.getStats();
+    if (!stats || !stats.pool) return;
+
+    const { pool } = stats;
+
+    // Prepare data for insertion
+    const soloData = {
+      users: pool.Users || 0,
+      workers: pool.Workers || 0,
+      idle: pool.Idle || 0,
+      disconnected: pool.Disconnected || 0,
+      hashrate15m: parseHashrateToGhs(pool.hashrate15m),
+      accepted: pool.accepted || 0,
+      rejected: pool.rejected || 0,
+      bestshare: pool.bestshare || 0,
+    };
+
+    // Insert data into DB in a transaction
+    await knex.transaction(async (trx) => {
+      // Delete old data (older than 7 days)
+      const rowsBefore = await trx('time_series_solo_data').count('* as count');
+      console.log('Solo rows before deletion:', rowsBefore[0].count);
+
+      const deletedRows = await trx('time_series_solo_data')
+        .where('createdAt', '<', knex.raw("datetime('now', '-7 days')"))
+        .del();
+      console.log('Solo deleted rows:', deletedRows);
+
+      const rowsAfter = await trx('time_series_solo_data').count('* as count');
+      console.log('Solo rows after deletion:', rowsAfter[0].count);
+
+      // Insert new data
+      await trx('time_series_solo_data').insert(soloData);
+    });
+
+    console.log('Time series solo data inserted');
+  } catch (error) {
+    console.error('Error while fetching statistics from solo pool:', error);
+  }
+}
+
+/**
  * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
@@ -206,7 +288,8 @@ async function startAllSchedulers() {
 
     // Service status checks are now handled by ServiceMonitor
     // We only need to collect statistics periodically
-    setInterval(fetchStatistics, 30000); // Collect statistics every 30 seconds
+    setInterval(fetchStatistics, process.env.TIMESERIES_INTERVAL || 60000); // Collect miner statistics every 60 seconds
+    setInterval(fetchSoloStatistics, process.env.TIMESERIES_INTERVAL || 60000); // Collect solo statistics every 60 seconds
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }
