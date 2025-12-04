@@ -1,24 +1,24 @@
 const moment = require('moment');
 const { GraphQLError } = require('graphql');
 
-// Interval configuration: default time ranges and SQL date formats
+// Interval configuration: default time ranges and SQL date formats (all in UTC)
 const INTERVAL_CONFIG = {
   tenmin: {
     defaultSubtract: { value: 6, unit: 'hours' },
-    // Group by 10-minute blocks: floor minutes to nearest 10
-    dateFormat: `strftime('%Y-%m-%d %H:', datetime(createdAt, 'localtime')) || printf('%02d', (cast(strftime('%M', datetime(createdAt, 'localtime')) as integer) / 10) * 10) || ':00'`,
+    // Group by 10-minute blocks: floor minutes to nearest 10 (UTC)
+    dateFormat: `strftime('%Y-%m-%d %H:', createdAt) || printf('%02d', (cast(strftime('%M', createdAt) as integer) / 10) * 10) || ':00'`,
     momentUnit: 'minutes',
     momentIncrement: 10,
   },
   hour: {
     defaultSubtract: { value: 1, unit: 'days' },
-    dateFormat: `strftime('%Y-%m-%d %H:00:00', datetime(createdAt, 'localtime'))`,
+    dateFormat: `strftime('%Y-%m-%d %H:00:00', createdAt)`,
     momentUnit: 'hour',
     momentIncrement: 1,
   },
   day: {
     defaultSubtract: { value: 30, unit: 'days' },
-    dateFormat: `strftime('%Y-%m-%d', datetime(createdAt, 'localtime'))`,
+    dateFormat: `strftime('%Y-%m-%d', createdAt)`,
     momentUnit: 'day',
     momentIncrement: 1,
   },
@@ -31,7 +31,7 @@ class TimeSeriesService {
 
   // Get time series statistics
   // source: 'miner' (default) or 'solo'
-  // interval: 'day' (default), 'hour', or '10min'
+  // interval: 'day' (default), 'hour', or 'tenmin'
   async getStats({ startDate, endDate, interval, itemId, source }) {
     try {
       // Set default values if not provided
@@ -40,16 +40,22 @@ class TimeSeriesService {
 
       const config = INTERVAL_CONFIG[interval] || INTERVAL_CONFIG.day;
 
-      // Set default values for startDate and endDate based on interval
+      // Set default values for startDate and endDate based on interval (all in UTC)
       if (!startDate) {
-        startDate = moment().subtract(config.defaultSubtract.value, config.defaultSubtract.unit);
+        startDate = moment.utc().subtract(config.defaultSubtract.value, config.defaultSubtract.unit);
+      } else {
+        startDate = moment.utc(startDate);
       }
-      if (!endDate) endDate = moment();
+      if (!endDate) {
+        endDate = moment.utc();
+      } else {
+        endDate = moment.utc(endDate);
+      }
 
       const format = 'YYYY-MM-DD HH:mm:ssZ';
 
-      startDate = moment(startDate).utc().format(format);
-      endDate = moment(endDate).utc().format(format);
+      startDate = startDate.format(format);
+      endDate = endDate.format(format);
 
       if (!itemId) itemId = 'totals';
 
@@ -94,29 +100,33 @@ class TimeSeriesService {
         .groupByRaw(dateFormat)
         .orderByRaw(dateFormat);
 
-      // Create a result array with values for each interval in the range
+      // Create a result array with values for each interval in the range (all UTC)
       const result = [];
-      let currentDate = moment(startDate);
-      const endDateObj = moment(endDate);
+      let currentDate = moment.utc(startDate);
+      const endDateObj = moment.utc(endDate);
 
-      // Round start date to interval boundary for tenmin
+      // Round start date to interval boundary (in UTC)
       if (interval === 'tenmin') {
         const minutes = currentDate.minutes();
-        currentDate.minutes(Math.floor(minutes / 10) * 10).seconds(0);
+        currentDate.minutes(Math.floor(minutes / 10) * 10).seconds(0).milliseconds(0);
+      } else if (interval === 'hour') {
+        currentDate.minutes(0).seconds(0).milliseconds(0);
+      } else if (interval === 'day') {
+        currentDate.hours(0).minutes(0).seconds(0).milliseconds(0);
       }
 
       while (currentDate <= endDateObj) {
-        // Format the current date
-        const formattedDate = currentDate.utc().format();
+        // Format the current date for output (ISO 8601 UTC)
+        const formattedDate = currentDate.format();
+        
+        // Format for comparison with DB data
+        const compareFormat = interval === 'day' ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:mm';
+        const currentCompare = currentDate.format(compareFormat);
 
         // Find data for the current interval
         const dataForDate = aggregateData.find((entry) => {
-          const entryDate = moment(entry.date, 'YYYY-MM-DD HH:mm:ss');
-          if (interval === 'tenmin') {
-            // Compare with 10-minute precision
-            return entryDate.format('YYYY-MM-DD HH:mm') === currentDate.format('YYYY-MM-DD HH:mm');
-          }
-          return entryDate.isSame(currentDate, config.momentUnit);
+          const entryDate = moment.utc(entry.date, 'YYYY-MM-DD HH:mm:ss');
+          return entryDate.format(compareFormat) === currentCompare;
         });
 
         // Add data or default values to the result
@@ -169,29 +179,33 @@ class TimeSeriesService {
         .groupByRaw(dateFormat)
         .orderByRaw(dateFormat);
 
-      // Create a result array with values for each interval in the range
+      // Create a result array with values for each interval in the range (all UTC)
       const result = [];
-      let currentDate = moment(startDate);
-      const endDateObj = moment(endDate);
+      let currentDate = moment.utc(startDate);
+      const endDateObj = moment.utc(endDate);
 
-      // Round start date to interval boundary for tenmin
+      // Round start date to interval boundary (in UTC)
       if (interval === 'tenmin') {
         const minutes = currentDate.minutes();
-        currentDate.minutes(Math.floor(minutes / 10) * 10).seconds(0);
+        currentDate.minutes(Math.floor(minutes / 10) * 10).seconds(0).milliseconds(0);
+      } else if (interval === 'hour') {
+        currentDate.minutes(0).seconds(0).milliseconds(0);
+      } else if (interval === 'day') {
+        currentDate.hours(0).minutes(0).seconds(0).milliseconds(0);
       }
 
       while (currentDate <= endDateObj) {
-        // Format the current date
-        const formattedDate = currentDate.utc().format();
+        // Format the current date for output (ISO 8601 UTC)
+        const formattedDate = currentDate.format();
+        
+        // Format for comparison with DB data
+        const compareFormat = interval === 'day' ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:mm';
+        const currentCompare = currentDate.format(compareFormat);
 
         // Find data for the current interval
         const dataForDate = aggregateData.find((entry) => {
-          const entryDate = moment(entry.date, 'YYYY-MM-DD HH:mm:ss');
-          if (interval === 'tenmin') {
-            // Compare with 10-minute precision
-            return entryDate.format('YYYY-MM-DD HH:mm') === currentDate.format('YYYY-MM-DD HH:mm');
-          }
-          return entryDate.isSame(currentDate, config.momentUnit);
+          const entryDate = moment.utc(entry.date, 'YYYY-MM-DD HH:mm:ss');
+          return entryDate.format(compareFormat) === currentCompare;
         });
 
         // Add data or default values to the result
