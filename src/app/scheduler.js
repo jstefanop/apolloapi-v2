@@ -194,12 +194,12 @@ async function fetchStatistics() {
 
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
-      // Delete old data (older than 7 days)
+      // Delete old data (older than 30 days)
       const rowsBefore = await trx('time_series_data').count('* as count');
       console.log('Rows before deletion:', rowsBefore[0].count);
 
       const deletedRows = await trx('time_series_data')
-        .where('createdAt', '<', knex.raw("datetime('now', '-7 days')"))
+        .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
       console.log('Deleted rows:', deletedRows);
 
@@ -250,12 +250,12 @@ async function fetchSoloStatistics() {
 
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
-      // Delete old data (older than 7 days)
+      // Delete old data (older than 30 days)
       const rowsBefore = await trx('time_series_solo_data').count('* as count');
       console.log('Solo rows before deletion:', rowsBefore[0].count);
 
       const deletedRows = await trx('time_series_solo_data')
-        .where('createdAt', '<', knex.raw("datetime('now', '-7 days')"))
+        .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
       console.log('Solo deleted rows:', deletedRows);
 

@@ -13,11 +13,12 @@ const servicesService = require('./services')(knex);
 const logsService = require('./logs')(knex);
 const soloService = require('./solo')(knex, utils);
 
-// Create service monitor with access to miner and node services
+// Create service monitor with access to miner, node and solo services
 // This allows it to check application-level status in addition to systemd
 const serviceMonitor = require('./serviceMonitor')(knex, {
   miner: minerService,
-  node: nodeService
+  node: nodeService,
+  solo: soloService
 });
 
 // Export all services
