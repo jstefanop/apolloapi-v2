@@ -6,6 +6,7 @@ describe('Settings API', () => {
   beforeEach(async () => {
     // Reset settings to default values before each test
     await knex('settings').del();
+    // Use raw SQLite datetime function for consistent timestamp format
     await knex('settings').insert({
       miner_mode: 'balanced',
       voltage: 12.0,
@@ -16,7 +17,9 @@ describe('Settings API', () => {
       left_sidebar_visibility: true,
       left_sidebar_extended: true,
       right_sidebar_visibility: true,
-      created_at: new Date()
+      btcsig: 'mined by Solo Apollo',
+      node_rpc_password: 'testpassword',
+      created_at: knex.fn.now()
     });
   });
 
@@ -214,67 +217,87 @@ describe('Settings API', () => {
   });
 
   describe('btcsig validation', () => {
+    // btcsig is now stored as user-customizable part only (max 26 chars)
+    // The full signature will be: /FutureBit-{btcsig}/
     const services = require('../src/services');
-    const utils = require('../src/utils');
-    const settingsService = services.settings(knex, utils);
+    const settingsService = services.settings;
 
     it('should accept valid btcsig format', async () => {
       const result = await settingsService.update({
-        btcsig: '/FutureBit-Apollo/'
+        btcsig: 'mined by Solo Apollo'
       });
 
-      expect(result.btcsig).toBe('/FutureBit-Apollo/');
+      expect(result.btcsig).toBe('mined by Solo Apollo');
     });
 
     it('should accept btcsig with spaces and special characters', async () => {
       const result = await settingsService.update({
-        btcsig: '/mined by FutureBit Apollo #123!/'
+        btcsig: 'Apollo #123!'
       });
 
-      expect(result.btcsig).toBe('/mined by FutureBit Apollo #123!/');
+      expect(result.btcsig).toBe('Apollo #123!');
     });
 
-    it('should reject btcsig without leading slash', async () => {
-      await expect(
-        settingsService.update({
-          btcsig: 'FutureBit-Apollo/'
-        })
-      ).rejects.toThrow('btcsig must start and end with "/"');
+    it('should accept btcsig at max length (26 chars)', async () => {
+      const maxLengthString = 'a'.repeat(26);
+      const result = await settingsService.update({
+        btcsig: maxLengthString
+      });
+
+      expect(result.btcsig).toBe(maxLengthString);
     });
 
-    it('should reject btcsig without trailing slash', async () => {
-      await expect(
-        settingsService.update({
-          btcsig: '/FutureBit-Apollo'
-        })
-      ).rejects.toThrow('btcsig must start and end with "/"');
-    });
-
-    it('should reject btcsig exceeding 100 characters', async () => {
-      const longString = '/a'.repeat(50) + '/'; // Creates a string > 100 chars
+    it('should reject btcsig exceeding 26 characters', async () => {
+      const longString = 'a'.repeat(27);
       
       await expect(
         settingsService.update({
           btcsig: longString
         })
-      ).rejects.toThrow('btcsig must not exceed 100 characters');
+      ).rejects.toThrow('btcsig must not exceed 26 characters');
+    });
+
+    it('should reject btcsig containing slashes', async () => {
+      await expect(
+        settingsService.update({
+          btcsig: 'Apollo/Test'
+        })
+      ).rejects.toThrow('btcsig cannot contain "/" characters');
     });
 
     it('should reject btcsig with non-ASCII characters', async () => {
       await expect(
         settingsService.update({
-          btcsig: '/FutureBit-Apollo-🚀/'
+          btcsig: 'Apollo-🚀'
         })
       ).rejects.toThrow('btcsig must contain only printable ASCII characters');
     });
 
-    it('should accept empty btcsig', async () => {
+    it('should set default btcsig when null is provided', async () => {
       const result = await settingsService.update({
         btcsig: null
       });
 
-      // Should use default value
-      expect(result).toBeDefined();
+      // Should use default value "mined by Solo Apollo"
+      expect(result.btcsig).toBe('mined by Solo Apollo');
+    });
+
+    it('should set default btcsig when empty string is provided', async () => {
+      const result = await settingsService.update({
+        btcsig: ''
+      });
+
+      // Should use default value "mined by Solo Apollo"
+      expect(result.btcsig).toBe('mined by Solo Apollo');
+    });
+
+    it('should set default btcsig when whitespace only is provided', async () => {
+      const result = await settingsService.update({
+        btcsig: '   '
+      });
+
+      // Should use default value "mined by Solo Apollo"
+      expect(result.btcsig).toBe('mined by Solo Apollo');
     });
   });
 });

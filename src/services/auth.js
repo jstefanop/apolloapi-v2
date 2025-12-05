@@ -2,7 +2,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('config');
 const { exec } = require('child_process');
-const { AuthenticationError } = require('@apollo/server');
+const { GraphQLError } = require('graphql');
+
+// Helper function to check if we're in production environment
+const isProduction = () => process.env.NODE_ENV === 'production';
 
 class AuthService {
   constructor(knex, utils) {
@@ -16,14 +19,18 @@ class AuthService {
     const [setup] = await this.knex('setup').select('*').limit(1);
 
     if (!setup) {
-      throw new AuthenticationError('Setup not finished');
+      throw new GraphQLError('Setup not finished', {
+        extensions: { code: 'UNAUTHENTICATED' }
+      });
     }
 
     // Compare the password
     const isPasswordValid = await bcrypt.compare(password, setup.password);
 
     if (!isPasswordValid) {
-      throw new AuthenticationError('Invalid password');
+      throw new GraphQLError('Invalid password', {
+        extensions: { code: 'UNAUTHENTICATED' }
+      });
     }
 
     // Generate JWT token
@@ -60,7 +67,7 @@ class AuthService {
     });
 
     // Also update the system password (only in production)
-    if (process.env.NODE_ENV !== 'development') {
+    if (isProduction()) {
       await this._changeSystemPassword(password);
     }
   }
@@ -83,8 +90,8 @@ class AuthService {
         password: hashedPassword
       });
 
-      // Set the system password
-      if (process.env.NODE_ENV !== 'development') {
+      // Set the system password (only in production)
+      if (isProduction()) {
         await this._changeSystemPassword(password);
       }
     } catch (err) {

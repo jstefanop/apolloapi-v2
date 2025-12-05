@@ -42,6 +42,12 @@ const generate = async function (pools = null, settings = null ) {
 
 	const mainPool = _.minBy(pools, 'index');
 
+	// If no pool configured, skip miner configuration
+	if (!mainPool || !mainPool.url) {
+		console.log('No pool configured, skipping miner configuration');
+		return;
+	}
+
 	// Get miner mode
 	let minerMode = settings.minerMode;
 

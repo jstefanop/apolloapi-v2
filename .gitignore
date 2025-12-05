@@ -82,6 +82,8 @@ backend/ckpool/ckpool.conf
 backend/ckpool/logs
 backend/start_swap.sh
 backend/apollo-miner/mode
+backend/node/api.conf
+backend/node/user.conf
 
 # Frontend symbolic link
 

@@ -70,34 +70,46 @@ class SettingsService {
   }
 
   // Validate btcsig format
+  // User provides only the customizable part (max 26 chars)
+  // The final coinbase signature will be: /FutureBit-{btcsig}/
   _validateBtcsig(btcsig) {
     if (!btcsig) {
-      return; // Allow empty/null values
+      return; // Allow empty/null values - will use default
     }
 
-    // Check if it starts and ends with '/'
-    if (!btcsig.startsWith('/') || !btcsig.endsWith('/')) {
-      throw new Error('btcsig must start and end with "/" (e.g., /FutureBit-Apollo/)');
+    // Check maximum length (26 characters for user part)
+    // Final signature will be: /FutureBit-{btcsig}/ = 10 + 26 + 2 = 38 chars max
+    if (btcsig.length > 26) {
+      throw new Error('btcsig must not exceed 26 characters');
     }
 
-    // Check maximum length (100 bytes limit for coinbase signature)
-    if (btcsig.length > 100) {
-      throw new Error('btcsig must not exceed 100 characters');
-    }
-
-    // Check for printable ASCII characters only (32-126)
+    // Check for printable ASCII characters only (32-126), excluding slashes
     const isPrintableAscii = /^[\x20-\x7E]*$/.test(btcsig);
     if (!isPrintableAscii) {
       throw new Error('btcsig must contain only printable ASCII characters');
+    }
+
+    // Disallow slashes as they're used as delimiters
+    if (btcsig.includes('/')) {
+      throw new Error('btcsig cannot contain "/" characters');
     }
   }
 
   // Update settings
   async update(settingsInput) {
     try {
-      // Validate btcsig if provided
+      // Handle btcsig: if null/empty, use default value
+      // Default btcsig will become "/FutureBit-mined by Solo Apollo/" when composed
+      const DEFAULT_BTCSIG = 'mined by Solo Apollo';
+      
       if (settingsInput.btcsig !== undefined) {
-        this._validateBtcsig(settingsInput.btcsig);
+        if (!settingsInput.btcsig || settingsInput.btcsig.trim() === '') {
+          // Set default if null or empty
+          settingsInput.btcsig = DEFAULT_BTCSIG;
+        } else {
+          // Validate non-empty btcsig
+          this._validateBtcsig(settingsInput.btcsig);
+        }
       }
 
       // Get existing settings before update

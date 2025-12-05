@@ -16,9 +16,15 @@ const execPromise = util.promisify(exec);
 const isProduction = () => process.env.NODE_ENV === 'production';
 
 // Path configuration for Bitcoin and ckpool
-const configBitcoinFilePath = path.resolve(
+// Note: bitcoin.conf is now managed by node_start.sh - we only manage api.conf and user.conf
+const configBitcoinApiConfPath = path.resolve(
   __dirname,
-  '../backend/node/bitcoin.conf'
+  '../backend/node/api.conf'
+);
+
+const configBitcoinUserConfPath = path.resolve(
+  __dirname,
+  '../backend/node/user.conf'
 );
 
 const configCkpoolFilePath = path.resolve(
@@ -105,19 +111,38 @@ module.exports.auth = {
       });
 
       try {
-        // Check if files exist before trying to modify them
-        await fsPromises.access(configBitcoinFilePath);
-        await fsPromises.access(configCkpoolFilePath);
+        // Create directories if needed
+        const bitcoinDir = path.dirname(configBitcoinApiConfPath);
+        const ckpoolDir = path.dirname(configCkpoolFilePath);
 
-        // Update Bitcoin configuration file
-        await execWithSudo(
-          `sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinFilePath}`
-        );
+        await fsPromises.mkdir(bitcoinDir, { recursive: true });
+        await fsPromises.mkdir(ckpoolDir, { recursive: true });
+
+        // Update api.conf with new password (sed will replace existing or we'll rebuild it)
+        try {
+          await fsPromises.access(configBitcoinApiConfPath);
+          // File exists, update the password line
+          await execWithSudo(
+            `sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinApiConfPath}`
+          );
+        } catch (accessErr) {
+          // api.conf doesn't exist, create it with just the password
+          await fsPromises.writeFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`);
+          console.log('Created api.conf with new password');
+        }
 
         // Update ckpool configuration file
-        await execWithSudo(
-          `sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
-        );
+        try {
+          await fsPromises.access(configCkpoolFilePath);
+          await execWithSudo(
+            `sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
+          );
+        } catch (ckpoolErr) {
+          // ckpool.conf doesn't exist, create basic one
+          const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
+          await fsPromises.writeFile(configCkpoolFilePath, ckpoolConfig);
+          console.log('Created ckpool.conf');
+        }
 
         // Restart the node service
         await mockSystemctl('restart', 'node');
@@ -126,29 +151,10 @@ module.exports.auth = {
         if (settings?.nodeEnableSoloMining) {
           await mockSystemctl('restart', 'ckpool');
         }
+
+        console.log('Password updated successfully in api.conf and ckpool.conf');
       } catch (err) {
         console.log('Error updating configuration files:', err.message);
-
-        // Try to create the files if they don't exist
-        try {
-          // Create directories if needed
-          const bitcoinDir = path.dirname(configBitcoinFilePath);
-          const ckpoolDir = path.dirname(configCkpoolFilePath);
-
-          await fsPromises.mkdir(bitcoinDir, { recursive: true });
-          await fsPromises.mkdir(ckpoolDir, { recursive: true });
-
-          // Create basic configuration files
-          const bitcoinConfig = `server=1\nrpcuser=futurebit\nrpcpassword=${password}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
-          await fsPromises.writeFile(configBitcoinFilePath, bitcoinConfig);
-
-          const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
-          await fsPromises.writeFile(configCkpoolFilePath, ckpoolConfig);
-
-          console.log('Created configuration files successfully');
-        } catch (createErr) {
-          console.log('Error creating configuration files:', createErr.message);
-        }
       }
     } catch (err) {
       console.log('Error in changeNodeRpcPassword:', err.message);
@@ -267,6 +273,10 @@ module.exports.auth = {
       }
 
       // Create ckpool configuration
+      // btcsig is stored as user-customizable part only, compose full signature here
+      const userBtcsig = settings.btcsig || 'mined by Solo Apollo';
+      const fullBtcsig = `/FutureBit-${userBtcsig}/`;
+      
       const ckpoolConf = {
         btcd: [
           {
@@ -277,7 +287,7 @@ module.exports.auth = {
           },
         ],
         logdir: '/opt/apolloapi/backend/ckpool/logs',
-        btcsig: settings.btcsig || '/FutureBit-Apollo/',
+        btcsig: fullBtcsig,
         zmqblock: 'tcp://127.0.0.1:28332',
       };
 
@@ -300,7 +310,8 @@ module.exports.auth = {
     }
   },
 
-  // Manage Bitcoin configuration
+  // Manage Bitcoin configuration (api.conf and user.conf)
+  // Note: bitcoin.conf is managed by node_start.sh and includes api.conf and user.conf
   async manageBitcoinConf(settings) {
     try {
       // Ensure settings is valid
@@ -327,27 +338,11 @@ module.exports.auth = {
 
       // Create directories if they don't exist
       try {
-        const configDir = path.dirname(configBitcoinFilePath);
+        const configDir = path.dirname(configBitcoinApiConfPath);
         await fsPromises.mkdir(configDir, { recursive: true });
       } catch (dirErr) {
         console.log('Error creating directory:', dirErr.message);
       }
-
-      // Check current configuration file if it exists
-      let currentConf = '';
-      let currentConfBase64 = '';
-
-      try {
-        currentConf = await fsPromises.readFile(configBitcoinFilePath, 'utf8');
-        currentConfBase64 = Buffer.from(currentConf).toString('base64');
-      } catch (readErr) {
-        console.log('Bitcoin configuration file does not exist, will create a new one');
-      }
-
-      // Build new configuration
-      const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword || 'default_password'}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
-      let conf = defaultConf;
-      conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
 
       // Setup ckpool configuration
       await this.manageCkpoolConf(settings);
@@ -379,9 +374,22 @@ module.exports.auth = {
         }
       }
 
+      // ===== BUILD api.conf =====
+      // Contains: rpcpassword, Tor settings, maxconnections, LAN access settings
+      // File is always created
+      let apiConf = '# API managed Bitcoin configuration\n';
+
+      // RPC password
+      apiConf += `rpcpassword=${settings.nodeRpcPassword || 'default_password'}\n`;
+
       // Configure Tor
       if (settings.nodeEnableTor) {
-        conf += `\n#TOR_START\nproxy=127.0.0.1:9050\nlisten=1\nbind=127.0.0.1\nonlynet=onion\ndnsseed=0\ndns=0\n#TOR_END`;
+        apiConf += `proxy=127.0.0.1:9050\n`;
+        apiConf += `listen=1\n`;
+        apiConf += `bind=127.0.0.1\n`;
+        apiConf += `onlynet=onion\n`;
+        apiConf += `dnsseed=0\n`;
+        apiConf += `dns=0\n`;
         try {
           if (isProduction()) {
             await mockSystemctl('enable', 'tor');
@@ -407,59 +415,96 @@ module.exports.auth = {
 
       // Configure max connections
       if (settings.nodeMaxConnections) {
-        conf += `\nmaxconnections=${settings.nodeMaxConnections}`;
-      } else {
-        conf += '\nmaxconnections=64';
+        apiConf += `maxconnections=${settings.nodeMaxConnections}\n`;
       }
 
       // Configure LAN access
       if (settings.nodeAllowLan) {
-        const lanNetwork = this.getSystemNetwork();
-        conf += `\nrpcbind=0.0.0.0\nrpcallowip=0.0.0.0/0`;
+        apiConf += `rpcbind=0.0.0.0\n`;
+        apiConf += `rpcallowip=0.0.0.0/0\n`;
       }
 
-      // Add user configuration if present
+      // ===== BUILD user.conf =====
+      // Contains: nodeUserConf (user custom configuration)
+      // File is always created, even if empty (with default comment)
+      let userConf = '# User custom Bitcoin configuration\n';
+
       if (settings.nodeUserConf) {
         const userConfLines = settings.nodeUserConf.split('\n');
         const formattedUserConf = [];
 
-        // List of options to exclude
-        const excludedOptions = ['rpcallowip', 'rpcbind', 'maxconnections'];
+        // List of options managed by api.conf that should be excluded from user.conf
+        const excludedOptions = [
+          'rpcpassword',
+          'rpcallowip',
+          'rpcbind',
+          'maxconnections',
+          'proxy',
+          'listen',
+          'bind',
+          'onlynet',
+          'dnsseed',
+          'dns'
+        ];
 
         userConfLines.forEach((line) => {
-          const variable = line.split('=')[0].trim();
-
-          // Check if the variable is not in the excluded options and not in default conf
-          if (!defaultConf.includes(variable) && !excludedOptions.includes(variable)) {
-            formattedUserConf.push(line.trim());
+          const trimmedLine = line.trim();
+          if (!trimmedLine || trimmedLine.startsWith('#')) {
+            // Keep empty lines and comments
+            formattedUserConf.push(trimmedLine);
+          } else {
+            const variable = trimmedLine.split('=')[0].trim();
+            // Check if the variable is not in the excluded options
+            if (!excludedOptions.includes(variable)) {
+              formattedUserConf.push(trimmedLine);
+            }
           }
         });
 
-        if (formattedUserConf.length) {
-          const filteredUserConf = formattedUserConf.join('\n');
-          conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
+        const filteredConf = formattedUserConf.join('\n').trim();
+        if (filteredConf) {
+          userConf = filteredConf + '\n';
         }
       }
 
-      // Ensure there are no trailing characters or spaces
-      conf = conf.trim() + '\n';
+      // ===== CHECK AND WRITE api.conf =====
+      let currentApiConf = '';
+      try {
+        currentApiConf = await fsPromises.readFile(configBitcoinApiConfPath, 'utf8');
+      } catch (readErr) {
+        console.log('api.conf does not exist, will create a new one');
+      }
 
-      // Convert to base64 to check if there are changes
-      const confBase64 = Buffer.from(conf).toString('base64');
-
-      // Only write the file if there are changes
-      if (currentConfBase64 === confBase64) {
-        console.log('No changes to bitcoin.conf file');
-      } else {
-        console.log('Writing Bitcoin conf file');
-
+      if (currentApiConf !== apiConf) {
+        console.log('Writing api.conf');
         try {
-          // Write the configuration file
-          await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
-          console.log('Bitcoin configuration saved successfully');
+          await fsPromises.writeFile(configBitcoinApiConfPath, apiConf, 'utf8');
+          console.log('api.conf saved successfully');
         } catch (writeErr) {
-          console.log('Error writing Bitcoin configuration:', writeErr.message);
+          console.log('Error writing api.conf:', writeErr.message);
         }
+      } else {
+        console.log('No changes to api.conf');
+      }
+
+      // ===== CHECK AND WRITE user.conf =====
+      let currentUserConf = '';
+      try {
+        currentUserConf = await fsPromises.readFile(configBitcoinUserConfPath, 'utf8');
+      } catch (readErr) {
+        console.log('user.conf does not exist, will create a new one');
+      }
+
+      if (currentUserConf !== userConf) {
+        console.log('Writing user.conf');
+        try {
+          await fsPromises.writeFile(configBitcoinUserConfPath, userConf, 'utf8');
+          console.log('user.conf saved successfully');
+        } catch (writeErr) {
+          console.log('Error writing user.conf:', writeErr.message);
+        }
+      } else {
+        console.log('No changes to user.conf');
       }
 
     } catch (err) {

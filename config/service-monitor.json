@@ -8,6 +8,12 @@
     "apollo-api",
     "apollo-ui-v2"
   ],
+  "developmentEnabled": true,
+  "developmentServices": [
+    "apollo-miner",
+    "node",
+    "ckpool"
+  ],
   "logLevel": "info",
   "autoStart": true,
   "systemdIntegration": true

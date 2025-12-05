@@ -169,7 +169,7 @@ beforeAll(async () => {
         table.boolean('node_enable_solo_mining').defaultTo(false);
         table.integer('node_max_connections').defaultTo(64);
         table.boolean('node_allow_lan').defaultTo(false);
-        table.string('btcsig').defaultTo('/FutureBit-Apollo/');
+        table.string('btcsig').defaultTo('mined by Solo Apollo');
         table.string('node_software').defaultTo('core-28.1');
         table.timestamps(true, true);
       });
@@ -228,7 +228,22 @@ beforeAll(async () => {
       right_sidebar_visibility: true,
       node_max_connections: 64,
       node_rpc_password: 'testpassword',
-      created_at: new Date()
+      created_at: knex.fn.now()
+    });
+  }
+
+  // Inserisci pool di default per i test
+  const poolsCount = await knex('pools').count('* as count').first();
+  if (!poolsCount || poolsCount.count === 0) {
+    await knex('pools').insert({
+      enabled: true,
+      donation: 0,
+      url: 'stratum+tcp://pool.test.com:3333',
+      username: 'testuser',
+      password: 'x',
+      proxy: null,
+      index: 0,
+      created_at: knex.fn.now()
     });
   }
 

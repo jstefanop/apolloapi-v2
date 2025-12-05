@@ -61,6 +61,9 @@ class ServiceMonitor {
         'apollo-api',
         'apollo-ui-v2',
       ],
+      // Development mode settings - only monitor core services without systemd
+      developmentEnabled: true,
+      developmentServices: ['apollo-miner', 'node', 'ckpool'],
       logLevel: 'info',
       autoStart: true,
       systemdIntegration: true,
@@ -79,15 +82,22 @@ class ServiceMonitor {
       return;
     }
 
-    // Skip monitoring in development environment
+    // In development mode, check if development monitoring is enabled
     if (this.isDevelopment()) {
-      console.log(
-        'Service monitor skipped in development environment - status managed by API calls only'
-      );
-      return;
+      if (!this.config.developmentEnabled) {
+        console.log(
+          'Service monitor skipped in development environment - status managed by API calls only'
+        );
+        return;
+      }
+      // Use only development services (miner, node, solo) without systemd
+      this.systemdServices = this.config.developmentServices || ['apollo-miner', 'node', 'ckpool'];
+      console.log('Starting service monitor in DEVELOPMENT mode (no systemd, app-level checks only)...');
+      console.log(`Monitoring services: ${this.systemdServices.join(', ')}`);
+    } else {
+      console.log('Starting service monitor...');
     }
 
-    console.log('Starting service monitor...');
     this.monitoring = true;
 
     // First immediate check
@@ -189,17 +199,13 @@ class ServiceMonitor {
   // requested_status to reflect reality instead of fighting user actions.
   async checkServiceStatus(serviceName) {
     try {
-      // Skip systemd checks in development environment
-      if (this.isDevelopment()) {
-        return {
-          serviceName,
-          status: 'unknown',
-          systemdStatus: 'skipped_dev',
-        };
-      }
-
       // Get database service name
       const dbServiceName = this.getDatabaseServiceName(serviceName);
+
+      // In development mode, use application-level checks only (no systemd)
+      if (this.isDevelopment()) {
+        return await this.checkServiceStatusDevelopment(serviceName, dbServiceName);
+      }
 
       // Special handling for Bitcoin node when it's remote
       if (serviceName === 'node' && (await this.isRemoteNode())) {
@@ -229,7 +235,10 @@ class ServiceMonitor {
             applicationOnline = nodeStatus?.online?.status;
           }
         } catch (error) {
-          // Continue with systemd check as fallback
+          // RPC connection failed - mark as error so we don't show "online" 
+          // when systemd is active but app can't connect (e.g., wrong port for testnet)
+          console.log(`Application check failed for ${serviceName}: ${error.message}`);
+          applicationOnline = 'rpc_error';
         }
       }
 
@@ -391,8 +400,14 @@ class ServiceMonitor {
       }
       // Special handling for services with application check (miner, node)
       else if (applicationOnline) {
-        // If systemd says active but app says offline/pending, service is probably starting up
+        // If systemd says active but RPC connection failed, it's a config error
+        // (e.g., wrong port for testnet, wrong credentials, etc.)
         if ((status === 'active' || status === 'activating') && 
+            applicationOnline === 'rpc_error') {
+          finalStatus = 'error';
+        }
+        // If systemd says active but app says offline/pending, service is probably starting up
+        else if ((status === 'active' || status === 'activating') && 
             (applicationOnline === 'offline' || applicationOnline === 'error')) {
           finalStatus = 'pending';
         }
@@ -431,6 +446,71 @@ class ServiceMonitor {
         serviceName: dbServiceName,
         status: 'unknown',
         systemdStatus: 'error',
+      };
+    }
+  }
+
+  // Check service status in development mode (no systemd, app-level checks only)
+  async checkServiceStatusDevelopment(serviceName, dbServiceName) {
+    try {
+      let status = 'unknown';
+      let checkMethod = 'none';
+
+      // Use application-level checks for each service
+      if (serviceName === 'apollo-miner' && this.services?.miner) {
+        try {
+          const minerStatus = await this.services.miner.checkOnline();
+          status = minerStatus?.online?.status || 'unknown';
+          checkMethod = 'miner.checkOnline()';
+        } catch (error) {
+          console.log(`Dev check: miner checkOnline failed: ${error.message}`);
+          status = 'offline';
+          checkMethod = 'miner.checkOnline() failed';
+        }
+      } else if (serviceName === 'node' && this.services?.node) {
+        try {
+          const nodeStatus = await this.services.node.checkOnline();
+          status = nodeStatus?.online?.status || 'unknown';
+          checkMethod = 'node.checkOnline()';
+        } catch (error) {
+          console.log(`Dev check: node checkOnline failed: ${error.message}`);
+          status = 'offline';
+          checkMethod = 'node.checkOnline() failed';
+        }
+      } else if (serviceName === 'ckpool' && this.services?.solo) {
+        try {
+          const soloStatus = await this.services.solo.getStatus();
+          // Map solo status to our standard status
+          if (soloStatus === 'active' || soloStatus === 'running') {
+            status = 'online';
+          } else if (soloStatus === 'inactive' || soloStatus === 'stopped') {
+            status = 'offline';
+          } else {
+            status = soloStatus || 'unknown';
+          }
+          checkMethod = 'solo.getStatus()';
+        } catch (error) {
+          console.log(`Dev check: solo getStatus failed: ${error.message}`);
+          status = 'offline';
+          checkMethod = 'solo.getStatus() failed';
+        }
+      }
+
+      // Update database with the status
+      await this.updateServiceStatus(dbServiceName, status, null);
+
+      return {
+        serviceName: dbServiceName,
+        status,
+        systemdStatus: `dev:${checkMethod}`,
+      };
+    } catch (error) {
+      console.error(`Error in dev check for ${serviceName}:`, error.message);
+      await this.updateServiceStatus(dbServiceName, 'unknown', null);
+      return {
+        serviceName: dbServiceName,
+        status: 'unknown',
+        systemdStatus: 'dev:error',
       };
     }
   }
