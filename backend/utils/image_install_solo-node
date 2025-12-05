@@ -185,6 +185,9 @@ echo -e "${GREEN} ---> Copied $NODE_SOFTWARE bitcoind binary${NC}"
 
 cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
 
+#Create new api/user config files
+touch $APOLLO_DIR/backend/node/api.conf
+touch $APOLLO_DIR/backend/node/user.conf
 
 ### ckpool ###
 #########################
@@ -243,6 +246,7 @@ systemctl enable apollo-ui-v2.service
 systemctl enable rc-local.service
 systemctl enable apollo-miner.service
 systemctl enable node.service
+systemctl enable ckpool.service
 
 
 echo -e "${GREEN} --->  Enabled apollo services${NC}"
