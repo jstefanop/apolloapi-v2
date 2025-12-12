@@ -14,6 +14,13 @@ IBD_16G_CONF="${CONF_BASE}/bitcoin-ibd-16gb.conf"
 BITCOIN_CONF_DST="${NODE_DIR}/bitcoin.conf"
 
 choose_ibd_conf() {
+	#Set zram to 1GB during IBD 
+	
+	sudo swapoff /dev/zram0
+	sudo zramctl --size=1G /dev/zram0
+	sudo mkswap /dev/zram0
+	sudo swapon /dev/zram0
+
     # Read total RAM in kB
     local mem_kb
     mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
