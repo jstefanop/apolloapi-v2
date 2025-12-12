@@ -1,6 +1,30 @@
-const { join } = require('path')
-const { loadGraphql } = require('backend-helpers')
+const { makeExecutableSchema } = require('@graphql-tools/schema');
+const { loadFilesSync } = require('@graphql-tools/load-files');
+const { mergeTypeDefs, mergeResolvers } = require('@graphql-tools/merge');
+const path = require('path');
+const { authDirectiveTransformer } = require('./directives/auth');
 
-const schema = loadGraphql(join(__dirname, 'graphqlModules'))
+// Load type definitions from separate files
+const typesArray = loadFilesSync(path.join(__dirname, './typeDefs'), {
+  extensions: ['js', 'gql']
+});
 
-module.exports = schema
+// Load resolvers from separate files
+const resolversArray = loadFilesSync(path.join(__dirname, './resolvers'), {
+  extensions: ['js']
+});
+
+// Merge type definitions and resolvers
+const typeDefs = mergeTypeDefs(typesArray);
+const resolvers = mergeResolvers(resolversArray);
+
+// Create executable schema
+let schema = makeExecutableSchema({
+  typeDefs,
+  resolvers
+});
+
+// Apply directive transformers
+schema = authDirectiveTransformer(schema);
+
+module.exports = schema;

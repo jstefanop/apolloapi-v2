@@ -5,7 +5,7 @@ cat << EOF
   "hostname": "orangepizero",
   "operatingSystem": "Ubuntu 18.04 bionic",
   "uptime": "2018-11-27 07:09:13",
-  "loadAverage": "0.00 0.00 0.00 1/118 27205",
+  "loadAverage": "6.38 5.69 4.38 3/612 114406",
   "architecture": "armv7l",
   "temperature": "41745",
   "minerTemperature": "78.92",

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  apollo-test:
+    build: .
+    container_name: apollo-install-test
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    ports:
+      - "2222:22"      # SSH
+      - "8080:80"      # HTTP (redirected to 3000)
+      - "3001:3000"    # Apollo UI
+      - "5003:5000"    # Apollo API
+      - "8334:8333"    # Bitcoin
+      - "3334:3333"    # Stratum
+    environment:
+      - container=docker
+    restart: "no"

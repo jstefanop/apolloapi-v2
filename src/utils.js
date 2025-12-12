@@ -7,10 +7,24 @@ const { knex } = require('./db');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const os = require('os');
+const util = require('util');
 
-const configBitcoinFilePath = path.resolve(
+// Convert exec to use promises
+const execPromise = util.promisify(exec);
+
+// Helper function to check if we're in production environment
+const isProduction = () => process.env.NODE_ENV === 'production';
+
+// Path configuration for Bitcoin and ckpool
+// Note: bitcoin.conf is now managed by node_start.sh - we only manage api.conf and user.conf
+const configBitcoinApiConfPath = path.resolve(
   __dirname,
-  '../backend/node/bitcoin.conf'
+  '../backend/node/api.conf'
+);
+
+const configBitcoinUserConfPath = path.resolve(
+  __dirname,
+  '../backend/node/user.conf'
 );
 
 const configCkpoolFilePath = path.resolve(
@@ -23,11 +37,47 @@ const configCkpoolServiceFilePath = path.resolve(
   '../backend/systemd/ckpool.service'
 );
 
+// Helper function to execute commands with sudo only in production
+const execWithSudo = async (command) => {
+  try {
+    const cmdToRun = isProduction()
+      ? `sudo ${command}`
+      : command;
+
+    console.log(`Executing command: ${cmdToRun}`);
+    const { stdout, stderr } = await execPromise(cmdToRun);
+
+    if (stderr) {
+      console.error(`Command stderr: ${stderr}`);
+    }
+
+    return stdout.trim();
+  } catch (error) {
+    if (!isProduction()) {
+      console.log(`Command would fail in production: ${error.message}`);
+      return "dev-mode-success";
+    }
+    throw error;
+  }
+};
+
+// Helper function to mock systemctl commands in development
+const mockSystemctl = async (action, service) => {
+  if (isProduction()) {
+    return execWithSudo(`systemctl ${action} ${service}`);
+  } else {
+    console.log(`[DEV] Mock systemctl ${action} ${service}`);
+    return `[DEV] systemctl ${action} ${service} - success`;
+  }
+};
+
 module.exports.auth = {
+  // Hash a password using bcrypt
   hashPassword(password) {
     return bcrypt.hash(password, 12);
   },
 
+  // Compare a password with a stored hash
   comparePassword(password, hash) {
     if (!password || !hash) {
       return false;
@@ -35,42 +85,83 @@ module.exports.auth = {
     return bcrypt.compare(password, hash);
   },
 
-  changeSystemPassword(password) {
-    exec(`echo 'futurebit:${password}' | sudo chpasswd`);
+  // Change the system user password
+  async changeSystemPassword(password) {
+    if (isProduction()) {
+      await execWithSudo(`echo 'futurebit:${password}' | chpasswd`);
+    } else {
+      console.log(`[DEV] Would change system password for user 'futurebit' to: ${password}`);
+    }
   },
 
+  // Generate and save a new RPC password for Bitcoin node
   async changeNodeRpcPassword(settings) {
     try {
       console.log('Generating and saving bitcoin password');
 
+      // Generate a random password
       const password = generator.generate({
         length: 12,
         numbers: true,
       });
 
+      // Update the password in the database
       await knex('settings').update({
         node_rpc_password: password,
       });
 
-      await fsPromises.access(configBitcoinFilePath);
-      await fsPromises.access(configCkpoolFilePath);
+      try {
+        // Create directories if needed
+        const bitcoinDir = path.dirname(configBitcoinApiConfPath);
+        const ckpoolDir = path.dirname(configCkpoolFilePath);
 
-      exec(
-        `sudo sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinFilePath}`
-      );
+        await fsPromises.mkdir(bitcoinDir, { recursive: true });
+        await fsPromises.mkdir(ckpoolDir, { recursive: true });
 
-      exec(
-        `sudo sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
-      );
+        // Update api.conf with new password (sed will replace existing or we'll rebuild it)
+        try {
+          await fsPromises.access(configBitcoinApiConfPath);
+          // File exists, update the password line
+          await execWithSudo(
+            `sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinApiConfPath}`
+          );
+        } catch (accessErr) {
+          // api.conf doesn't exist, create it with just the password
+          await fsPromises.writeFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`);
+          console.log('Created api.conf with new password');
+        }
 
-      exec('sudo systemctl restart node');
+        // Update ckpool configuration file
+        try {
+          await fsPromises.access(configCkpoolFilePath);
+          await execWithSudo(
+            `sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
+          );
+        } catch (ckpoolErr) {
+          // ckpool.conf doesn't exist, create basic one
+          const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
+          await fsPromises.writeFile(configCkpoolFilePath, ckpoolConfig);
+          console.log('Created ckpool.conf');
+        }
 
-      if (settings?.nodeEnableSoloMining) exec('sudo systemctl restart ckpool');
+        // Restart the node service
+        await mockSystemctl('restart', 'node');
+
+        // Restart ckpool if solo mining is enabled
+        if (settings?.nodeEnableSoloMining) {
+          await mockSystemctl('restart', 'ckpool');
+        }
+
+        console.log('Password updated successfully in api.conf and ckpool.conf');
+      } catch (err) {
+        console.log('Error updating configuration files:', err.message);
+      }
     } catch (err) {
-      console.log('ERR changeNodeRpcPassword', err);
+      console.log('Error in changeNodeRpcPassword:', err.message);
     }
   },
 
+  // Generate a JWT access token
   generateAccessToken() {
     const accessToken = jwt.sign({}, config.get('server.secret'), {
       subject: 'apollouser',
@@ -81,8 +172,9 @@ module.exports.auth = {
     };
   },
 
+  // Calculate network address with CIDR notation
   networkAddressWithCIDR(ipAddress, netmask) {
-    // Converti l'indirizzo IP e la netmask in forma binaria
+    // Convert IP address and netmask to binary form
     const ipBinary = ipAddress
       .split('.')
       .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
@@ -92,19 +184,19 @@ module.exports.auth = {
       .map((part) => parseInt(part, 10).toString(2).padStart(8, '0'))
       .join('');
 
-    // Applica l'operazione bitwise AND
+    // Apply bitwise AND operation
     const networkBinary = ipBinary
       .split('')
       .map((bit, index) => bit & netmaskBinary[index])
       .join('');
 
-    // Converti il risultato in forma di stringa
+    // Convert the result to string form
     const networkAddress = networkBinary
       .match(/.{1,8}/g)
       .map((byte) => parseInt(byte, 2))
       .join('.');
 
-    // Calcola il numero di bit della netmask
+    // Calculate the number of netmask bits
     const cidrPrefix = netmask
       .split('.')
       .reduce(
@@ -116,6 +208,7 @@ module.exports.auth = {
     return `${networkAddress}/${cidrPrefix}`;
   },
 
+  // Get the system's network information
   getSystemNetwork() {
     // Get network interface information
     const interfaces = os.networkInterfaces();
@@ -146,6 +239,20 @@ module.exports.auth = {
       netmask = interfaces['eth0'].find(
         (info) => info.family === 'IPv4'
       ).netmask;
+    } else if (!isProduction()) {
+      // For development on Mac, try to find en0 (typical Mac wireless)
+      for (const [iface, addresses] of Object.entries(interfaces)) {
+        if (iface.startsWith('en') && addresses.some(info => info.family === 'IPv4')) {
+          address = addresses.find(info => info.family === 'IPv4').address;
+          netmask = addresses.find(info => info.family === 'IPv4').netmask;
+          break;
+        }
+      }
+      if (!address) {
+        console.log('Using localhost for development mode');
+        address = '127.0.0.1';
+        netmask = '255.0.0.0';
+      }
     } else {
       console.log('No IP address associated with wlan0 or eth0');
     }
@@ -156,113 +263,468 @@ module.exports.auth = {
     return network;
   },
 
+  // Manage ckpool configuration
   async manageCkpoolConf(settings) {
     try {
+      // Ensure settings is valid
+      if (!settings) {
+        console.log('No settings found for solo configuration');
+        return;
+      }
+
+      // Create ckpool configuration
+      // btcsig is stored as user-customizable part only, compose full signature here
+      const userBtcsig = settings.btcsig || 'mined by Solo Apollo';
+      const fullBtcsig = `/FutureBit-${userBtcsig}/`;
+      
       const ckpoolConf = {
         btcd: [
           {
             url: '127.0.0.1:8332',
             auth: 'futurebit',
-            pass: settings.nodeRpcPassword,
+            pass: settings.nodeRpcPassword || 'default_password',
             notify: true,
           },
         ],
         logdir: '/opt/apolloapi/backend/ckpool/logs',
-        btcsig: '/mined by Solo FutureBit Apollo/',
+        btcsig: fullBtcsig,
         zmqblock: 'tcp://127.0.0.1:28332',
       };
 
-      await fsPromises.writeFile(
-        configCkpoolFilePath,
-        JSON.stringify(ckpoolConf, null, 2)
-      );
+      try {
+        // Ensure the directory exists
+        const dir = path.dirname(configCkpoolFilePath);
+        await fsPromises.mkdir(dir, { recursive: true });
+
+        // Write the configuration file
+        await fsPromises.writeFile(
+          configCkpoolFilePath,
+          JSON.stringify(ckpoolConf, null, 2)
+        );
+        console.log('solo configuration saved successfully');
+      } catch (writeErr) {
+        console.log('Error writing solo configuration:', writeErr.message);
+      }
     } catch (err) {
-      console.log('ERR manageCkpoolConf', err);
+      console.log('Error in manageCkpoolConf:', err.message);
     }
   },
 
+  // Manage Bitcoin configuration (api.conf and user.conf)
+  // Note: bitcoin.conf is managed by node_start.sh and includes api.conf and user.conf
   async manageBitcoinConf(settings) {
     try {
-      // Checking current conf file
-      const currentConf = await fsPromises.readFile(
-        configBitcoinFilePath,
-        'utf8'
-      );
-      const currentConfBase64 = Buffer.from(currentConf).toString('base64');
+      // Ensure settings is valid
+      if (!settings) {
+        console.log('No settings found for Bitcoin configuration');
+        return;
+      }
 
-      const defaultConf = `server=1\nrpcuser=futurebit\nrpcpassword=${settings.nodeRpcPassword}\ndaemon=0\nupnp=1\nuacomment=FutureBit-Apollo-Node`;
-      let conf = defaultConf;
-      conf += `\n#SOLO_START\nzmqpubhashblock=tcp://127.0.0.1:28332\n#SOLO_END`;
+      // Copy the correct bitcoind binary based on node_software
+      if (settings.nodeSoftware) {
+        try {
+          console.log(`Switching Bitcoin software to ${settings.nodeSoftware}...`);
+          const switchResult = await this.switchBitcoinSoftware(settings.nodeSoftware);
+          
+          if (!switchResult.success) {
+            console.log('Warning: Bitcoin software switch failed:', switchResult.message);
+            // Continue with configuration management even if switch failed
+          }
+        } catch (switchErr) {
+          console.log('Error during Bitcoin software switch:', switchErr.message);
+          // Continue with configuration management even if switch failed
+        }
+      }
 
-      this.manageCkpoolConf(settings);
+      // Create directories if they don't exist
+      try {
+        const configDir = path.dirname(configBitcoinApiConfPath);
+        await fsPromises.mkdir(configDir, { recursive: true });
+      } catch (dirErr) {
+        console.log('Error creating directory:', dirErr.message);
+      }
 
+      // Setup ckpool configuration
+      await this.manageCkpoolConf(settings);
+
+      // Configure solo mining
       if (settings.nodeEnableSoloMining) {
-        exec(
-          `sudo cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`
-        );
-        exec('sudo systemctl daemon-reload');
-        exec('sudo systemctl enable ckpool');
-        exec('sudo systemctl restart ckpool');
+        try {
+          if (isProduction()) {
+            await execWithSudo(`cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`);
+            await mockSystemctl('daemon-reload', '');
+            await mockSystemctl('enable', 'ckpool');
+            await mockSystemctl('restart', 'ckpool');
+          } else {
+            console.log('[DEV] Would setup solo mining with ckpool');
+          }
+        } catch (soloErr) {
+          console.log('Error configuring solo mining:', soloErr.message);
+        }
       } else {
-        exec('sudo systemctl stop ckpool');
-        exec('sudo systemctl disable ckpool');
+        try {
+          if (isProduction()) {
+            await mockSystemctl('stop', 'ckpool');
+            await mockSystemctl('disable', 'ckpool');
+          } else {
+            console.log('[DEV] Would disable ckpool');
+          }
+        } catch (disableErr) {
+          console.log('Error disabling ckpool:', disableErr.message);
+        }
       }
 
+      // ===== BUILD api.conf =====
+      // Contains: rpcpassword, Tor settings, maxconnections, LAN access settings
+      // File is always created
+      let apiConf = '# API managed Bitcoin configuration\n';
+
+      // RPC password
+      apiConf += `rpcpassword=${settings.nodeRpcPassword || 'default_password'}\n`;
+
+      // Configure Tor
       if (settings.nodeEnableTor) {
-        conf += `\n#TOR_START\nproxy=127.0.0.1:9050\nlisten=1\nbind=127.0.0.1\nonlynet=onion\ndnsseed=0\ndns=0\n#TOR_END`;
-        exec('sudo systemctl enable tor');
-        exec('sudo systemctl restart tor');
+        apiConf += `proxy=127.0.0.1:9050\n`;
+        apiConf += `listen=1\n`;
+        apiConf += `bind=127.0.0.1\n`;
+        apiConf += `onlynet=onion\n`;
+        apiConf += `dnsseed=0\n`;
+        apiConf += `dns=0\n`;
+        try {
+          if (isProduction()) {
+            await mockSystemctl('enable', 'tor');
+            await mockSystemctl('restart', 'tor');
+          } else {
+            console.log('[DEV] Would enable and restart tor');
+          }
+        } catch (torErr) {
+          console.log('Error configuring Tor:', torErr.message);
+        }
       } else {
-        exec('sudo systemctl stop tor');
-        exec('sudo systemctl disable tor');
+        try {
+          if (isProduction()) {
+            await mockSystemctl('stop', 'tor');
+            await mockSystemctl('disable', 'tor');
+          } else {
+            console.log('[DEV] Would stop and disable tor');
+          }
+        } catch (torDisableErr) {
+          console.log('Error disabling Tor:', torDisableErr.message);
+        }
       }
 
-      if (settings.nodeMaxConnections)
-        conf += `\nmaxconnections=${settings.nodeMaxConnections}`;
-      else conf += '\nmaxconnections=64';
+      // Configure max connections
+      if (settings.nodeMaxConnections) {
+        apiConf += `maxconnections=${settings.nodeMaxConnections}\n`;
+      }
 
+      // Configure LAN access
       if (settings.nodeAllowLan) {
-        const lanNetwork = this.getSystemNetwork();
-        conf += `\nrpcbind=0.0.0.0\nrpcallowip=0.0.0.0/0`;
+        apiConf += `rpcbind=0.0.0.0\n`;
+        apiConf += `rpcallowip=0.0.0.0/0\n`;
       }
+
+      // ===== BUILD user.conf =====
+      // Contains: nodeUserConf (user custom configuration)
+      // File is always created, even if empty (with default comment)
+      let userConf = '# User custom Bitcoin configuration\n';
 
       if (settings.nodeUserConf) {
         const userConfLines = settings.nodeUserConf.split('\n');
         const formattedUserConf = [];
 
-        // Aggiungi le opzioni da escludere in una lista
-        const excludedOptions = ['rpcallowip', 'rpcbind', 'maxconnections'];
+        // List of options managed by api.conf that should be excluded from user.conf
+        const excludedOptions = [
+          'rpcpassword',
+          'rpcallowip',
+          'rpcbind',
+          'maxconnections',
+          'proxy',
+          'listen',
+          'bind',
+          'onlynet',
+          'dnsseed',
+          'dns'
+        ];
 
         userConfLines.forEach((line) => {
-          const variable = line.split('=')[0].trim();
-
-          // Verifica che la variabile non sia nell'elenco delle opzioni escluse e non sia nel defaultConf
-          if (!defaultConf.includes(variable) && !excludedOptions.includes(variable)) {
-            formattedUserConf.push(line.trim());
+          const trimmedLine = line.trim();
+          if (!trimmedLine || trimmedLine.startsWith('#')) {
+            // Keep empty lines and comments
+            formattedUserConf.push(trimmedLine);
+          } else {
+            const variable = trimmedLine.split('=')[0].trim();
+            // Check if the variable is not in the excluded options
+            if (!excludedOptions.includes(variable)) {
+              formattedUserConf.push(trimmedLine);
+            }
           }
         });
 
-        if (formattedUserConf.length) {
-          const filteredUserConf = formattedUserConf.join('\n');
-          conf += `\n#USER_INPUT_START\n${filteredUserConf}\n#USER_INPUT_END`;
+        const filteredConf = formattedUserConf.join('\n').trim();
+        if (filteredConf) {
+          userConf = filteredConf + '\n';
         }
       }
 
-      // Ensure there are no trailing characters or spaces
-      conf = conf.trim() + '\n';
+      // ===== CHECK AND WRITE api.conf =====
+      let currentApiConf = '';
+      try {
+        currentApiConf = await fsPromises.readFile(configBitcoinApiConfPath, 'utf8');
+      } catch (readErr) {
+        console.log('api.conf does not exist, will create a new one');
+      }
 
-      const confBase64 = Buffer.from(conf).toString('base64');
+      if (currentApiConf !== apiConf) {
+        console.log('Writing api.conf');
+        try {
+          await fsPromises.writeFile(configBitcoinApiConfPath, apiConf, 'utf8');
+          console.log('api.conf saved successfully');
+        } catch (writeErr) {
+          console.log('Error writing api.conf:', writeErr.message);
+        }
+      } else {
+        console.log('No changes to api.conf');
+      }
 
-      if (currentConfBase64 === confBase64)
-        return console.log('No changes to bitcoin.conf file');
+      // ===== CHECK AND WRITE user.conf =====
+      let currentUserConf = '';
+      try {
+        currentUserConf = await fsPromises.readFile(configBitcoinUserConfPath, 'utf8');
+      } catch (readErr) {
+        console.log('user.conf does not exist, will create a new one');
+      }
 
-      console.log('Writing Bitcoin conf file', conf);
+      if (currentUserConf !== userConf) {
+        console.log('Writing user.conf');
+        try {
+          await fsPromises.writeFile(configBitcoinUserConfPath, userConf, 'utf8');
+          console.log('user.conf saved successfully');
+        } catch (writeErr) {
+          console.log('Error writing user.conf:', writeErr.message);
+        }
+      } else {
+        console.log('No changes to user.conf');
+      }
 
-      await fsPromises.writeFile(configBitcoinFilePath, conf, 'utf8');
-
-      exec('sleep 3 && sudo systemctl restart node');
     } catch (err) {
-      console.log('ERR manageBitcoinConf', err);
+      console.log('Error in manageBitcoinConf:', err.message);
+    }
+  },
+
+  // Safely switch Bitcoin software
+  async switchBitcoinSoftware(targetSoftware) {
+    // Check initial service state
+    let wasServiceRunning = false;
+    let wasServiceEnabled = false;
+    
+    try {
+      // Validate target software
+      if (!['core-25.1', 'core-28.1', 'knots-29.2'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, knots-29.2`);
+      }
+
+      console.log(`Switching Bitcoin software to ${targetSoftware}...`);
+
+      if (!isProduction()) {
+        console.log(`[DEV] Would switch to ${targetSoftware}`);
+        return { success: true, message: `[DEV] Would switch to ${targetSoftware}` };
+      }
+
+      try {
+        wasServiceRunning = await execWithSudo('systemctl is-active node') === 'active';
+        wasServiceEnabled = await execWithSudo('systemctl is-enabled node') === 'enabled';
+        console.log(`Initial service state - Running: ${wasServiceRunning}, Enabled: ${wasServiceEnabled}`);
+      } catch (statusErr) {
+        console.log('Could not check initial service status:', statusErr.message);
+        // Set default values if we can't check status
+        wasServiceRunning = false;
+        wasServiceEnabled = false;
+      }
+
+      // Get architecture and paths first
+      const arch = os.machine();
+      const apolloDir = '/opt/apolloapi';
+      const sourcePath = `${apolloDir}/backend/node/bin/${targetSoftware}/${arch}/bitcoind`;
+      const destPath = `${apolloDir}/backend/node/bitcoind`;
+
+      // Stop node service if running
+      if (wasServiceRunning) {
+        try {
+          console.log('Stopping node service...');
+          await execWithSudo('systemctl stop node');
+          
+          // Wait for service to stop
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Check if service is actually stopped
+          let maxRetries = 10;
+          let retryCount = 0;
+          let serviceStopped = false;
+          
+          while (retryCount < maxRetries && !serviceStopped) {
+            try {
+              const statusCheck = await execWithSudo('systemctl is-active node');
+              if (statusCheck.trim() === 'active') {
+                console.log(`Service still active, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retryCount++;
+              } else {
+                serviceStopped = true;
+                console.log('Node service stopped successfully');
+              }
+            } catch (statusCheckErr) {
+              // If command fails, service is likely stopped
+              serviceStopped = true;
+              console.log('Node service appears to be stopped');
+            }
+          }
+          
+          // If service is still running, force kill
+          if (!serviceStopped) {
+            console.log('Warning: Node service is still running, forcing stop...');
+            try {
+              await execWithSudo('systemctl kill node');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (killErr) {
+              console.log('Could not force kill service:', killErr.message);
+            }
+          }
+          
+          // Wait for bitcoind process to fully terminate and file to be available
+          console.log('Waiting for bitcoind process to terminate...');
+          maxRetries = 15;
+          retryCount = 0;
+          let fileAvailable = false;
+          
+          while (retryCount < maxRetries && !fileAvailable) {
+            try {
+              // Check if file is in use using fuser (more reliable than lsof)
+              const fuserCheck = await execWithSudo(`fuser ${destPath} 2>/dev/null || true`);
+              if (!fuserCheck.trim()) {
+                // File is not in use, verify we can access it
+                try {
+                  await execWithSudo(`test -f ${destPath}`);
+                  fileAvailable = true;
+                  console.log('File is no longer in use and available');
+                } catch (testErr) {
+                  console.log(`File check failed, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  retryCount++;
+                }
+              } else {
+                console.log(`File still in use, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retryCount++;
+              }
+            } catch (checkErr) {
+              // If fuser fails, try a different approach - check if process exists
+              try {
+                const pgrepCheck = await execWithSudo(`pgrep -f "bitcoind.*datadir" || true`);
+                if (!pgrepCheck.trim()) {
+                  fileAvailable = true;
+                  console.log('No bitcoind process found, file should be available');
+                } else {
+                  console.log(`Bitcoind process still running, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  retryCount++;
+                }
+              } catch (pgrepErr) {
+                // If all checks fail, assume file is available after a wait
+                console.log('Could not verify file status, waiting before proceeding...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                fileAvailable = true;
+              }
+            }
+          }
+          
+          if (!fileAvailable) {
+            console.log('Warning: File may still be in use, but proceeding with copy attempt...');
+          }
+        } catch (stopErr) {
+          console.log('Warning: Could not stop node service:', stopErr.message);
+          // Don't throw error, just continue with the switch
+          console.log('Continuing with software switch...');
+        }
+      } else {
+        console.log('Node service was not running, no need to stop it');
+      }
+
+      // Check if source binary exists
+      try {
+        await execWithSudo(`test -f ${sourcePath}`);
+      } catch (testErr) {
+        throw new Error(`Source binary not found: ${sourcePath}`);
+      }
+
+      // Create backup of current binary
+      try {
+        await execWithSudo(`cp ${destPath} ${destPath}.backup`);
+        console.log('Created backup of current bitcoind binary');
+      } catch (backupErr) {
+        console.log('Could not create backup:', backupErr.message);
+      }
+
+      // Copy new binary
+      try {
+        await execWithSudo(`cp ${sourcePath} ${destPath}`);
+        await execWithSudo(`chmod +x ${destPath}`);
+        console.log(`Copied ${sourcePath} to ${destPath}`);
+      } catch (copyErr) {
+        console.log('Error copying binary:', copyErr.message);
+        
+        // Try to restore backup if copy failed
+        try {
+          await execWithSudo(`cp ${destPath}.backup ${destPath}`);
+          console.log('Restored backup binary after copy failure');
+        } catch (restoreErr) {
+          console.log('Could not restore backup:', restoreErr.message);
+        }
+        throw new Error(`Failed to copy binary: ${copyErr.message}`);
+      }
+
+      // Start node service only if it was running initially
+      if (wasServiceRunning && wasServiceEnabled) {
+        try {
+          console.log('Starting node service (was running initially)...');
+          await execWithSudo('systemctl start node');
+          
+          // Wait and check if service started successfully
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const statusCheck = await execWithSudo('systemctl is-active node');
+          if (statusCheck === 'active') {
+            console.log('Node service started successfully');
+          } else {
+            console.log('Warning: Node service may not have started properly');
+            console.log('Check logs with: journalctl -u node.service');
+          }
+        } catch (startErr) {
+          console.log('Warning: Could not start node service:', startErr.message);
+          console.log('You may need to start it manually with: systemctl start node');
+        }
+      } else if (wasServiceEnabled && !wasServiceRunning) {
+        console.log('Node service is enabled but was not running initially, not starting it');
+      } else {
+        console.log('Node service is not enabled, not starting it');
+      }
+
+      console.log(`Successfully switched to ${targetSoftware}`);
+      return { success: true, message: `Successfully switched to ${targetSoftware}` };
+
+    } catch (err) {
+      console.log('Error in switchBitcoinSoftware:', err.message);
+      
+      // Try to start the service if something went wrong and it was running initially
+      if (isProduction() && wasServiceRunning && wasServiceEnabled) {
+        try {
+          console.log('Attempting to start node service after error (was running initially)...');
+          await execWithSudo('systemctl start node');
+        } catch (recoveryErr) {
+          console.log('Could not start node service in recovery:', recoveryErr.message);
+        }
+      }
+      
+      return { success: false, message: err.message };
     }
   },
 };

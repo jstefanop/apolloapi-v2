@@ -4,6 +4,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 TMPFILE='/tmp/update_progress'
+APOLLO_DIR=/opt/apolloapi
 
 rm $TMPFILE
 touch $TMPFILE
@@ -15,62 +16,25 @@ fi
 
 echo "10" > $TMPFILE
 
-systemctl stop ckpool
-systemctl stop node
-systemctl stop apollo-miner
-
-APOLLO_DIR=/opt/apolloapi
 
 git config --global --add safe.directory $APOLLO_DIR
 git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
 
 chown -R futurebit $APOLLO_DIR
 
-. /usr/local/nvm/nvm.sh
-
-nvm use 21
-
-echo "20" > $TMPFILE
-
-### API ###
-echo -e "${YELLOW} ---> Updating API modules${NC}"
-
 cd $APOLLO_DIR
 
 git reset --hard
 git pull
-
-echo "30" > $TMPFILE
-
-yarn
-
-echo "40" > $TMPFILE
-
-### UI ###
-echo -e "${YELLOW} ---> Updating UI modules${NC}"
 
 cd $APOLLO_DIR/apolloui-v2
 
 git reset --hard
 git pull
 
-echo "60" > $TMPFILE
-
-yarn --ignore-engines
-
-echo "70" > $TMPFILE
-
-echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
-
-rm -rf .next
-
-yarn build
-
-yarn cache clean
-
-echo "80" > $TMPFILE
-
 chown -R futurebit $APOLLO_DIR
+
+echo "20" > $TMPFILE
 
 echo -e "${YELLOW} ---> Running update_system script${NC}"
 

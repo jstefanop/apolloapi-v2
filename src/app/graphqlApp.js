@@ -1,26 +1,38 @@
-const config = require('config')
-const { createGraphqlApp } = require('backend-helpers')
-const store = require('./../store')
-const schema = require('./../graphql')
+const { ApolloServer } = require('@apollo/server');
+const { expressMiddleware } = require('@apollo/server/express4');
+const { json } = require('body-parser');
+const cors = require('cors');
+const schema = require('../graphql/schema');
+const { createContext } = require('../graphql/context');
 
-const { app } = createGraphqlApp(schema, {
-  expressGraphql (request) {
-    return {
-      context: {
-        dispatch (method, payload) {
-          return store.dispatch(method, payload, request, {
-            cid: request.headers['x-request-id'],
-            internal: !!request.headers['x-test-request']
-          })
-        }
-      }
+async function setupApolloServer(app) {
+  // Create Apollo Server
+  const server = new ApolloServer({
+    schema,
+    formatError: (error) => {
+      // Keep the original error message
+      return {
+        message: error.message,
+        path: error.path,
+        extensions: error.extensions
+      };
     }
-  },
-  cors: true,
-  jwt: {
-    secret: config.get('server.secret'),
-    audience: 'auth'
-  }
-})
+  });
 
-module.exports = app
+  // Start the server
+  await server.start();
+
+  // Apply middleware
+  app.use(
+    '/api/graphql',
+    cors(),
+    json(),
+    expressMiddleware(server, {
+      context: createContext
+    })
+  );
+
+  return app;
+}
+
+module.exports = setupApolloServer;

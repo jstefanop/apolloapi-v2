@@ -1,7 +1,45 @@
 #!/bin/bash
 
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT && \
-iptables -A INPUT -p tcp --dport 5000 -j ACCEPT && \
-iptables -A PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 3000
+# Firewall script for Apollo API v2
+# Compatible with nf_tables (modern iptables)
+
+echo "Configuring firewall for Apollo..."
+
+# Flush existing rules
+iptables -F
+iptables -t nat -F
+iptables -t mangle -F
+
+# Set default policies
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+
+# Enable loopback
+iptables -A INPUT -i lo -j ACCEPT
+
+# Enable established and related connections
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Port 80 (HTTP) - redirect to 3000
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
+
+# Port 3000 (UI)
+iptables -A INPUT -p tcp --dport 3000 -j ACCEPT
+
+# Port 5000 (API)
+iptables -A INPUT -p tcp --dport 5000 -j ACCEPT
+
+# Port 8333 (Bitcoin)
 iptables -A INPUT -p tcp --dport 8333 -j ACCEPT
 iptables -A INPUT -p udp --dport 8333 -j ACCEPT
+
+# Port 3333 (Stratum)
+iptables -A INPUT -p tcp --dport 3333 -j ACCEPT
+
+# Port 22 (SSH) - for security
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+echo "Firewall configured successfully!"
+echo "Open ports: 22 (SSH), 80 (HTTP->3000), 3000 (UI), 5000 (API), 8333 (Bitcoin), 3333 (Stratum)"
