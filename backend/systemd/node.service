@@ -12,6 +12,7 @@ ExecStart=/opt/apolloapi/backend/node/node_start.sh
 #WorkingDirectory=/opt/apolloapi/backend/node
 #Stop:
 TimeoutStartSec=300
+TimeoutStopSec=600
 ExecStop=/opt/apolloapi/backend/node/node_stop.sh
 #Restart
 Restart=always
