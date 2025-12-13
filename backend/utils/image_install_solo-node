@@ -27,7 +27,7 @@ echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
 apt-get update
 apt-get -y upgrade
 
-DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python2-dev python-dev-is-python3 vim git sudo iptables network-manager screen ntp
+DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python2-dev python-dev-is-python3 vim git sudo iptables network-manager screen ntp gnome-tweaks avahi-daemon
 
 #### SYSTEM SETUP ####
 #########################
@@ -187,7 +187,6 @@ cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/
 ### Bitcoind ###
 #########################
 echo -e "${YELLOW} ---> Installing Bitcoin node${NC}"
-
 
 # Current Default Core
 NODE_SOFTWARE="core-28.1"
