@@ -133,10 +133,24 @@ cd $APOLLO_UI_DIR
 # Generate a random string for NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
 
-# Create the .env file with the specified content
-echo "NEXT_PUBLIC_POLLING_TIME=5000" >> .env
-echo "NEXT_PUBLIC_POLLING_TIME_NODE=30000" >> .env
-echo "NEXTAUTH_SECRET='$NEXTAUTH_SECRET'" >> .env
+# Function to add or update environment variable
+set_env_var() {
+    local key="$1"
+    local value="$2"
+    local env_file=".env"
+    
+    # If key exists, update it
+    if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+    else
+        echo "${key}=${value}" >> "$env_file"
+    fi
+}
+
+# Create or update the .env file with the specified content
+set_env_var "NEXT_PUBLIC_POLLING_TIME" "5000"
+set_env_var "NEXT_PUBLIC_POLLING_TIME_NODE" "30000"
+set_env_var "NEXTAUTH_SECRET" "'$NEXTAUTH_SECRET'"
 
 echo -e "${GREEN} ---> .env file created with random NEXTAUTH_SECRET${NC}"
 #increase timeout for sd card installs
