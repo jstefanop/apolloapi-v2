@@ -273,6 +273,100 @@ async function fetchSoloStatistics() {
 }
 
 /**
+ * Update recent blocks in the database
+ * Runs every 5 minutes (300000 ms)
+ */
+async function fetchRecentBlocks() {
+  try {
+    // 1. Verify that node is online and synchronized
+    const nodeService = await knex('service_status')
+      .select('status')
+      .where({ service_name: 'node' })
+      .first();
+
+    if (!nodeService || nodeService.status !== 'online') {
+      console.log('Node is not online, skipping recent blocks update');
+      // Update error in existing blocks
+      await knex('recent_blocks')
+        .update({
+          error: 'Node is not online',
+          updated_at: knex.fn.now()
+        });
+      return;
+    }
+
+    // 2. Retrieve blocks from node
+    const blocks = await services.node.getRecentBlocksFromNode(15);
+    
+    if (!blocks || blocks.length === 0) {
+      throw new Error('No blocks retrieved from node');
+    }
+
+    // 3. Insert/update blocks in database
+    await knex.transaction(async (trx) => {
+      for (const block of blocks) {
+        const blockData = {
+          block_hash: block.id,
+          height: block.height,
+          block_data: JSON.stringify(block),
+          error: null,
+          updated_at: knex.fn.now()
+        };
+
+        // Check if block already exists
+        const existing = await trx('recent_blocks')
+          .where({ block_hash: block.id })
+          .first();
+
+        if (existing) {
+          // Update existing
+          await trx('recent_blocks')
+            .where({ block_hash: block.id })
+            .update({
+              height: blockData.height,
+              block_data: blockData.block_data,
+              error: null, // Reset error if success
+              updated_at: blockData.updated_at
+            });
+        } else {
+          // Insert new
+          await trx('recent_blocks').insert(blockData);
+        }
+      }
+
+      // 4. Keep only the 15 most recent blocks
+      // Delete older blocks (if there are more than 15)
+      const blocksToKeep = await trx('recent_blocks')
+        .select('id')
+        .orderBy('height', 'desc')
+        .limit(15);
+
+      if (blocksToKeep.length > 0) {
+        const idsToKeep = blocksToKeep.map(b => b.id);
+        await trx('recent_blocks')
+          .whereNotIn('id', idsToKeep)
+          .del();
+      }
+    });
+
+    console.log(`Recent blocks updated: ${blocks.length} blocks`);
+  } catch (error) {
+    console.error('Error while fetching recent blocks:', error);
+    
+    // Update error in existing blocks
+    try {
+      await knex('recent_blocks')
+        .update({
+          error: error.message || 'Unknown error',
+          updated_at: knex.fn.now()
+        });
+    } catch (updateError) {
+      console.error('Error updating blocks with error message:', updateError);
+    }
+  }
+}
+
+/**
  * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
@@ -290,6 +384,14 @@ async function startAllSchedulers() {
     // We only need to collect statistics periodically
     setInterval(fetchStatistics, process.env.TIMESERIES_INTERVAL || 60000); // Collect miner statistics every 60 seconds
     setInterval(fetchSoloStatistics, process.env.TIMESERIES_INTERVAL || 60000); // Collect solo statistics every 60 seconds
+    
+    // Fetch recent blocks immediately on startup (don't wait 5 minutes)
+    fetchRecentBlocks().catch(err => {
+      console.error('Error in initial recent blocks fetch:', err);
+    });
+    
+    // Then run periodically every 5 minutes
+    setInterval(fetchRecentBlocks, 5 * 60 * 1000); // Every 5 minutes (300000 ms)
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }

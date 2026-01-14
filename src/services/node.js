@@ -470,6 +470,277 @@ class NodeService {
       throw error;
     }
   }
+
+  // Get recent blocks from Bitcoin node via RPC
+  async getRecentBlocksFromNode(count = 15) {
+    try {
+      const rpcClient = await this._createRpcClient();
+      
+      // 1. Verify node is synchronized
+      const blockchainInfo = await this._callRpcMethod(rpcClient, 'getblockchaininfo');
+      
+      if (blockchainInfo.initialblockdownload) {
+        throw new Error('Node is still in initial block download');
+      }
+      
+      if (blockchainInfo.verificationprogress < 0.99) {
+        throw new Error(`Node verification progress: ${(blockchainInfo.verificationprogress * 100).toFixed(2)}%`);
+      }
+      
+      const currentHeight = blockchainInfo.blocks;
+      
+      // 2. Prepare batch RPC for getblockstats and getblockhash
+      const blockHeights = [];
+      for (let i = 0; i < count; i++) {
+        blockHeights.push(currentHeight - i);
+      }
+      
+      // 3. Batch: getblockstats for statistics
+      const statsRequests = blockHeights.map((height, index) => ({
+        jsonrpc: '2.0',
+        id: `stats_${index + 1}`,
+        method: 'getblockstats',
+        params: [height]
+      }));
+      
+      // 4. Batch: getblockhash to get block hashes
+      const hashRequests = blockHeights.map((height, index) => ({
+        jsonrpc: '2.0',
+        id: `hash_${index + 1}`,
+        method: 'getblockhash',
+        params: [height]
+      }));
+      
+      const [statsResults, hashResults] = await Promise.all([
+        rpcClient.post('', statsRequests),
+        rpcClient.post('', hashRequests)
+      ]);
+      
+      // Check for errors
+      const statsErrors = statsResults.data.filter(r => r.error);
+      const hashErrors = hashResults.data.filter(r => r.error);
+      
+      if (statsErrors.length > 0 || hashErrors.length > 0) {
+        throw new Error(`RPC errors: ${JSON.stringify([...statsErrors, ...hashErrors])}`);
+      }
+      
+      const blockHashes = hashResults.data.map(r => r.result);
+      const blockStats = statsResults.data.map(r => r.result);
+      
+      // 5. Batch: getblockheader for header information
+      const headerRequests = blockHashes.map((hash, index) => ({
+        jsonrpc: '2.0',
+        id: `header_${index + 1}`,
+        method: 'getblockheader',
+        params: [hash, true]
+      }));
+      
+      const headerResults = await rpcClient.post('', headerRequests);
+      const headerErrors = headerResults.data.filter(r => r.error);
+      if (headerErrors.length > 0) {
+        throw new Error(`Header RPC errors: ${JSON.stringify(headerErrors)}`);
+      }
+      
+      const blockHeaders = headerResults.data.map(r => r.result);
+      
+      // 6. Batch: getblock with verbosity=1 to get coinbase txid
+      const blockRequests = blockHashes.map((hash, index) => ({
+        jsonrpc: '2.0',
+        id: `block_${index + 1}`,
+        method: 'getblock',
+        params: [hash, 1] // verbosity=1: only tx hashes
+      }));
+      
+      const blockResults = await rpcClient.post('', blockRequests);
+      const blockErrors = blockResults.data.filter(r => r.error);
+      if (blockErrors.length > 0) {
+        throw new Error(`Block RPC errors: ${JSON.stringify(blockErrors)}`);
+      }
+      
+      const coinbaseTxids = blockResults.data.map(r => r.result.tx[0]);
+      
+      // 7. Batch: getrawtransaction for coinbase (for pool extraction and reward)
+      const coinbaseRequests = blockHashes.map((hash, index) => ({
+        jsonrpc: '2.0',
+        id: `coinbase_${index + 1}`,
+        method: 'getrawtransaction',
+        params: [coinbaseTxids[index], true, hash]
+      }));
+      
+      const coinbaseResults = await rpcClient.post('', coinbaseRequests);
+      const coinbaseErrors = coinbaseResults.data.filter(r => r.error);
+      if (coinbaseErrors.length > 0) {
+        throw new Error(`Coinbase RPC errors: ${JSON.stringify(coinbaseErrors)}`);
+      }
+      
+      const coinbaseTxs = coinbaseResults.data.map(r => r.result);
+      
+      // 8. Format blocks
+      const formattedBlocks = blockHeights.map((height, index) => {
+        const stats = blockStats[index];
+        const header = blockHeaders[index];
+        const coinbase = coinbaseTxs[index];
+        
+        // Extract pool info from coinbase
+        const poolInfo = this._extractPoolFromCoinbase(
+          coinbase.vin[0].coinbase
+        );
+        
+        return this._formatBlockForUI(stats, header, coinbase, height, poolInfo);
+      });
+      
+      return formattedBlocks;
+    } catch (error) {
+      console.error('Error getting recent blocks from node:', error);
+      throw error;
+    }
+  }
+
+  // Format a block for UI (compatible with mempool.space format)
+  _formatBlockForUI(stats, header, coinbase, height, poolInfo) {
+    // Calculate total reward (subsidy + fees)
+    const reward = (stats.subsidy + stats.totalfee) / 100000000; // Convert from satoshi to BTC
+    
+    // Extract coinbase address
+    const coinbaseAddress = coinbase.vout && coinbase.vout.length > 0
+      ? (coinbase.vout[0].scriptPubKey?.address || null)
+      : null;
+    
+    // Convert bits from hex string to integer (if it's a string)
+    const bits = typeof header.bits === 'string' 
+      ? parseInt(header.bits, 16) 
+      : header.bits;
+    
+    return {
+      id: header.hash,
+      height: height,
+      version: header.version,
+      timestamp: header.time,
+      bits: bits,
+      nonce: header.nonce,
+      difficulty: header.difficulty,
+      merkle_root: header.merkleroot,
+      tx_count: stats.txs,
+      size: stats.total_size,
+      weight: stats.total_weight,
+      previousblockhash: header.previousblockhash,
+      mediantime: stats.mediantime,
+      stale: false,
+      extras: {
+        reward: reward,
+        coinbaseRaw: coinbase.hex,
+        totalFees: stats.totalfee / 100000000, // BTC
+        avgFee: stats.avgfee,
+        avgFeeRate: stats.avgfeerate,
+        avgTxSize: stats.avgtxsize,
+        totalInputs: stats.ins,
+        totalOutputs: stats.outs,
+        totalOutputAmt: stats.total_out / 100000000, // BTC
+        segwitTotalTxs: stats.swtxs,
+        segwitTotalSize: stats.swtotal_size,
+        segwitTotalWeight: stats.swtotal_weight,
+        virtualSize: stats.total_weight / 4,
+        coinbaseAddress: coinbaseAddress,
+        pool: poolInfo
+      }
+    };
+  }
+
+  // Extract pool information from coinbase signature
+  _extractPoolFromCoinbase(coinbaseHex) {
+    try {
+      const coinbaseBytes = Buffer.from(coinbaseHex, 'hex');
+      const asciiText = coinbaseBytes.toString('ascii');
+      
+      // Common patterns for pool names
+      const poolPatterns = [
+        { pattern: /Foundry\s+USA\s+Pool/i, name: 'Foundry USA', slug: 'foundryusa', id: 111 },
+        { pattern: /F2Pool/i, name: 'F2Pool', slug: 'f2pool', id: 36 },
+        { pattern: /Antpool/i, name: 'Antpool', slug: 'antpool', id: 37 },
+        { pattern: /Binance\s+Pool/i, name: 'Binance Pool', slug: 'binancepool', id: 38 },
+        { pattern: /ViaBTC/i, name: 'ViaBTC', slug: 'viabtc', id: 39 },
+        { pattern: /Slush\s+Pool/i, name: 'Slush Pool', slug: 'slushpool', id: 40 },
+        { pattern: /BTC\.com/i, name: 'BTC.com', slug: 'btccom', id: 41 },
+        { pattern: /Poolin/i, name: 'Poolin', slug: 'poolin', id: 42 },
+        { pattern: /Luxor/i, name: 'Luxor', slug: 'luxor', id: 43 },
+        { pattern: /Marathon/i, name: 'Marathon', slug: 'marathon', id: 44 },
+        { pattern: /Core\s+Scientific/i, name: 'Core Scientific', slug: 'corescientific', id: 45 },
+        { pattern: /Bitfury/i, name: 'Bitfury', slug: 'bitfury', id: 46 },
+        { pattern: /Secpool/i, name: 'Secpool', slug: 'secpool', id: 47 },
+        { pattern: /Mined\s+by\s+Secpool/i, name: 'Secpool', slug: 'secpool', id: 47 },
+      ];
+      
+      // Search for specific patterns
+      for (const pool of poolPatterns) {
+        if (pool.pattern.test(asciiText)) {
+          return {
+            id: pool.id,
+            name: pool.name,
+            slug: pool.slug
+          };
+        }
+      }
+      
+      // Search for generic patterns (slash format, "Pool", "Mined by", etc.)
+      const poolMatch = asciiText.match(/([A-Za-z0-9\s#-]{4,30}(?:Pool|pool))/);
+      if (poolMatch) {
+        const poolName = poolMatch[1].trim();
+        return {
+          id: null,
+          name: poolName,
+          slug: poolName.toLowerCase().replace(/\s+/g, '')
+        };
+      }
+      
+      // Search for "Mined by" pattern
+      const minedByMatch = asciiText.match(/Mined\s+by\s+([A-Za-z0-9\s-]{3,30})/i);
+      if (minedByMatch) {
+        const poolName = `Mined by ${minedByMatch[1].trim()}`;
+        return {
+          id: null,
+          name: poolName,
+          slug: poolName.toLowerCase().replace(/\s+/g, '')
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error extracting pool from coinbase:', error);
+      return null;
+    }
+  }
+
+  // Get recent blocks from database
+  async getRecentBlocksFromDB(count = 15) {
+    try {
+      const rows = await this.knex('recent_blocks')
+        .select('block_data', 'error', 'updated_at')
+        .orderBy('height', 'desc')
+        .limit(count);
+
+      if (rows.length === 0) {
+        return [];
+      }
+
+      // Parse JSON and add error info if present
+      const blocks = rows.map(row => {
+        const block = JSON.parse(row.block_data);
+        
+        // Add error info if present
+        if (row.error) {
+          block.error = row.error;
+          block.errorUpdatedAt = row.updated_at;
+        }
+        
+        return block;
+      });
+
+      return blocks;
+    } catch (error) {
+      console.error('Error getting recent blocks from DB:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = (knex, utils) => new NodeService(knex, utils);
