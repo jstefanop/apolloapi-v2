@@ -95,6 +95,29 @@ class SettingsService {
     }
   }
 
+  // Validate startdiff format
+  // Must be a positive integer
+  _validateStartdiff(startdiff) {
+    if (startdiff === undefined || startdiff === null) {
+      return; // Allow undefined/null values - will use default
+    }
+
+    // Check if it's a number
+    if (typeof startdiff !== 'number') {
+      throw new Error('startdiff must be a number');
+    }
+
+    // Check if it's an integer
+    if (!Number.isInteger(startdiff)) {
+      throw new Error('startdiff must be an integer');
+    }
+
+    // Check if it's positive
+    if (startdiff <= 0) {
+      throw new Error('startdiff must be a positive integer');
+    }
+  }
+
   // Update settings
   async update(settingsInput) {
     try {
@@ -110,6 +133,11 @@ class SettingsService {
           // Validate non-empty btcsig
           this._validateBtcsig(settingsInput.btcsig);
         }
+      }
+
+      // Validate startdiff if provided
+      if (settingsInput.startdiff !== undefined) {
+        this._validateStartdiff(settingsInput.startdiff);
       }
 
       // Get existing settings before update
@@ -165,6 +193,7 @@ class SettingsService {
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
         oldSettings.btcsig !== newSettings.btcsig ||
+        oldSettings.startdiff !== newSettings.startdiff ||
         (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
       ) {
         await this.utils.auth.manageBitcoinConf(backendSettings);
@@ -205,6 +234,7 @@ class SettingsService {
         'node_max_connections as nodeMaxConnections',
         'node_allow_lan as nodeAllowLan',
         'btcsig',
+        'startdiff',
         'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')
@@ -250,6 +280,7 @@ class SettingsService {
       'node_max_connections as nodeMaxConnections',
       'node_allow_lan as nodeAllowLan',
       'btcsig',
+      'startdiff',
       'node_software as nodeSoftware'
     );
 
@@ -300,6 +331,7 @@ class SettingsService {
       nodeMaxConnections: 'node_max_connections',
       nodeAllowLan: 'node_allow_lan',
       btcsig: 'btcsig',
+      startdiff: 'startdiff',
       nodeSoftware: 'node_software'
     };
 
@@ -329,6 +361,7 @@ class SettingsService {
         'node_max_connections',
         'node_allow_lan',
         'btcsig',
+        'startdiff',
         'node_software'
       ])
       .orderBy('created_at', 'desc')
@@ -357,6 +390,7 @@ class SettingsService {
       nodeMaxConnections: currentSettings?.node_max_connections,
       nodeAllowLan: currentSettings?.node_allow_lan,
       btcsig: currentSettings?.btcsig,
+      startdiff: currentSettings?.startdiff,
       nodeSoftware: currentSettings?.node_software // Keep backend format!
     };
 

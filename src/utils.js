@@ -289,6 +289,7 @@ module.exports.auth = {
         logdir: '/opt/apolloapi/backend/ckpool/logs',
         btcsig: fullBtcsig,
         zmqblock: 'tcp://127.0.0.1:28332',
+        startdiff: settings.startdiff || 1024,
       };
 
       try {

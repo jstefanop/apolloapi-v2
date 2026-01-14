@@ -56,6 +56,7 @@ module.exports = gql`
     nodeMaxConnections: Int
     nodeAllowLan: Boolean
     btcsig: String
+    startdiff: Int
     nodeSoftware: NodeSoftware
   }
 
@@ -84,6 +85,7 @@ module.exports = gql`
     nodeMaxConnections: Int
     nodeAllowLan: Boolean
     btcsig: String
+    startdiff: Int
     nodeSoftware: NodeSoftware
   }
 `;

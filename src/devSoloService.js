@@ -37,7 +37,7 @@ const generateShareStats = () => {
     diff: (Math.random() * 1000).toFixed(2),
     accepted: Math.floor(Math.random() * 10000000),
     rejected: Math.floor(Math.random() * 10000),
-    bestshare: Math.floor(Math.random() * 10000000),
+    bestshare: Math.floor(Math.random() * 100000000000),
     SPS1m: (Math.random() * 1).toFixed(3),
     SPS5m: (Math.random() * 1).toFixed(3),
     SPS15m: (Math.random() * 1).toFixed(3),
