@@ -32,11 +32,6 @@ const configCkpoolFilePath = path.resolve(
   '../backend/ckpool/ckpool.conf'
 );
 
-const configCkpoolServiceFilePath = path.resolve(
-  __dirname,
-  '../backend/systemd/ckpool.service'
-);
-
 // Helper function to execute commands with sudo only in production
 const execWithSudo = async (command) => {
   try {
@@ -352,7 +347,6 @@ module.exports.auth = {
       if (settings.nodeEnableSoloMining) {
         try {
           if (isProduction()) {
-            await execWithSudo(`cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`);
             await mockSystemctl('daemon-reload', '');
             await mockSystemctl('enable', 'ckpool');
             await mockSystemctl('restart', 'ckpool');
