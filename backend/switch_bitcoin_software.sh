@@ -13,14 +13,14 @@ TARGET_SOFTWARE=$1
 
 # Check if target software is specified
 if [ -z "$TARGET_SOFTWARE" ]; then
-    echo -e "${RED}Usage: $0 <core-25.1|core-28.1|knots-29.2>${NC}"
+    echo -e "${RED}Usage: $0 <core-25.1|core-28.1|core-29.2|knots-29.2>${NC}"
     exit 1
 fi
 
 # Validate target software
-if [[ "$TARGET_SOFTWARE" != "core-25.1" && "$TARGET_SOFTWARE" != "core-28.1" && "$TARGET_SOFTWARE" != "knots-29.2" ]]; then
+if [[ "$TARGET_SOFTWARE" != "core-25.1" && "$TARGET_SOFTWARE" != "core-28.1" && "$TARGET_SOFTWARE" != "core-29.2" && "$TARGET_SOFTWARE" != "knots-29.2" ]]; then
     echo -e "${RED}Invalid software: $TARGET_SOFTWARE${NC}"
-    echo -e "${RED}Valid options: core-25.1, core-28.1, knots-29.2${NC}"
+    echo -e "${RED}Valid options: core-25.1, core-28.1, core-29.2, knots-29.2${NC}"
     exit 1
 fi
 

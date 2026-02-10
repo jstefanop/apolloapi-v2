@@ -515,8 +515,8 @@ module.exports.auth = {
     
     try {
       // Validate target software
-      if (!['core-25.1', 'core-28.1', 'knots-29.2'].includes(targetSoftware)) {
-        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, knots-29.2`);
+      if (!['core-25.1', 'core-28.1', 'core-29.2', 'knots-29.2'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, core-29.2, knots-29.2`);
       }
 
       console.log(`Switching Bitcoin software to ${targetSoftware}...`);

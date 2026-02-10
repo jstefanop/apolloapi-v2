@@ -80,7 +80,7 @@ if [ -z "$NODE_SOFTWARE" ]; then
 fi
 
 # Validate and set default if invalid
-if [[ "$NODE_SOFTWARE" != "core-25.1" && "$NODE_SOFTWARE" != "core-28.1" && "$NODE_SOFTWARE" != "knots-29.2" ]]; then
+if [[ "$NODE_SOFTWARE" != "core-25.1" && "$NODE_SOFTWARE" != "core-28.1" && "$NODE_SOFTWARE" != "core-29.2" && "$NODE_SOFTWARE" != "knots-29.2" ]]; then
   echo -e "${YELLOW} ---> Invalid node_software value: $NODE_SOFTWARE, defaulting to core-28.1${NC}"
   NODE_SOFTWARE="core-28.1"
 fi
