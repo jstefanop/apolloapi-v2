@@ -33,6 +33,12 @@ class SoloService {
         await devSoloService.startDevSolo();
       } else {
         await this._execCommand('sudo systemctl start ckpool');
+        // Wait for service to be actually active before marking online (avoids monitor overwriting to offline)
+        const becameActive = await this._waitForActive();
+        if (!becameActive) {
+          await this._updateServiceStatus('offline');
+          throw new GraphQLError('Solo pool start timed out: service did not become active');
+        }
       }
 
       // Update status to online after successful start
@@ -94,6 +100,12 @@ class SoloService {
         await devSoloService.restartDevSolo();
       } else {
         await this._execCommand('sudo systemctl restart ckpool');
+        // Wait for service to be actually active before marking online (avoids "stoppato ma non riavviato" / connection issue in UI)
+        const becameActive = await this._waitForActive();
+        if (!becameActive) {
+          await this._updateServiceStatus('offline');
+          throw new GraphQLError('Solo pool restart timed out: service did not become active');
+        }
       }
 
       // Update status to online after successful restart
@@ -371,6 +383,31 @@ class SoloService {
     } catch (error) {
       console.error('Error updating last_checked:', error);
     }
+  }
+
+  /**
+   * Wait for ckpool to become active after start/restart (production only).
+   * Polls systemctl is-active until 'active' or timeout. Keeps DB as 'pending' so
+   * the service monitor grace period applies and the UI doesn't show "offline but should be online".
+   * @param {number} timeoutMs - Max wait in ms
+   * @param {number} pollIntervalMs - Interval between checks
+   * @returns {Promise<boolean>} - true if active, false if timeout
+   */
+  async _waitForActive(timeoutMs = 30000, pollIntervalMs = 1500) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const { stdout } = await this._execCommand('systemctl is-active ckpool');
+        const status = (stdout && stdout.trim()) || '';
+        if (status === 'active') return true;
+        if (status === 'failed') return false;
+        // activating, inactive, etc. -> keep waiting
+      } catch (err) {
+        // is-active exits non-zero when not active; keep polling
+      }
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
+    return false;
   }
 
   // Helper method to execute shell commands
