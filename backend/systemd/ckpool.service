@@ -6,6 +6,7 @@ After=node.service
 [Service]
 Type=forking
 User=futurebit
+LimitNOFILE=10000
 #Start:
 ExecStart=/opt/apolloapi/backend/ckpool/ckpool_start.sh
 #Stop:

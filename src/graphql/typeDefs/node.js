@@ -13,6 +13,7 @@ module.exports = gql`
     formatProgress: NodeFormatProgressOutput! @auth
     format: EmptyOutput! @auth
     online: NodeOnlineOutput!
+    recentBlocks(count: Int): NodeRecentBlocksOutput!
   }
 
   type NodeStatsOutput {
@@ -101,5 +102,59 @@ module.exports = gql`
   type NodeOnline {
     timestamp: String!
     status: String!
+  }
+
+  type NodeRecentBlocksOutput {
+    result: NodeRecentBlocksResult
+    error: Error
+  }
+
+  type NodeRecentBlocksResult {
+    blocks: [BlockInfo!]!
+    error: String
+  }
+
+  type BlockInfo {
+    id: String!
+    height: Int!
+    version: Int!
+    timestamp: Int!
+    bits: Int!
+    nonce: Int!
+    difficulty: Float!
+    merkle_root: String!
+    tx_count: Int!
+    size: Int!
+    weight: Int!
+    previousblockhash: String!
+    mediantime: Int!
+    stale: Boolean!
+    error: String
+    errorUpdatedAt: String
+    extras: BlockExtras
+  }
+
+  type BlockExtras {
+    reward: Float!
+    coinbaseRaw: String
+    totalFees: Float
+    avgFee: Float
+    avgFeeRate: Float
+    avgTxSize: Float
+    totalInputs: Int
+    totalOutputs: Int
+    totalOutputAmt: Float
+    segwitTotalTxs: Int
+    segwitTotalSize: Int
+    segwitTotalWeight: Int
+    virtualSize: Float
+    coinbaseAddress: String
+    pool: PoolInfo
+  }
+
+  type PoolInfo {
+    id: Int
+    name: String
+    slug: String
   }
 `;

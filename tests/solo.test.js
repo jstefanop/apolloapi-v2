@@ -1,4 +1,10 @@
 // tests/solo.test.js
+const { exec } = require('child_process');
+
+jest.mock('child_process', () => ({
+  exec: jest.fn()
+}));
+
 const { knex } = require('../src/db');
 const soloResolver = require('../src/graphql/resolvers/solo');
 const SoloService = require('../src/services/solo')(knex, {});
@@ -214,5 +220,89 @@ describe('Solo API', () => {
     });
   });
 
+  describe('SoloService start/restart with _waitForActive (production)', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
 
+    beforeEach(async () => {
+      const existing = await knex('service_status').where({ service_name: 'solo' }).first();
+      if (!existing) {
+        await knex('service_status').insert({
+          service_name: 'solo',
+          status: 'offline',
+          requested_status: null,
+          requested_at: null,
+          last_checked: Date.now()
+        });
+      }
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+      exec.mockReset();
+    });
+
+    it('restart() should set online only after service becomes active', async () => {
+      process.env.NODE_ENV = 'production';
+      let isActiveCallCount = 0;
+      exec.mockImplementation((command, callback) => {
+        if (command.includes('is-active')) {
+          isActiveCallCount++;
+          const stdout = isActiveCallCount < 3 ? 'inactive' : 'active';
+          callback(null, stdout, '');
+        } else if (command.includes('restart')) {
+          callback(null, '', '');
+        } else {
+          callback(null, '', '');
+        }
+      });
+
+      await SoloService.restart();
+
+      const row = await knex('service_status').where({ service_name: 'solo' }).first();
+      expect(row).toBeDefined();
+      expect(row.status).toBe('online');
+      expect(row.requested_status).toBe('online');
+      expect(isActiveCallCount).toBe(3);
+    });
+
+    it('restart() should set offline and throw when service becomes failed', async () => {
+      process.env.NODE_ENV = 'production';
+      exec.mockImplementation((command, callback) => {
+        if (command.includes('is-active')) {
+          callback(null, 'failed', '');
+        } else if (command.includes('restart')) {
+          callback(null, '', '');
+        } else {
+          callback(null, '', '');
+        }
+      });
+
+      await expect(SoloService.restart()).rejects.toThrow(
+        'Solo pool restart timed out: service did not become active'
+      );
+
+      const row = await knex('service_status').where({ service_name: 'solo' }).first();
+      expect(row).toBeDefined();
+      expect(row.status).toBe('offline');
+    });
+
+    it('start() should set online only after service becomes active', async () => {
+      process.env.NODE_ENV = 'production';
+      exec.mockImplementation((command, callback) => {
+        if (command.includes('is-active')) {
+          callback(null, 'active', '');
+        } else if (command.includes('start') && !command.includes('restart')) {
+          callback(null, '', '');
+        } else {
+          callback(null, '', '');
+        }
+      });
+
+      await SoloService.start();
+
+      const row = await knex('service_status').where({ service_name: 'solo' }).first();
+      expect(row).toBeDefined();
+      expect(row.status).toBe('online');
+    });
+  });
 });

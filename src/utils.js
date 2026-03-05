@@ -32,11 +32,6 @@ const configCkpoolFilePath = path.resolve(
   '../backend/ckpool/ckpool.conf'
 );
 
-const configCkpoolServiceFilePath = path.resolve(
-  __dirname,
-  '../backend/systemd/ckpool.service'
-);
-
 // Helper function to execute commands with sudo only in production
 const execWithSudo = async (command) => {
   try {
@@ -289,6 +284,7 @@ module.exports.auth = {
         logdir: '/opt/apolloapi/backend/ckpool/logs',
         btcsig: fullBtcsig,
         zmqblock: 'tcp://127.0.0.1:28332',
+        startdiff: settings.startdiff || 1024,
       };
 
       try {
@@ -351,7 +347,6 @@ module.exports.auth = {
       if (settings.nodeEnableSoloMining) {
         try {
           if (isProduction()) {
-            await execWithSudo(`cp ${configCkpoolServiceFilePath} /etc/systemd/system/ckpool.service`);
             await mockSystemctl('daemon-reload', '');
             await mockSystemctl('enable', 'ckpool');
             await mockSystemctl('restart', 'ckpool');
@@ -520,8 +515,8 @@ module.exports.auth = {
     
     try {
       // Validate target software
-      if (!['core-25.1', 'core-28.1', 'knots-29.2'].includes(targetSoftware)) {
-        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, knots-29.2`);
+      if (!['core-25.1', 'core-28.1', 'core-29.2', 'knots-29.2'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, core-29.2, knots-29.2`);
       }
 
       console.log(`Switching Bitcoin software to ${targetSoftware}...`);

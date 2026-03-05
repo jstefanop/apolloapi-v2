@@ -65,6 +65,26 @@ module.exports = {
       } catch (error) {
         return { result: null, error: { message: error.message } };
       }
+    },
+
+    recentBlocks: async (_, { count = 15 }, { services }) => {
+      try {
+        // Read from database instead of RPC
+        const blocks = await services.node.getRecentBlocksFromDB(count);
+        
+        return { 
+          result: { 
+            blocks,
+            error: null // No error if DB read successful
+          }, 
+          error: null 
+        };
+      } catch (error) {
+        return { 
+          result: null, 
+          error: { message: error.message } 
+        };
+      }
     }
   }
 };

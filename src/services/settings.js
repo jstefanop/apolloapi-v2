@@ -95,6 +95,29 @@ class SettingsService {
     }
   }
 
+  // Validate startdiff format
+  // Must be a positive integer
+  _validateStartdiff(startdiff) {
+    if (startdiff === undefined || startdiff === null) {
+      return; // Allow undefined/null values - will use default
+    }
+
+    // Check if it's a number
+    if (typeof startdiff !== 'number') {
+      throw new Error('startdiff must be a number');
+    }
+
+    // Check if it's an integer
+    if (!Number.isInteger(startdiff)) {
+      throw new Error('startdiff must be an integer');
+    }
+
+    // Check if it's positive
+    if (startdiff <= 0) {
+      throw new Error('startdiff must be a positive integer');
+    }
+  }
+
   // Update settings
   async update(settingsInput) {
     try {
@@ -110,6 +133,11 @@ class SettingsService {
           // Validate non-empty btcsig
           this._validateBtcsig(settingsInput.btcsig);
         }
+      }
+
+      // Validate startdiff if provided
+      if (settingsInput.startdiff !== undefined) {
+        this._validateStartdiff(settingsInput.startdiff);
       }
 
       // Get existing settings before update
@@ -165,6 +193,7 @@ class SettingsService {
         oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
         oldSettings.btcsig !== newSettings.btcsig ||
+        oldSettings.startdiff !== newSettings.startdiff ||
         (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
       ) {
         await this.utils.auth.manageBitcoinConf(backendSettings);
@@ -205,6 +234,7 @@ class SettingsService {
         'node_max_connections as nodeMaxConnections',
         'node_allow_lan as nodeAllowLan',
         'btcsig',
+        'startdiff',
         'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')
@@ -250,6 +280,7 @@ class SettingsService {
       'node_max_connections as nodeMaxConnections',
       'node_allow_lan as nodeAllowLan',
       'btcsig',
+      'startdiff',
       'node_software as nodeSoftware'
     );
 
@@ -283,7 +314,6 @@ class SettingsService {
       minerMode: 'miner_mode',
       voltage: 'voltage',
       frequency: 'frequency',
-      fan: 'fan',
       fan_low: 'fan_low',
       fan_high: 'fan_high',
       apiAllow: 'api_allow',
@@ -301,11 +331,68 @@ class SettingsService {
       nodeMaxConnections: 'node_max_connections',
       nodeAllowLan: 'node_allow_lan',
       btcsig: 'btcsig',
+      startdiff: 'startdiff',
       nodeSoftware: 'node_software'
     };
 
-    // Get current settings
-    const newData = await this._readSettings();
+    // Get current settings directly from database (backend format)
+    // Important: We read directly from DB to avoid GraphQL enum conversion
+    // that happens in _readSettings(). We need to keep backend format (e.g., 'core-28.1')
+    // when saving to database, not enum format (e.g., 'core_28_1')
+    const [currentSettings] = await this.knex('settings')
+      .select([
+        'miner_mode',
+        'voltage',
+        'frequency',
+        'fan_low',
+        'fan_high',
+        'api_allow',
+        'custom_approval',
+        'connected_wifi',
+        'left_sidebar_visibility',
+        'left_sidebar_extended',
+        'right_sidebar_visibility',
+        'temperature_unit',
+        'power_led_off',
+        'node_rpc_password',
+        'node_enable_tor',
+        'node_user_conf',
+        'node_enable_solo_mining',
+        'node_max_connections',
+        'node_allow_lan',
+        'btcsig',
+        'startdiff',
+        'node_software'
+      ])
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1);
+
+    // Map DB fields to camelCase (without enum conversion)
+    const newData = {
+      minerMode: currentSettings?.miner_mode,
+      voltage: currentSettings?.voltage,
+      frequency: currentSettings?.frequency,
+      fan_low: currentSettings?.fan_low,
+      fan_high: currentSettings?.fan_high,
+      apiAllow: currentSettings?.api_allow,
+      customApproval: currentSettings?.custom_approval,
+      connectedWifi: currentSettings?.connected_wifi,
+      leftSidebarVisibility: currentSettings?.left_sidebar_visibility,
+      leftSidebarExtended: currentSettings?.left_sidebar_extended,
+      rightSidebarVisibility: currentSettings?.right_sidebar_visibility,
+      temperatureUnit: currentSettings?.temperature_unit,
+      powerLedOff: currentSettings?.power_led_off,
+      nodeRpcPassword: currentSettings?.node_rpc_password,
+      nodeEnableTor: currentSettings?.node_enable_tor,
+      nodeUserConf: currentSettings?.node_user_conf,
+      nodeEnableSoloMining: currentSettings?.node_enable_solo_mining,
+      nodeMaxConnections: currentSettings?.node_max_connections,
+      nodeAllowLan: currentSettings?.node_allow_lan,
+      btcsig: currentSettings?.btcsig,
+      startdiff: currentSettings?.startdiff,
+      nodeSoftware: currentSettings?.node_software // Keep backend format!
+    };
 
     // Update with new values
     Object.keys(update).forEach(key => newData[key] = update[key]);

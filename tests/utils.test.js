@@ -40,6 +40,12 @@ describe('Bitcoin Software Switching', () => {
       expect(result.message).toContain('knots-29.2');
     });
 
+    it('should handle core-29.2 software', async () => {
+      const result = await utils.auth.switchBitcoinSoftware('core-29.2');
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('core-29.2');
+    });
+
     it('should return dev mode message in development', async () => {
       const result = await utils.auth.switchBitcoinSoftware('core-28.1');
       expect(result.message).toContain('[DEV]');
