@@ -1,0 +1,22 @@
+# Lightweight image to run Apollo API v2 test suite (Jest)
+# Use this to verify the codebase without an Apollo device or Armbian
+
+FROM node:21-bookworm-slim
+
+WORKDIR /app
+
+# Build tools for native deps (e.g. diskusage, sqlite3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (no dev pruning so Jest and test deps are available)
+COPY package.json ./
+RUN npm install
+
+# Copy app and tests
+COPY . .
+
+# Run tests with in-memory SQLite (no DB file needed)
+ENV NODE_ENV=test
+CMD ["npm", "test"]

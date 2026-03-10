@@ -105,13 +105,13 @@ async function initServiceStatusRows() {
 async function fetchStatistics() {
   try {
     // Check if miner is online
-    const minserService = await knex('service_status')
+    const minerService = await knex('service_status')
       .select('status')
       .where({ service_name: 'miner' })
       .first();
 
-    // If miner is not online, return
-    if (minserService.status !== 'online') return;
+    // If miner row missing or not online, return (avoid crash when .first() is undefined)
+    if (!minerService || minerService.status !== 'online') return;
 
     // Get miner statistics
     const { stats } = await services.miner.getStats();
@@ -286,10 +286,13 @@ async function fetchRecentBlocks() {
 
     if (!nodeService || nodeService.status !== 'online') {
       console.log('Node is not online, skipping recent blocks update');
-      // Update error in existing blocks
+      // Only update rows with no error yet — preserves per-block error messages and avoids
+      // re-stamping every row every interval once already marked (no WHERE was updating all rows)
+      const NODE_OFFLINE_MSG = 'Node is not online';
       await knex('recent_blocks')
+        .whereNull('error')
         .update({
-          error: 'Node is not online',
+          error: NODE_OFFLINE_MSG,
           updated_at: knex.fn.now()
         });
       return;
@@ -353,11 +356,13 @@ async function fetchRecentBlocks() {
   } catch (error) {
     console.error('Error while fetching recent blocks:', error);
     
-    // Update error in existing blocks
+    // Optionally mark blocks that had no error yet (don't blanket-overwrite per-block errors)
     try {
+      const msg = error.message || 'Unknown error';
       await knex('recent_blocks')
+        .whereNull('error')
         .update({
-          error: error.message || 'Unknown error',
+          error: msg,
           updated_at: knex.fn.now()
         });
     } catch (updateError) {
@@ -397,5 +402,9 @@ async function startAllSchedulers() {
   }
 }
 
-// Start schedulers immediately
-startAllSchedulers();
+// Start schedulers immediately (skip in test so we can unit-test fetchStatistics/fetchRecentBlocks)
+if (process.env.NODE_ENV !== 'test') {
+  startAllSchedulers();
+}
+
+module.exports = { startAllSchedulers, fetchStatistics, fetchRecentBlocks };

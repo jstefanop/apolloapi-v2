@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  # Integration tests: real chpasswd + nmcli argv (run in Docker)
+  integration:
+    build:
+      context: .
+      dockerfile: Dockerfile.integration
+    container_name: apollo-api-integration
+    environment:
+      - NODE_ENV=production
+    # Run as root so we can read /etc/shadow and use sudo
+    user: root
+
+  # Run Jest unit test suite (security/reliability fixes, no device needed)
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: apollo-api-test
+    environment:
+      - NODE_ENV=test
+    # Optional: mount source for quick iteration (re-run tests without rebuild)
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules  # prevent host node_modules overwriting container's
+
+  # Full install test with systemd (Armbian-like)
   apollo-test:
     build: .
     container_name: apollo-install-test

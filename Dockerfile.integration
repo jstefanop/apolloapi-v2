@@ -1,0 +1,28 @@
+# Image to run integration tests with real system commands (chpasswd, nmcli stub)
+# Verifies that password change and WiFi connect use spawn/argv (no shell injection)
+
+FROM node:21-bookworm-slim
+
+WORKDIR /app
+
+# Build tools + sudo (for chpasswd and nmcli stub in integration tests)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# User futurebit (same as production) so chpasswd can be tested
+RUN useradd -m -s /bin/bash futurebit
+
+# Stub nmcli: log each argv on its own line (printf preserves args with quotes/semicolons)
+RUN echo '#!/bin/sh' > /usr/local/bin/nmcli && \
+    echo 'printf "%s\n" "$@" > /tmp/nmcli-args; exit 1' >> /usr/local/bin/nmcli && \
+    chmod +x /usr/local/bin/nmcli
+
+# Install app deps and copy app
+COPY package.json ./
+RUN npm install
+COPY . .
+
+# Run integration tests (real chpasswd + nmcli argv check)
+ENV NODE_ENV=production
+CMD ["node", "scripts/integration-test-runner.js"]
