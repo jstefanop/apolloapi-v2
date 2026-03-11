@@ -1,7 +1,6 @@
 [Unit]
 Description=node
 After=multi-user.target
-After=apollo-api.service
 After=apollo-ui-v2.service
 After=dev-nvme0n1.device
 

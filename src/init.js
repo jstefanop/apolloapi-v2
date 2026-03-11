@@ -1,6 +1,5 @@
 const { writeFileSync, existsSync } = require('fs');
 const { join } = require('path');
-const { execSync } = require('child_process');
 const crypto = require('crypto');
 const utils = require('./utils');
 const { knex } = require('./db');
@@ -66,16 +65,6 @@ const runGenerateBitcoinPassword = async (settings) => {
 async function initializeApp() {
   await initEnvFile();
   await runMigrations();
-
-  // Signal systemd that initialization is complete and api.conf is written.
-  // node.service (After=apollo-api.service) will not start bitcoind until this fires.
-  try {
-    execSync('systemd-notify --ready');
-    console.log('Sent systemd ready notification');
-  } catch {
-    // Not running under systemd or systemd-notify unavailable (e.g. dev mode)
-  }
-
   return require('./server');
 }
 

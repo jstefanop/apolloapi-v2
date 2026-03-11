@@ -5,13 +5,11 @@ After=rc-local.service
 
 [Service]
 Environment=NODE_ENV=production
-Type=notify
-NotifyAccess=all
+Type=simple
 User=futurebit
 ExecStart=/usr/local/nvm/versions/node/v21.6.2/bin/node /opt/apolloapi/src/init.js
 WorkingDirectory=/opt/apolloapi
 Restart=on-failure
-TimeoutStartSec=120
 
 [Install]
 WantedBy=multi-user.target
