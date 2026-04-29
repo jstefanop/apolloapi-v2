@@ -214,29 +214,46 @@ class McuService {
     });
   }
 
-  // Helper method to connect to WiFi network
+  // Helper method to connect to WiFi network (spawn + argv only — no shell on ssid/passphrase)
   async _wifiConnect(ssid, passphrase) {
+    const isProd = process.env.NODE_ENV === 'production';
+    if (!isProd) {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    const nmcliArgs = ['dev', 'wifi', 'connect', ssid];
+    if (passphrase) {
+      nmcliArgs.push('password', passphrase);
+    }
+
     return new Promise((resolve, reject) => {
-      let command = `sudo nmcli dev wifi connect '${ssid}'`;
-      if (passphrase) command += ` password '${passphrase}'`;
+      const child = isProd
+        ? spawn('sudo', ['nmcli', ...nmcliArgs], { stdio: ['ignore', 'pipe', 'pipe'] })
+        : spawn('nmcli', nmcliArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-      if (process.env.NODE_ENV !== 'production') {
-        command = `sleep 2 && nmcli dev wifi connect ${ssid}`;
-      }
-
-      exec(command, {}, (err, stdout) => {
-        if (err) {
-          reject(err);
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        const out = (stdout + stderr).toString();
+        if (code !== 0) {
+          reject(new Error(out.trim() || `nmcli exited with code ${code}`));
+          return;
+        }
+        if (out.includes('Error')) {
+          const errMsg = out
+            .trim()
+            .replace(/^.+\(\d+\)\ /g, '')
+            .replace(/\.$/g, '');
+          reject(new Error(errMsg));
         } else {
-          if (stdout.includes('Error')) {
-            const errMsg = stdout.trim()
-              .replace(/^.+\(\d+\)\ /g, "")
-              .replace(/\.$/g, "");
-
-            reject(new Error(errMsg));
-          } else {
-            resolve();
-          }
+          resolve();
         }
       });
     });

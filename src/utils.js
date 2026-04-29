@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const generator = require('generate-password');
 const config = require('config');
 const { knex } = require('./db');
@@ -80,13 +80,32 @@ module.exports.auth = {
     return bcrypt.compare(password, hash);
   },
 
-  // Change the system user password
+  // Change the system user password (stdin only — never interpolate password into a shell string)
   async changeSystemPassword(password) {
-    if (isProduction()) {
-      await execWithSudo(`echo 'futurebit:${password}' | chpasswd`);
-    } else {
-      console.log(`[DEV] Would change system password for user 'futurebit' to: ${password}`);
+    if (!isProduction()) {
+      console.log(`[DEV] Would change system password for user 'futurebit'`);
+      return;
     }
+    await new Promise((resolve, reject) => {
+      // chpasswd reads "user:password" lines from stdin; no shell, so quotes/newlines cannot inject commands
+      const child = spawn('sudo', ['chpasswd'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr.trim() || `chpasswd exited with code ${code}`));
+        } else {
+          resolve();
+        }
+      });
+      child.stdin.write(`futurebit:${password}\n`);
+      child.stdin.end();
+    });
   },
 
   // Generate and save a new RPC password for Bitcoin node
@@ -100,10 +119,21 @@ module.exports.auth = {
         numbers: true,
       });
 
-      // Update the password in the database
-      await knex('settings').update({
-        node_rpc_password: password,
-      });
+      // Update the password only on the latest settings row (append-only table;
+      // updating without WHERE would overwrite every historical row).
+      const latestSettings = await knex('settings')
+        .select('id')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+
+      if (latestSettings) {
+        await knex('settings')
+          .where('id', latestSettings.id)
+          .update({ node_rpc_password: password });
+      } else {
+        console.warn('changeNodeRpcPassword: no settings row found, skipping DB update');
+      }
 
       try {
         // Create directories if needed

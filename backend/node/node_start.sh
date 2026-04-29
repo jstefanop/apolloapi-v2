@@ -2,6 +2,7 @@
 set -e
 
 DEVICE=/dev/nvme0n1p1
+MOUNTPOINT=/media/nvme
 
 CONF_BASE="/opt/apolloapi/backend/default-configs"
 NODE_DIR="/opt/apolloapi/backend/node"
@@ -23,15 +24,16 @@ log() { echo "[node-start] $*" >&2; }
 
 set_conf_by_ram_for_ibd() {
     local mem_kb mem_gb
-    
+
     #Set zram to 1GB during IBD 
 	
 	sudo swapoff /dev/zram0
 	sudo zramctl --size=1G /dev/zram0
 	sudo mkswap /dev/zram0
 	sudo swapon /dev/zram0
-
-   #Get system RAM total
+	
+	#Get system RAM total
+    # Suppress low-level awk noise; we log our own warning if it fails
     mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
     if [ -z "$mem_kb" ]; then
         log "WARN: could not read MemTotal; using generic IBD profile"
@@ -39,6 +41,7 @@ set_conf_by_ram_for_ibd() {
         return
     fi
 
+    # Convert to GiB, rounded to nearest integer
     mem_gb=$(( (mem_kb + 524288) / 1048576 ))
     log "Detected RAM: ${mem_gb}GiB (MemTotal=${mem_kb}kB)"
 
@@ -54,11 +57,34 @@ set_conf_by_ram_for_ibd() {
     fi
 }
 
-# Check for node drive
+# --- Node drive / mount validation ---
+# We only want to start if:
+#   1) NVMe block device exists
+#   2) /media/nvme is mounted
+#   3) /media/nvme is mounted FROM that NVMe device (not the SD card)
 if [ ! -b "$DEVICE" ]; then
-    log "WARN: node drive not found at $DEVICE; bitcoind not started"
+    log "WARN: node drive device not found at $DEVICE; bitcoind not started"
     exit 0
 fi
+
+# Is the mountpoint actually mounted?
+if ! findmnt -rn --target "$MOUNTPOINT" >/dev/null 2>&1; then
+    log "WARN: $MOUNTPOINT is not mounted; bitcoind not started"
+    exit 0
+fi
+
+# Is it mounted from the expected device?
+mnt_src="$(findmnt -rn -o SOURCE --target "$MOUNTPOINT" 2>/dev/null || true)"
+dev_real="$(readlink -f "$DEVICE" 2>/dev/null || echo "$DEVICE")"
+src_real="$(readlink -f "$mnt_src" 2>/dev/null || echo "$mnt_src")"
+
+if [ -z "$mnt_src" ] || [ "$src_real" != "$dev_real" ]; then
+    log "WARN: $MOUNTPOINT mounted from '$mnt_src' (expected '$DEVICE'); bitcoind not started"
+    exit 0
+fi
+
+log "Node storage OK: $MOUNTPOINT mounted from $mnt_src"
+# --- end validation ---
 
 # Determine sync state (default unsynced)
 synced=1

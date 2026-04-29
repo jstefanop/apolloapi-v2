@@ -81,23 +81,27 @@ chmod +x "$APOLLO_DIR/backend/node/bitcoind"
 
 # Update database with new software selection
 echo -e "${YELLOW} ---> Updating database configuration${NC}"
-sqlite3 "$APOLLO_DIR/backend/futurebit.sqlite" "UPDATE settings SET node_software = '$TARGET_SOFTWARE' WHERE ID = (SELECT MAX(ID) FROM settings);"
+sqlite3 "$APOLLO_DIR/futurebit.sqlite" "UPDATE settings SET node_software = '$TARGET_SOFTWARE' WHERE ID = (SELECT MAX(ID) FROM settings);"
 
 # Copy configuration file
 cp "$APOLLO_DIR/backend/default-configs/bitcoin.conf" "$APOLLO_DIR/backend/node/"
 
-# Restore RPC password if exists
-PASS=$(sqlite3 "$APOLLO_DIR/backend/futurebit.sqlite" "SELECT node_rpc_password FROM settings ORDER BY id DESC LIMIT 1;")
-if [ ! -z "$PASS" ]; then
-    sed -i "s/rpcpassword=/rpcpassword=${PASS}/" "$APOLLO_DIR/backend/node/bitcoin.conf"
+# Restore RPC password in api.conf (bitcoin.conf includes api.conf via includeconf)
+PASS=$(sqlite3 "$APOLLO_DIR/futurebit.sqlite" "SELECT node_rpc_password FROM settings ORDER BY id DESC LIMIT 1;")
+if [ -n "$PASS" ]; then
+    if [ -f "$APOLLO_DIR/backend/node/api.conf" ]; then
+        sed -i "s/rpcpassword=.*/rpcpassword=${PASS}/" "$APOLLO_DIR/backend/node/api.conf"
+    else
+        echo "rpcpassword=${PASS}" > "$APOLLO_DIR/backend/node/api.conf"
+    fi
     echo -e "${GREEN} ---> Restored RPC password${NC}"
 fi
 
 # Set max connections to 64 if needed
-MAXCONNECTIONS=$(sqlite3 "$APOLLO_DIR/backend/futurebit.sqlite" "SELECT node_max_connections FROM settings ORDER BY id DESC LIMIT 1;")
+MAXCONNECTIONS=$(sqlite3 "$APOLLO_DIR/futurebit.sqlite" "SELECT node_max_connections FROM settings ORDER BY id DESC LIMIT 1;")
 if [ -z "$MAXCONNECTIONS" ] || [ "$MAXCONNECTIONS" -eq 32 ]; then
-    sed -i 's/maxconnections=32/maxconnections=64/' "$APOLLO_DIR/backend/node/bitcoin.conf"
-    sqlite3 "$APOLLO_DIR/backend/futurebit.sqlite" "UPDATE settings SET node_max_connections = 64 WHERE ID = (SELECT MAX(ID) FROM settings);"
+    sed -i 's/maxconnections=32/maxconnections=64/' "$APOLLO_DIR/backend/node/api.conf"
+    sqlite3 "$APOLLO_DIR/futurebit.sqlite" "UPDATE settings SET node_max_connections = 64 WHERE ID = (SELECT MAX(ID) FROM settings);"
     echo -e "${GREEN} ---> Set max connections to 64${NC}"
 fi
 

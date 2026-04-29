@@ -62,7 +62,6 @@ const runGenerateBitcoinPassword = async (settings) => {
   }
 };
 
-// Funzione principale di avvio
 async function initializeApp() {
   await initEnvFile();
   await runMigrations();

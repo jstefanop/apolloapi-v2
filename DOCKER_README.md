@@ -1,8 +1,69 @@
 # Apollo API v2 - Docker Test Environment
 
-This Dockerfile tests the original `install-v2` script in an environment that simulates Armbian to verify that the installation works correctly.
+This repo provides two Docker-based workflows: **unit/integration tests** (no device) and **full install test** (Armbian-like with systemd).
 
-## Purpose
+---
+
+## 1. Run test suite (Jest) — no Apollo device needed
+
+Use this to verify the codebase (including the [implemented security/reliability fixes](docs/IMPLEMENTED_FIXES.md)) without an Apollo device or Armbian.
+
+**Build and run tests:**
+
+```bash
+docker-compose run --rm test
+```
+
+This builds the image from `Dockerfile.test` (Node 21 + npm install), runs `npm test` (Jest with in-memory SQLite), and exits. No systemd, no install script.
+
+**Run tests with local source (faster iteration):**
+
+```bash
+docker-compose run --rm -v "$(pwd)":/app -v /app/node_modules test npm test
+```
+
+The first volume mounts the project; the anonymous volume keeps container `node_modules` so the host doesn’t overwrite them.
+
+**Run tests locally (no Docker):**
+
+Requires Node 21+ (see `package.json` engines). If you use nvm:
+
+```bash
+nvm use
+NODE_ENV=test npm test
+```
+
+---
+
+## 2. Integration tests in Docker (real system commands)
+
+These tests run **inside Docker** with real commands to verify the security fixes (no shell interpolation):
+
+- **chpasswd**: the app really changes the `futurebit` user password via `spawn('sudo', ['chpasswd'])` and stdin; we verify by reading `/etc/shadow` before/after.
+- **nmcli**: a stub `nmcli` in the container logs its argv to `/tmp/nmcli-args`; we run the same spawn pattern the app uses and assert that SSID and passphrase are separate arguments (so a value like `Net'; echo pwned` is one arg, not interpreted by a shell).
+
+**Run integration tests:**
+
+```bash
+docker-compose run --rm integration
+```
+
+Build and run manually:
+
+```bash
+docker build -f Dockerfile.integration -t apollo-integration .
+docker run --rm apollo-integration
+```
+
+The image includes a `futurebit` user and a fake `nmcli` at `/usr/local/bin/nmcli`; the test runner is `scripts/integration-test-runner.js`.
+
+---
+
+## 3. Full install test (systemd / Armbian-like)
+
+The main Dockerfile tests the `install-v2` script in an environment that simulates Armbian.
+
+### Purpose
 
 - **Test install-v2 script**: Verify that the complete installation works
 - **Simulate Armbian**: Debian Bookworm + systemd environment like Armbian 25.8.1
@@ -20,26 +81,26 @@ This Dockerfile tests the original `install-v2` script in an environment that si
 ### Quick installation test
 
 ```bash
-# Build and test installation
-docker-compose up --build
+# Build and start container (runs systemd + install-v2)
+docker-compose up --build apollo-test
 
 # View installation logs
-docker-compose logs -f
+docker-compose logs -f apollo-test
 ```
 
-### Manual testing
+### Manual testing (install flow)
 
 ```bash
 # Build image
-docker build -t apollo-test .
+docker build -t apollo-install-test .
 
 # Start container for testing
 docker run -it --privileged \
   -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
-  apollo-test
+  apollo-install-test
 
 # Inside container you can run manually:
-# bash /tmp/test-install.sh
+# bash /opt/test-install.sh
 ```
 
 ## What the test does

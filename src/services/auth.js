@@ -1,7 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('config');
-const { exec } = require('child_process');
 const { GraphQLError } = require('graphql');
 
 // Helper function to check if we're in production environment
@@ -66,9 +65,9 @@ class AuthService {
       password: hashedPassword
     });
 
-    // Also update the system password (only in production)
+    // Also update the system password (only in production; uses stdin-based chpasswd, no shell)
     if (isProduction()) {
-      await this._changeSystemPassword(password);
+      await this.utils.auth.changeSystemPassword(password);
     }
   }
 
@@ -90,9 +89,9 @@ class AuthService {
         password: hashedPassword
       });
 
-      // Set the system password (only in production)
+      // Set the system password (only in production; uses stdin-based chpasswd, no shell)
       if (isProduction()) {
-        await this._changeSystemPassword(password);
+        await this.utils.auth.changeSystemPassword(password);
       }
     } catch (err) {
       console.log('ERROR', err);
@@ -100,18 +99,6 @@ class AuthService {
     }
   }
 
-  // Helper method to change system password
-  async _changeSystemPassword(password) {
-    return new Promise((resolve, reject) => {
-      exec(`echo 'futurebit:${password}' | sudo chpasswd`, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
 }
 
 module.exports = (knex, utils) => new AuthService(knex, utils);

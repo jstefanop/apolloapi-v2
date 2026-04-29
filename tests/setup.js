@@ -85,12 +85,14 @@ jest.mock('fs', () => {
 jest.mock('child_process', () => ({
   exec: jest.fn((cmd, options, callback) => {
     if (callback) {
-      callback(null, { stdout: 'Mock command output' });
+      // Node exec callback is (err, stdout, stderr) with stdout/stderr as strings
+      callback(null, 'Mock command output', '');
     }
     return { stdout: 'Mock command output' };
   }),
   execSync: jest.fn(() => 'Mock command output'),
   spawn: jest.fn(() => ({
+    stdin: { write: jest.fn(), end: jest.fn() },
     stdout: { on: jest.fn((event, callback) => callback('Mock stdout output')) },
     stderr: { on: jest.fn((event, callback) => callback('')) },
     on: jest.fn((event, callback) => {
@@ -153,6 +155,7 @@ beforeAll(async () => {
         table.string('miner_mode').defaultTo('balanced');
         table.float('voltage').defaultTo(12.0);
         table.integer('frequency').defaultTo(650);
+        table.integer('fan').defaultTo(null);
         table.integer('fan_low').defaultTo(40);
         table.integer('fan_high').defaultTo(60);
         table.boolean('api_allow').defaultTo(false);
@@ -170,6 +173,7 @@ beforeAll(async () => {
         table.integer('node_max_connections').defaultTo(64);
         table.boolean('node_allow_lan').defaultTo(false);
         table.string('btcsig').defaultTo('mined by Solo Apollo');
+        table.integer('startdiff').defaultTo(null);
         table.string('node_software').defaultTo('core-28.1');
         table.timestamps(true, true);
       });
