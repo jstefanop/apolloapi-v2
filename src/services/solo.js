@@ -13,6 +13,13 @@ class SoloService {
     this.utils = utils;
   }
 
+  _notifyServicesStatus() {
+    try {
+      const { pushServicesStatus } = require('../app/scheduler');
+      pushServicesStatus().catch(() => {});
+    } catch (_) {}
+  }
+
   // Start the solo pool (ckpool)
   async start() {
     try {
@@ -25,6 +32,7 @@ class SoloService {
             requested_status: 'online',
             requested_at: new Date(),
           });
+        this._notifyServicesStatus();
       }
 
       // Start the solo pool based on environment
@@ -62,6 +70,7 @@ class SoloService {
             requested_status: 'offline',
             requested_at: new Date(),
           });
+        this._notifyServicesStatus();
       }
 
       // Stop the solo pool based on environment
@@ -92,6 +101,7 @@ class SoloService {
             requested_status: 'online',
             requested_at: new Date(),
           });
+        this._notifyServicesStatus();
       }
 
       // Restart the solo pool based on environment

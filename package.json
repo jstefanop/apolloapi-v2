@@ -34,12 +34,15 @@
     "express": "^4.21.2",
     "generate-password": "^1.7.1",
     "graphql": "^16.10.0",
+    "graphql-subscriptions": "^2.0.0",
     "graphql-tag": "^2.12.6",
+    "graphql-ws": "^6.0.8",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
     "moment": "^2.30.1",
     "normalize-object": "^2.0.6",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "bunyan": "^1.8.15",

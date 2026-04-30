@@ -1,181 +1,139 @@
-// tests/auth.test.js
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// tests/services.test.js
+// Tests for ServicesService.getStats() — the function that pushServicesStatus() relies on.
+// Verifies camelCase aliasing (serviceName, requestedStatus, etc.) and timestamp conversion.
+
 const { knex } = require('../src/db');
-const authResolver = require('../src/graphql/resolvers/auth');
-const AuthService = require('../src/services/auth')(knex, {});
+const ServicesService = require('../src/services/services')(knex);
 
-describe('Auth API', () => {
+describe('ServicesService', () => {
   beforeEach(async () => {
-    // Clear setup table before each test
-    await knex('setup').del();
+    await knex('service_status').del();
   });
 
-  describe('Auth.status', () => {
-    it('should return pending when setup is not done', async () => {
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.status(
-        null,
-        {},
-        { services: { auth: AuthService } }
-      );
-
-      expect(result.result.status).toBe('pending');
-      expect(result.error).toBeNull();
-    });
-
-    it('should return done when setup is completed', async () => {
-      // Insert setup record
-      await knex('setup').insert({
-        password: await bcrypt.hash('testpassword', 12)
+  describe('getStats() — field aliasing', () => {
+    it('returns camelCase field names (not snake_case)', async () => {
+      await knex('service_status').insert({
+        service_name: 'miner',
+        status: 'online',
+        requested_status: 'online',
+        requested_at: null,
+        last_checked: new Date(),
       });
 
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.status(
-        null,
-        {},
-        { services: { auth: AuthService } }
-      );
+      const { data } = await ServicesService.getStats();
 
-      expect(result.result.status).toBe('done');
-      expect(result.error).toBeNull();
-    });
-  });
+      expect(data).toHaveLength(1);
+      const row = data[0];
 
-  describe('Auth.setup', () => {
-    it('should create initial setup with password', async () => {
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.setup(
-        null,
-        { input: { password: "testpassword" } },
-        { services: { auth: AuthService } }
-      );
+      // camelCase fields must be present
+      expect(row).toHaveProperty('serviceName', 'miner');
+      expect(row).toHaveProperty('requestedStatus', 'online');
+      expect(row).toHaveProperty('lastChecked');
 
-      expect(result.error).toBeNull();
-
-      // Verify setup was created
-      const setup = await knex('setup').first();
-      expect(setup).toBeTruthy();
-
-      // Check password was hashed
-      const validPassword = await bcrypt.compare('testpassword', setup.password);
-      expect(validPassword).toBe(true);
+      // snake_case originals must NOT leak through
+      expect(row).not.toHaveProperty('service_name');
+      expect(row).not.toHaveProperty('requested_status');
+      expect(row).not.toHaveProperty('last_checked');
     });
 
-    it('should return error if setup already exists', async () => {
-      // Insert setup record
-      await knex('setup').insert({
-        password: await bcrypt.hash('testpassword', 12)
-      });
+    it('returns all services when no filter is applied', async () => {
+      await knex('service_status').insert([
+        { service_name: 'miner', status: 'online',  last_checked: new Date() },
+        { service_name: 'node',  status: 'offline', last_checked: new Date() },
+        { service_name: 'solo',  status: 'pending', last_checked: new Date() },
+      ]);
 
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.setup(
-        null,
-        { input: { password: "newpassword" } },
-        { services: { auth: AuthService } }
-      );
+      const { data } = await ServicesService.getStats();
 
-      expect(result.error).toBeTruthy();
-      expect(result.error.message).toContain('Setup already done');
+      expect(data).toHaveLength(3);
+      const names = data.map((r) => r.serviceName);
+      expect(names).toContain('miner');
+      expect(names).toContain('node');
+      expect(names).toContain('solo');
+    });
+
+    it('filters by serviceName when provided', async () => {
+      await knex('service_status').insert([
+        { service_name: 'miner', status: 'online',  last_checked: new Date() },
+        { service_name: 'node',  status: 'offline', last_checked: new Date() },
+      ]);
+
+      const { data } = await ServicesService.getStats({ serviceName: 'miner' });
+
+      expect(data).toHaveLength(1);
+      expect(data[0].serviceName).toBe('miner');
+      expect(data[0].status).toBe('online');
+    });
+
+    it('returns empty array when table is empty', async () => {
+      const { data } = await ServicesService.getStats();
+      expect(data).toEqual([]);
     });
   });
 
-  describe('Auth.login', () => {
-    beforeEach(async () => {
-      // Create setup with known password
-      await knex('setup').insert({
-        password: await bcrypt.hash('testpassword', 12)
+  describe('getStats() — timestamp conversion', () => {
+    it('converts numeric lastChecked timestamp to ISO UTC string', async () => {
+      const now = Date.now();
+      await knex('service_status').insert({
+        service_name: 'miner',
+        status: 'online',
+        last_checked: now,
       });
+
+      const { data } = await ServicesService.getStats();
+      const row = data[0];
+
+      expect(typeof row.lastChecked).toBe('string');
+      // Must be parseable as a date and within 5 seconds of now
+      const parsed = new Date(row.lastChecked).getTime();
+      expect(Math.abs(parsed - now)).toBeLessThan(5000);
     });
 
-    it('should return access token with valid credentials', async () => {
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.login(
-        null,
-        { input: { password: "testpassword" } },
-        { services: { auth: AuthService } }
-      );
+    it('returns null for requestedAt when not set', async () => {
+      await knex('service_status').insert({
+        service_name: 'miner',
+        status: 'offline',
+        requested_at: null,
+        last_checked: new Date(),
+      });
 
-      expect(result.result.accessToken).toBeTruthy();
-      expect(result.error).toBeNull();
-
-      // Verifica che il token sia un JWT valido
-      const decoded = jwt.decode(result.result.accessToken);
-      expect(decoded).toBeTruthy();
-      expect(decoded.aud).toBe('auth');
+      const { data } = await ServicesService.getStats();
+      expect(data[0].requestedAt).toBeNull();
     });
 
-    it('should return error with invalid credentials', async () => {
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.login(
-        null,
-        { input: { password: "wrongpassword" } },
-        { services: { auth: AuthService } }
-      );
+    it('converts requestedAt to ISO UTC string when present', async () => {
+      const ts = Date.now();
+      await knex('service_status').insert({
+        service_name: 'miner',
+        status: 'pending',
+        requested_status: 'online',
+        requested_at: ts,
+        last_checked: new Date(),
+      });
 
-      expect(result.result).toBeNull();
-      expect(result.error).toBeTruthy();
-      expect(result.error.message).toContain('Invalid password');
+      const { data } = await ServicesService.getStats();
+      const row = data[0];
+
+      expect(typeof row.requestedAt).toBe('string');
+      const parsed = new Date(row.requestedAt).getTime();
+      expect(Math.abs(parsed - ts)).toBeLessThan(5000);
     });
   });
 
-  describe('Auth.changePassword', () => {
-    let token;
-
-    beforeEach(async () => {
-      // Create setup with known password
-      await knex('setup').insert({
-        password: await bcrypt.hash('testpassword', 12)
-      });
-
-      // Genera un token direttamente senza fare una chiamata
-      token = jwt.sign({}, 'test-secret-key-for-jwt-token-generation', {
-        subject: 'apollouser',
-        audience: 'auth'
-      });
-    });
-
-    it('should change password with valid token', async () => {
-      // Mocka il context per simulare un utente autenticato
-      const authenticatedContext = {
-        services: { auth: AuthService },
-        isAuthenticated: true
-      };
-
-      // Test diretto del resolver
-      const result = await authResolver.AuthActions.changePassword(
-        null,
-        { input: { password: "newpassword" } },
-        authenticatedContext
-      );
-
-      expect(result.error).toBeNull();
-
-      // Verify password was changed
-      const setup = await knex('setup').first();
-      const validPassword = await bcrypt.compare('newpassword', setup.password);
-      expect(validPassword).toBe(true);
-    });
-
-    it('should return error when not authenticated', async () => {
-      // Qui simuliamo la parte di autenticazione che fallisce
-      // Per questo test, dobbiamo controllare che il resolver lanci un'eccezione
-      // quando il contesto non ha isAuthenticated a true
-
-      // Mocka il resolver di autenticazione
-      const authDirectiveResolver = {
-        resolve: jest.fn().mockImplementation(() => {
-          throw new Error('You must be authenticated');
-        })
-      };
-
-      // Testa che il resolver lanci l'eccezione prevista
-      expect(() => {
-        authDirectiveResolver.resolve(() => { }, null, {
-          services: { auth: AuthService },
-          isAuthenticated: false
+  describe('getStats() — status values', () => {
+    it.each([['online'], ['offline'], ['pending'], ['unknown']])(
+      'preserves status value "%s"',
+      async (status) => {
+        await knex('service_status').del();
+        await knex('service_status').insert({
+          service_name: 'miner',
+          status,
+          last_checked: new Date(),
         });
-      }).toThrow('You must be authenticated');
-    });
+
+        const { data } = await ServicesService.getStats();
+        expect(data[0].status).toBe(status);
+      }
+    );
   });
 });

@@ -4,6 +4,8 @@ const moment = require('moment');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
+const pubsub = require('../graphql/pubsub');
+const TOPICS = require('../graphql/topics');
 
 const execAsync = promisify(exec);
 
@@ -496,6 +498,39 @@ class ServiceMonitor {
         }
       }
 
+      // Grace period: don't downgrade a status that was explicitly set by an action
+      // (e.g., miner.start() sets DB to 'online', but checkOnline() still returns
+      // 'pending' because the stats file hasn't been written yet).
+      const existing = await this.knex('service_status')
+        .where({ service_name: dbServiceName })
+        .first();
+
+      if (existing && existing.requested_at) {
+        const timeSinceRequest = Date.now() - new Date(existing.requested_at).getTime();
+        const startGracePeriod = 45000; // 45 s — service has been explicitly started
+        const stopGracePeriod  = 20000; // 20 s — service has been explicitly stopped
+
+        // Don't overwrite 'online' with 'pending' right after start()
+        if (
+          existing.requested_status === 'online' &&
+          existing.status === 'online' &&
+          status === 'pending' &&
+          timeSinceRequest <= startGracePeriod
+        ) {
+          status = 'online';
+        }
+
+        // Don't overwrite 'offline' with 'pending' right after stop()
+        if (
+          existing.requested_status === 'offline' &&
+          existing.status === 'offline' &&
+          status === 'pending' &&
+          timeSinceRequest <= stopGracePeriod
+        ) {
+          status = 'offline';
+        }
+      }
+
       // Update database with the status
       await this.updateServiceStatus(dbServiceName, status, null);
 
@@ -598,6 +633,32 @@ class ServiceMonitor {
           console.log(
             `Service ${serviceName} updated: ${existing.status} -> ${status}`
           );
+
+          // Push updated services list to all WebSocket subscribers.
+          // Use fieldsMapping so column names are camelCase (serviceName etc.)
+          // matching what the GraphQL StatusData type and frontend selector expect.
+          try {
+            const fieldsMapping = [
+              'id',
+              'service_name as serviceName',
+              'status',
+              'requested_status as requestedStatus',
+              'requested_at as requestedAt',
+              'last_checked as lastChecked',
+            ];
+            const rows = await this.knex('service_status').select(fieldsMapping);
+            const toUtc = (ts) => ts ? require('moment')(Number(ts)).utc().format() : null;
+            const allServices = rows.map((row) => ({
+              ...row,
+              lastChecked: toUtc(row.lastChecked),
+              requestedAt: toUtc(row.requestedAt),
+            }));
+            pubsub.publish(TOPICS.SERVICES, {
+              services: { result: { data: allServices }, error: null },
+            });
+          } catch (pubErr) {
+            console.error('Error publishing services update:', pubErr.message);
+          }
         } else {
           // Update only the last checked timestamp
           await this.knex('service_status')

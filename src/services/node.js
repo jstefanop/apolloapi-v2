@@ -15,10 +15,16 @@ class NodeService {
     this.utils = utils;
   }
 
+  _notifyServicesStatus() {
+    try {
+      const { pushServicesStatus } = require('../app/scheduler');
+      pushServicesStatus().catch(() => {});
+    } catch (_) {}
+  }
+
   // Start the Bitcoin node
   async start() {
     try {
-      // Update service status in the database
       await this.knex('service_status')
         .where({ service_name: 'node' })
         .update({
@@ -27,7 +33,7 @@ class NodeService {
           requested_at: new Date()
         });
 
-      // Start the node service
+      this._notifyServicesStatus();
       await this._execCommand('sudo systemctl start node');
     } catch (error) {
       throw new GraphQLError(`Failed to start node: ${error.message}`);
@@ -37,7 +43,6 @@ class NodeService {
   // Stop the Bitcoin node
   async stop() {
     try {
-      // Update service status in the database
       await this.knex('service_status')
         .where({ service_name: 'node' })
         .update({
@@ -46,7 +51,7 @@ class NodeService {
           requested_at: new Date()
         });
 
-      // Stop the node service
+      this._notifyServicesStatus();
       await this._execCommand('sudo systemctl stop node');
     } catch (error) {
       throw new GraphQLError(`Failed to stop node: ${error.message}`);

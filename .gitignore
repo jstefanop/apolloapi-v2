@@ -89,3 +89,7 @@ backend/node/user.conf
 
 .claudeignore
 .claudesync
+
+# AI docs and Cursor skills (local only)
+docs-ai/
+.cursor/skills/
