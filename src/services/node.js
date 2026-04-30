@@ -378,6 +378,13 @@ class NodeService {
         ? new Date(dbStatus.requestedAt).getTime()
         : 0;
 
+      // Helper: detect RPC_IN_WARMUP (-28) — Bitcoin Core is alive but still loading.
+      // This is not a failure: the service is running, just not fully ready.
+      const isWarmupError = (err) => {
+        const code = err?.response?.data?.error?.code;
+        return code === -28 || code === '-28';
+      };
+
       // Handle case where requested_status is null (e.g., fresh installation)
       // In this case, just check if the node responds without any pending logic
       if (!dbStatus.requestedStatus || dbStatus.requestedStatus === null) {
@@ -385,6 +392,7 @@ class NodeService {
           await this._callRpcMethod(rpcClient, 'getblockchaininfo');
           return { status: 'online' };
         } catch (err) {
+          if (isWarmupError(err)) return { status: 'online' };
           console.log('Node not responding and no requested status:', err.message);
           return { status: 'offline' };
         }
@@ -396,6 +404,9 @@ class NodeService {
           await this._callRpcMethod(rpcClient, 'getblockchaininfo');
           return { status: 'online' };
         } catch (err) {
+          // RPC_IN_WARMUP: Bitcoin Core is starting up — treat the service as online
+          if (isWarmupError(err)) return { status: 'online' };
+
           console.log('Error checking node status:', err.message);
 
           // If the node doesn't respond, check the pending threshold
