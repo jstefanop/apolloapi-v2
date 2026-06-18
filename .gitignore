@@ -93,3 +93,4 @@ backend/node/user.conf
 # AI docs and Cursor skills (local only)
 docs-ai/
 .cursor/skills/
+/CLAUDE.md
