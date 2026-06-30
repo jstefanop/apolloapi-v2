@@ -118,6 +118,26 @@ class SettingsService {
     }
   }
 
+  // Validate mindiff format
+  // Minimum difficulty vardiff will allow miners to drop to. Must be a positive integer.
+  _validateMindiff(mindiff) {
+    if (mindiff === undefined || mindiff === null) {
+      return; // Allow undefined/null values - will use default
+    }
+
+    if (typeof mindiff !== 'number') {
+      throw new Error('mindiff must be a number');
+    }
+
+    if (!Number.isInteger(mindiff)) {
+      throw new Error('mindiff must be an integer');
+    }
+
+    if (mindiff <= 0) {
+      throw new Error('mindiff must be a positive integer');
+    }
+  }
+
   // Update settings
   async update(settingsInput) {
     try {
@@ -138,6 +158,11 @@ class SettingsService {
       // Validate startdiff if provided
       if (settingsInput.startdiff !== undefined) {
         this._validateStartdiff(settingsInput.startdiff);
+      }
+
+      // Validate mindiff if provided
+      if (settingsInput.mindiff !== undefined) {
+        this._validateMindiff(settingsInput.mindiff);
       }
 
       // Get existing settings before update
@@ -194,6 +219,7 @@ class SettingsService {
         oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
         oldSettings.btcsig !== newSettings.btcsig ||
         oldSettings.startdiff !== newSettings.startdiff ||
+        oldSettings.mindiff !== newSettings.mindiff ||
         (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
       ) {
         await this.utils.auth.manageBitcoinConf(backendSettings);
@@ -236,6 +262,7 @@ class SettingsService {
         'node_allow_lan as nodeAllowLan',
         'btcsig',
         'startdiff',
+        'mindiff',
         'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')
@@ -283,6 +310,7 @@ class SettingsService {
       'node_allow_lan as nodeAllowLan',
       'btcsig',
       'startdiff',
+      'mindiff',
       'node_software as nodeSoftware'
     );
 
@@ -335,6 +363,7 @@ class SettingsService {
       nodeAllowLan: 'node_allow_lan',
       btcsig: 'btcsig',
       startdiff: 'startdiff',
+      mindiff: 'mindiff',
       nodeSoftware: 'node_software'
     };
 
@@ -366,6 +395,7 @@ class SettingsService {
         'node_allow_lan',
         'btcsig',
         'startdiff',
+        'mindiff',
         'node_software'
       ])
       .orderBy('created_at', 'desc')
@@ -396,6 +426,7 @@ class SettingsService {
       nodeAllowLan: currentSettings?.node_allow_lan,
       btcsig: currentSettings?.btcsig,
       startdiff: currentSettings?.startdiff,
+      mindiff: currentSettings?.mindiff,
       nodeSoftware: currentSettings?.node_software // Keep backend format!
     };
 

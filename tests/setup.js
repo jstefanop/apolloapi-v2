@@ -178,6 +178,7 @@ beforeAll(async () => {
         table.boolean('node_allow_lan').defaultTo(false);
         table.string('btcsig').defaultTo('mined by Solo Apollo');
         table.integer('startdiff').defaultTo(null);
+        table.integer('mindiff').defaultTo(null);
         table.string('node_software').defaultTo('core-28.1');
         table.timestamps(true, true);
       });
