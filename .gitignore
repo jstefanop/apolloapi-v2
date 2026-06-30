@@ -32,7 +32,6 @@ bower_components
 
 # Dev files
 dev-*.js
-!scripts/dev-*.js
 .codegpt
 
 # Compiled binary addons (https://nodejs.org/api/addons.html)
