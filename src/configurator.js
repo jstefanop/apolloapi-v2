@@ -96,13 +96,7 @@ const generate = async function (pools = null, settings = null ) {
 		await fsPromises.mkdir(confDir, { recursive: true });
 		// Conf files
 		await fsPromises.writeFile(confDir + '/miner_config', minerConfig);
-		// BTC/II mode file: the legacy apollo-miner binary doesn't understand the
-		// Apollo III-only "super-eco" preset, so it always receives plain eco.
-		await fsPromises.writeFile(confDir + '/mode', minerMode === 'super-eco' ? 'eco' : minerMode);
-		// Apollo III config file: separate file consumed by the III binary, which
-		// keeps super-eco as-is. Harmless on BTC/II-only devices (binary not run).
-		// TBD: John — confirm miner_config3 format and Apollo III custom tunables schema.
-		await fsPromises.writeFile(confDir + '/miner_config3', minerMode);
+		await fsPromises.writeFile(confDir + '/mode', minerMode);
 		console.log('Configuration saved');
 	} catch (err) {
 		console.log('Error saving configuration files');

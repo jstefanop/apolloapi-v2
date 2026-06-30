@@ -336,7 +336,7 @@ class MinerService {
     }
   }
 
-  // Parse a single stat file written by apollo-miner (USB) or apollo-miner-3 (III).
+  // Parse a single stat file written by apollo-miner / apollo-miner-iii.
   // Returns the parsed object with int_<key> renaming applied, or null if
   // the file is empty / malformed.
   async _parseStatFileEntry(filePath, fileDetails) {
@@ -404,10 +404,7 @@ class MinerService {
       const statsDir = path.resolve(__dirname, '../../backend/apollo-miner/');
       const statsFilePattern = /^apollo-miner.*$/;
       let statsFiles = await fs.readdir(statsDir);
-      // The Apollo III stat file lives in the same dir but is read separately.
-      statsFiles = statsFiles.filter(
-        (f) => statsFilePattern.test(f) && f !== 'apollo-miner-3.json'
-      );
+      statsFiles = statsFiles.filter((f) => statsFilePattern.test(f));
 
       const findFileDetails = (fileName) => {
         const match = fileName.match(/^(apollo-miner)(?:-v(\d+))?\.(.+)$/);
@@ -439,20 +436,29 @@ class MinerService {
     }
 
     // --- Apollo III internal hashboards (single stat file) ---
-    // One file named `apollo-miner-3.json` (no UID), same schema as Apollo II,
-    // written alongside the USB stat files. The backend miner script launches
-    // the III binary; there is no separate systemd unit.
+    // TBD: John — path, filename pattern and file count for the III binary.
+    // Defaults assume a single `apollo-miner-iii.<uuid>` file under
+    // backend/apollo-miner-iii/, overridable via APOLLO_III_STATS_DIR.
     try {
       const iiiStatsDir =
         process.env.APOLLO_III_STATS_DIR ||
-        path.resolve(__dirname, '../../backend/apollo-miner/');
-      const iiiPath = `${iiiStatsDir}/apollo-miner-3.json`;
-      await fs.access(iiiPath);
-      const parsed = await this._parseStatFileEntry(iiiPath, {
-        version: 'v3',
-        id: '3',
-      });
-      if (parsed) stats.push(parsed);
+        path.resolve(__dirname, '../../backend/apollo-miner-iii/');
+      const iiiFiles = await fs.readdir(iiiStatsDir);
+      const iiiPattern = /^apollo-miner-iii(?:[-.].*)?$/;
+
+      await Promise.all(
+        iiiFiles
+          .filter((f) => iiiPattern.test(f))
+          .map(async (file) => {
+            const idMatch = file.match(/^apollo-miner-iii[-.]?(.*)$/);
+            const id = idMatch && idMatch[1] ? idMatch[1] : 'iii-0';
+            const parsed = await this._parseStatFileEntry(
+              `${iiiStatsDir}/${file}`,
+              { version: 'v3', id }
+            );
+            if (parsed) stats.push(parsed);
+          })
+      );
     } catch (err) {
       if (err.code !== 'ENOENT') {
         console.log(`Apollo III stats scan failed: ${err.message}`);
