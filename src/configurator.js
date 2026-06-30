@@ -40,9 +40,7 @@ const generate = async function (pools = null, settings = null ) {
 		pools = _.filter(pools, { enabled: 1 });
 	}
 
-	const orderedPools = _.sortBy(pools, 'index');
-	const mainPool = orderedPools[0];
-	const backupPool = orderedPools[1];
+	const mainPool = _.minBy(pools, 'index');
 
 	// If no pool configured, skip miner configuration
 	if (!mainPool || !mainPool.url) {
@@ -64,17 +62,6 @@ const generate = async function (pools = null, settings = null ) {
 
 	// Parse miner configuration
 	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -pswd ${mainPool.password}`;
-
-	// Backup pool — appended only if enabled and reachable.
-	// TBD: John — confirm exact CLI flag names on apollo-miner (BTC/II) and the Apollo III binary.
-	// Placeholder syntax: -host2 / -port2 / -user2 / -pswd2.
-	if (backupPool && backupPool.url) {
-		const backupUrl = backupPool.url.replace(/^.*\/\//, '');
-		const [backupHost, backupPort] = backupUrl.split(':');
-		if (backupHost && backupPort) {
-			minerConfig += ` -host2 ${backupHost} -port2 ${backupPort} -user2 ${backupPool.username} -pswd2 ${backupPool.password}`;
-		}
-	}
 
 	// Add custom configuration if needed
 	if (settings.minerMode === 'custom') {
