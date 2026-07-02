@@ -136,6 +136,29 @@ describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () 
   });
 });
 
+describe('T1 — pool change (Pool.updateAll) reconfigures the miner', () => {
+  it('persists pools and regenerates miner_config with the new pool', async () => {
+    const fs = require('fs');
+    fs.promises.writeFile.mockClear();
+    const res = await run(
+      `query($in: PoolUpdateAllInput!) { Pool { updateAll(input: $in) {
+        result { pools { url username index enabled } } error { message } } } }`,
+      {
+        variables: {
+          in: { pools: [{ index: 0, enabled: true, url: 'stratum+tcp://newpool.example:4444', username: 'newwallet', password: 'x' }] },
+        },
+      }
+    );
+    expect(res.data.Pool.updateAll.error).toBeNull();
+    const pools = res.data.Pool.updateAll.result.pools;
+    expect(pools.some((p) => p.url.includes('newpool.example'))).toBe(true);
+    // configurator regenerated the miner config with the new pool
+    const call = fs.promises.writeFile.mock.calls.find((c) => String(c[0]).endsWith('/miner_config'));
+    expect(call).toBeDefined();
+    expect(call[1]).toContain('-host newpool.example -port 4444 -user newwallet');
+  });
+});
+
 describe('T1 — @auth guard', () => {
   it('rejects an unauthenticated mutation', async () => {
     const spy = jest.spyOn(services.node, '_execCommand').mockResolvedValue('');
