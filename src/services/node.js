@@ -9,6 +9,10 @@ const util = require('util');
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
 
+// Dev fake node RPC (mirrors devMinerService/devSoloService) — active in NODE_ENV=development
+const devNodeService =
+  process.env.NODE_ENV === 'development' ? require('../devNodeService') : null;
+
 class NodeService {
   constructor(knex, utils) {
     this.knex = knex;
@@ -195,6 +199,10 @@ class NodeService {
 
   // Helper method to create RPC client
   async _createRpcClient() {
+    // In development, return an in-process fake client so the node pages render
+    // without a real bitcoind (mirrors devMinerService/devSoloService).
+    if (devNodeService) return devNodeService.createFakeRpcClient();
+
     // Get RPC password from settings
     const settings = await this.knex('settings')
       .select(['node_rpc_password as nodeRpcPassword'])

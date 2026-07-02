@@ -1,15 +1,8 @@
-#!/usr/bin/env node
-// Fake bitcoind JSON-RPC server for the E2E "fake device".
-// The backend's node service (src/services/node.js) posts JSON-RPC to
-// BITCOIN_NODE_HOST:PORT. In NODE_ENV=development miner/solo/mcu/systemctl are
-// already faked; the node is the only piece that needs a real RPC endpoint.
-// This serves canned-but-realistic responses so overview/node pages render and
-// stay deterministic. Handles single calls (POST /) and batches (POST '').
-//
-// Usage: FAKE_RPC_PORT=18332 node scripts/fake-bitcoind-rpc.js
-const http = require('http');
+// Dev fake for the Bitcoin node, mirroring devMinerService / devSoloService.
+// In NODE_ENV=development, node.js._createRpcClient() returns an in-process fake
+// client so the Node pages (stats, online, recent blocks) render without a real
+// bitcoind. Reusable for local UI development and for the E2E fake-device stack.
 
-const PORT = Number(process.env.FAKE_RPC_PORT || 18332);
 const TIP = Number(process.env.FAKE_TIP_HEIGHT || 956365);
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -26,8 +19,7 @@ const hash = (seed) => {
 
 // Coinbase scriptSig hex with an embedded ASCII pool tag (for pool detection).
 const coinbaseHex = (height) => {
-  const tag = '/FutureBit E2E/';
-  const ascii = Buffer.from(tag, 'utf8').toString('hex');
+  const ascii = Buffer.from('/FutureBit E2E/', 'utf8').toString('hex');
   return `03${height.toString(16).padStart(6, '0')}${ascii}00000000`;
 };
 
@@ -76,7 +68,7 @@ const handlers = {
       startingheight: TIP,
     })),
   getblockhash: ([height]) => hash(`block-${height}`),
-  getblock: ([, verbosity]) => block(TIP), // called with bestblockhash; return tip block
+  getblock: () => block(TIP),
   getblockheader: () => ({ ...block(TIP - 1) }),
   getblockstats: ([height]) => ({
     height,
@@ -96,8 +88,8 @@ const handlers = {
 };
 
 const dispatch = (req) => {
-  const fn = handlers[req.method];
   const id = req.id ?? null;
+  const fn = handlers[req.method];
   if (!fn) return { result: null, error: { code: -32601, message: `Method not found: ${req.method}` }, id };
   try {
     return { result: fn(req.params || []), error: null, id };
@@ -106,26 +98,11 @@ const dispatch = (req) => {
   }
 };
 
-const server = http.createServer((req, res) => {
-  if (req.method !== 'POST') {
-    res.writeHead(405).end();
-    return;
-  }
-  let body = '';
-  req.on('data', (c) => (body += c));
-  req.on('end', () => {
-    let payload;
-    try {
-      payload = JSON.parse(body || '{}');
-    } catch {
-      res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'bad json' }));
-      return;
-    }
-    const out = Array.isArray(payload) ? payload.map(dispatch) : dispatch(payload);
-    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
-  });
+// axios-compatible client: post(path, body) -> { data: <single obj | array> }
+const createFakeRpcClient = () => ({
+  post: async (_path, body) => ({
+    data: Array.isArray(body) ? body.map(dispatch) : dispatch(body),
+  }),
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[fake-bitcoind-rpc] listening on 127.0.0.1:${PORT} (tip=${TIP})`);
-});
+module.exports = { createFakeRpcClient };
