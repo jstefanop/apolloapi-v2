@@ -134,6 +134,28 @@ describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () 
     expect(res.data.Settings.update.result.settings.nodeAllowLan).toBe(true);
     expect(spy).toHaveBeenCalled();
   });
+
+  it('changing nodeEnableTor and nodeUserConf persists and triggers manageBitcoinConf', async () => {
+    const spy = jest.spyOn(utils.auth, 'manageBitcoinConf').mockResolvedValue(undefined);
+    const res = await run(
+      `query($in: SettingsUpdateInput!) { Settings { update(input: $in) {
+        result { settings { nodeEnableTor nodeUserConf } } error { message } } } }`,
+      { variables: { in: { nodeEnableTor: true, nodeUserConf: 'maxmempool=300' } } }
+    );
+    expect(res.data.Settings.update.error).toBeNull();
+    expect(res.data.Settings.update.result.settings.nodeEnableTor).toBe(true);
+    expect(res.data.Settings.update.result.settings.nodeUserConf).toBe('maxmempool=300');
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('T1 — service action triggers a services-status push', () => {
+  it('Node.start notifies pushServicesStatus (UI subscription refresh)', async () => {
+    jest.spyOn(services.node, '_execCommand').mockResolvedValue('');
+    const scheduler = require('../../src/app/scheduler'); // mocked in tests/setup.js
+    await run(`query { Node { start { error { message } } } }`);
+    expect(scheduler.pushServicesStatus).toHaveBeenCalled();
+  });
 });
 
 describe('T1 — pool change (Pool.updateAll) reconfigures the miner', () => {
