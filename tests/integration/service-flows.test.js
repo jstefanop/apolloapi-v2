@@ -68,6 +68,74 @@ describe('T1 — node start/stop (Node.start / Node.stop)', () => {
   });
 });
 
+describe('T1 — miner start/stop/restart (Miner.*)', () => {
+  it('Miner.start → requested_status=online + systemctl start apollo-miner', async () => {
+    const spy = jest.spyOn(services.miner, '_execCommand').mockResolvedValue('');
+    const res = await run(`query { Miner { start { error { message } } } }`);
+    expect(res.data.Miner.start.error).toBeNull();
+    const row = await knex('service_status').where({ service_name: 'miner' }).first();
+    expect(row.requested_status).toBe('online');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl start apollo-miner');
+  });
+
+  it('Miner.stop → requested_status=offline + systemctl stop apollo-miner', async () => {
+    const spy = jest.spyOn(services.miner, '_execCommand').mockResolvedValue('');
+    const res = await run(`query { Miner { stop { error { message } } } }`);
+    expect(res.data.Miner.stop.error).toBeNull();
+    const row = await knex('service_status').where({ service_name: 'miner' }).first();
+    expect(row.requested_status).toBe('offline');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl stop apollo-miner');
+  });
+
+  it('Miner.restart → systemctl restart apollo-miner', async () => {
+    const spy = jest.spyOn(services.miner, '_execCommand').mockResolvedValue('');
+    const res = await run(`query { Miner { restart { error { message } } } }`);
+    expect(res.data.Miner.restart.error).toBeNull();
+    expect(spy).toHaveBeenCalledWith('sudo systemctl restart apollo-miner');
+  });
+});
+
+describe('T1 — solo start/stop (Solo.*)', () => {
+  beforeAll(async () => {
+    const exists = await knex('service_status').where({ service_name: 'solo' }).first();
+    if (!exists) await knex('service_status').insert({ service_name: 'solo', status: 'offline', requested_status: 'offline' });
+  });
+
+  it('Solo.start → requested_status=online + systemctl start ckpool (waitForActive ok)', async () => {
+    // _execCommand serves both the start command and the is-active poll in _waitForActive
+    const spy = jest.spyOn(services.solo, '_execCommand').mockResolvedValue({ stdout: 'active' });
+    const res = await run(`query { Solo { start { error { message } } } }`);
+    expect(res.data.Solo.start.error).toBeNull();
+    const row = await knex('service_status').where({ service_name: 'solo' }).first();
+    expect(row.requested_status).toBe('online');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl start ckpool');
+  });
+
+  it('Solo.stop → requested_status=offline + systemctl stop ckpool', async () => {
+    const spy = jest.spyOn(services.solo, '_execCommand').mockResolvedValue({ stdout: 'inactive' });
+    const res = await run(`query { Solo { stop { error { message } } } }`);
+    expect(res.data.Solo.stop.error).toBeNull();
+    const row = await knex('service_status').where({ service_name: 'solo' }).first();
+    expect(row.requested_status).toBe('offline');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl stop ckpool');
+  });
+});
+
+describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () => {
+  it('changing nodeMaxConnections persists and triggers manageBitcoinConf', async () => {
+    const spy = jest.spyOn(utils.auth, 'manageBitcoinConf').mockResolvedValue(undefined);
+    const res = await run(
+      `query($in: SettingsUpdateInput!) { Settings { update(input: $in) {
+        result { settings { nodeMaxConnections nodeAllowLan } } error { message } } } }`,
+      { variables: { in: { nodeMaxConnections: 128, nodeAllowLan: true } } }
+    );
+    expect(res.data.Settings.update.error).toBeNull();
+    expect(res.data.Settings.update.result.settings.nodeMaxConnections).toBe(128);
+    expect(res.data.Settings.update.result.settings.nodeAllowLan).toBe(true);
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
 describe('T1 — @auth guard', () => {
   it('rejects an unauthenticated mutation', async () => {
     const spy = jest.spyOn(services.node, '_execCommand').mockResolvedValue('');
