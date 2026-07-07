@@ -16,6 +16,15 @@ class MinerService {
   }
 
   // Start the miner
+  // Push the current services status to all WS subscribers immediately.
+  // Uses a lazy require to avoid circular dependency (scheduler → services → miner).
+  _notifyServicesStatus() {
+    try {
+      const { pushServicesStatus } = require('../app/scheduler');
+      pushServicesStatus().catch(() => {});
+    } catch (_) {}
+  }
+
   async start() {
     try {
       // Update service status in the database
@@ -26,6 +35,10 @@ class MinerService {
           requested_status: 'online',
           requested_at: new Date(),
         });
+
+      // Notify subscribers immediately so the UI shows "pending" without waiting
+      // for the next periodic push (up to 10s later).
+      this._notifyServicesStatus();
 
       // Start the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -61,6 +74,8 @@ class MinerService {
           requested_at: new Date(),
         });
 
+      this._notifyServicesStatus();
+
       // Stop the miner based on environment
       if (process.env.NODE_ENV === 'development') {
         console.log('Stopping dev miner...');
@@ -94,6 +109,8 @@ class MinerService {
           requested_status: 'online',
           requested_at: new Date(),
         });
+
+      this._notifyServicesStatus();
 
       // Restart the miner based on environment
       if (process.env.NODE_ENV === 'development') {

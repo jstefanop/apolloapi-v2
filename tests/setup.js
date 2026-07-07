@@ -19,9 +19,13 @@ jest.mock('config', () => ({
   }
 }));
 
-// Disattiva lo scheduler durante i test per evitare che cerchi tabelle prima che siano create
+// Disattiva lo scheduler durante i test per evitare che cerchi tabelle prima che siano create.
+// pushServicesStatus e pushAllStats vengono chiamati via lazy-require da _notifyServicesStatus
+// in miner/node/solo service — vanno esposti come jest.fn() per evitare silent failures.
 jest.mock('../src/app/scheduler', () => ({
-  startAllSchedulers: jest.fn()
+  startAllSchedulers: jest.fn(),
+  pushServicesStatus: jest.fn().mockResolvedValue(undefined),
+  pushAllStats: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock delle operazioni del file system
@@ -174,6 +178,7 @@ beforeAll(async () => {
         table.boolean('node_allow_lan').defaultTo(false);
         table.string('btcsig').defaultTo('mined by Solo Apollo');
         table.integer('startdiff').defaultTo(null);
+        table.integer('mindiff').defaultTo(null);
         table.string('node_software').defaultTo('core-28.1');
         table.timestamps(true, true);
       });

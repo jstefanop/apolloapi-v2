@@ -315,6 +315,7 @@ module.exports.auth = {
         btcsig: fullBtcsig,
         zmqblock: 'tcp://127.0.0.1:28332',
         startdiff: settings.startdiff || 1024,
+        mindiff: settings.mindiff || 1,
       };
 
       try {
@@ -545,8 +546,8 @@ module.exports.auth = {
     
     try {
       // Validate target software
-      if (!['core-25.1', 'core-28.1', 'core-29.2', 'knots-29.2'].includes(targetSoftware)) {
-        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, core-29.2, knots-29.2`);
+      if (!['core-25.1', 'core-28.1', 'core-29.2', 'core-31.0', 'knots-29.2', 'knots-29.3'].includes(targetSoftware)) {
+        throw new Error(`Invalid software: ${targetSoftware}. Valid options: core-25.1, core-28.1, core-29.2, core-31.0, knots-29.2, knots-29.3`);
       }
 
       console.log(`Switching Bitcoin software to ${targetSoftware}...`);

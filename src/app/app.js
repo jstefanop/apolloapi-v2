@@ -1,3 +1,4 @@
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const setupApolloServer = require('./graphqlApp');
@@ -16,18 +17,19 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Setup Apollo Server and apply middleware
+// Setup Apollo Server + WebSocket server, then run scheduler
 async function initializeApp() {
-  const appWithApollo = await setupApolloServer(app);
+  const httpServer = http.createServer(app);
+  await setupApolloServer(app, httpServer);
 
-  // Run the scheduler
+  // Run the scheduler (starts PubSub timers and service monitor)
   require('./scheduler');
 
-  return appWithApollo;
+  return httpServer;
 }
 
 // Initialize the app
 const appPromise = initializeApp();
 
-// Export the app promise
+// Export the httpServer promise
 module.exports = appPromise;
