@@ -336,121 +336,136 @@ class MinerService {
     }
   }
 
+  // Parse a single stat file written by apollo-miner / apollo-miner-iii.
+  // Returns the parsed object with int_<key> renaming applied, or null if
+  // the file is empty / malformed.
+  async _parseStatFileEntry(filePath, fileDetails) {
+    try {
+      const data = await fs.readFile(filePath);
+      let received = data.toString('utf8').trim();
+
+      if (!received) {
+        console.log(`Skipping empty file: ${filePath}`);
+        return null;
+      }
+
+      received = received
+        .replace(/\-nan/g, '0')
+        .replace(/[^\x00-\x7F]/g, '')
+        .replace('}{', '},{')
+        .replace(String.fromCharCode(0), '')
+        .replace(/[^\}]+$/, '');
+
+      if (!received.startsWith('{') || !received.endsWith('}')) {
+        console.log(`Invalid JSON format in file ${filePath}, skipping...`);
+        return null;
+      }
+
+      try {
+        received = JSON.parse(received);
+      } catch (parseError) {
+        console.log(`Failed to parse JSON in file ${filePath}: ${parseError.message}`);
+        return null;
+      }
+
+      received.uuid = fileDetails.id;
+      received.version = fileDetails.version;
+
+      received.master.intervals = _.mapKeys(
+        received.master.intervals,
+        (value, name) => `int_${name}`
+      );
+      received.pool.intervals = _.mapKeys(
+        received.pool.intervals,
+        (value, name) => `int_${name}`
+      );
+      received.fans = _.mapKeys(received.fans, (value, name) => `int_${name}`);
+      received.slots = _.mapKeys(received.slots, (value, name) => `int_${name}`);
+
+      let offset = new Date().getTimezoneOffset();
+      offset *= -1;
+      received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss')
+        .utcOffset(offset)
+        .format();
+
+      return received;
+    } catch (fileError) {
+      console.log(`Error processing file ${filePath}: ${fileError.message}`);
+      return null;
+    }
+  }
+
   // Helper method to get miner stats
   async _getMinerStats(settings, pools) {
-    return new Promise((resolve, reject) => {
-      (async () => {
-        try {
-          const statsDir = path.resolve(
-            __dirname,
-            '../../backend/apollo-miner/'
-          );
-          const statsFilePattern = 'apollo-miner.*';
+    const stats = [];
 
-          // Get list of stats files
-          let statsFiles = await fs.readdir(statsDir);
-          statsFiles = statsFiles.filter((f) => f.match(statsFilePattern));
+    // --- USB boards (apollo-miner) ---
+    try {
+      const statsDir = path.resolve(__dirname, '../../backend/apollo-miner/');
+      const statsFilePattern = /^apollo-miner.*$/;
+      let statsFiles = await fs.readdir(statsDir);
+      statsFiles = statsFiles.filter((f) => statsFilePattern.test(f));
 
-          let stats = [];
-
-          // Parse file details (version and ID)
-          const findFileDetails = (fileName) => {
-            const match = fileName.match(/^(apollo-miner)(?:-v(\d+))?\.(.+)$/);
-            if (match) {
-              const [, , version, id] = match;
-              const fileVersion = version ? 'v' + version : 'v1';
-              return { version: fileVersion, id };
-            } else {
-              return null;
-            }
-          };
-
-          // Process each stats file
-          await Promise.all(
-            statsFiles.map(async (file) => {
-              try {
-                const data = await fs.readFile(`${statsDir}/${file}`);
-                let received = data.toString('utf8').trim();
-
-                // Skip empty files
-                if (!received) {
-                  console.log(`Skipping empty file: ${file}`);
-                  return;
-                }
-
-                // Clean JSON data
-                received = received
-                  .replace(/\-nan/g, '0')
-                  .replace(/[^\x00-\x7F]/g, '')
-                  .replace('}{', '},{')
-                  .replace(String.fromCharCode(0), '')
-                  .replace(/[^\}]+$/, '');
-
-                // Validate JSON before parsing
-                if (!received.startsWith('{') || !received.endsWith('}')) {
-                  console.log(`Invalid JSON format in file ${file}, skipping...`);
-                  return;
-                }
-
-                try {
-                  received = JSON.parse(received);
-                } catch (parseError) {
-                  console.log(`Failed to parse JSON in file ${file}: ${parseError.message}`);
-                  return;
-                }
-
-                // Add file details to the stats
-                const fileDetails = findFileDetails(file);
-                if (!fileDetails) {
-                  console.log(`Could not extract details from filename ${file}, skipping...`);
-                  return;
-                }
-
-                received.uuid = fileDetails.id;
-                received.version = fileDetails.version;
-
-                // Rename interval keys
-                received.master.intervals = _.mapKeys(
-                  received.master.intervals,
-                  (value, name) => `int_${name}`
-                );
-
-                received.pool.intervals = _.mapKeys(
-                  received.pool.intervals,
-                  (value, name) => `int_${name}`
-                );
-
-                received.fans = _.mapKeys(
-                  received.fans,
-                  (value, name) => `int_${name}`
-                );
-
-                received.slots = _.mapKeys(
-                  received.slots,
-                  (value, name) => `int_${name}`
-                );
-
-                // Format date with timezone
-                let offset = new Date().getTimezoneOffset();
-                offset *= -1;
-                received.date = moment(`${received.date}`, 'YYYY-MM-DD HH:mm:ss')
-                  .utcOffset(offset)
-                  .format();
-
-                stats.push(received);
-              } catch (fileError) {
-                console.log(`Error processing file ${file}: ${fileError.message}`);
-                // Continue with other files instead of failing completely
-              }
-            })
-          );
-
-          resolve(stats);
-        } catch (err) {
-          reject(err);
+      const findFileDetails = (fileName) => {
+        const match = fileName.match(/^(apollo-miner)(?:-v(\d+))?\.(.+)$/);
+        if (match) {
+          const [, , version, id] = match;
+          const fileVersion = version ? 'v' + version : 'v1';
+          return { version: fileVersion, id };
         }
-      })();
-    });
+        return null;
+      };
+
+      await Promise.all(
+        statsFiles.map(async (file) => {
+          const details = findFileDetails(file);
+          if (!details) {
+            console.log(`Could not extract details from filename ${file}, skipping...`);
+            return;
+          }
+          const parsed = await this._parseStatFileEntry(
+            `${statsDir}/${file}`,
+            details
+          );
+          if (parsed) stats.push(parsed);
+        })
+      );
+    } catch (err) {
+      // Directory may not exist on Solo Node devices with no USB units.
+      if (err.code !== 'ENOENT') throw err;
+    }
+
+    // --- Apollo III internal hashboards (single stat file) ---
+    // TBD: John — path, filename pattern and file count for the III binary.
+    // Defaults assume a single `apollo-miner-iii.<uuid>` file under
+    // backend/apollo-miner-iii/, overridable via APOLLO_III_STATS_DIR.
+    try {
+      const iiiStatsDir =
+        process.env.APOLLO_III_STATS_DIR ||
+        path.resolve(__dirname, '../../backend/apollo-miner-iii/');
+      const iiiFiles = await fs.readdir(iiiStatsDir);
+      const iiiPattern = /^apollo-miner-iii(?:[-.].*)?$/;
+
+      await Promise.all(
+        iiiFiles
+          .filter((f) => iiiPattern.test(f))
+          .map(async (file) => {
+            const idMatch = file.match(/^apollo-miner-iii[-.]?(.*)$/);
+            const id = idMatch && idMatch[1] ? idMatch[1] : 'iii-0';
+            const parsed = await this._parseStatFileEntry(
+              `${iiiStatsDir}/${file}`,
+              { version: 'v3', id }
+            );
+            if (parsed) stats.push(parsed);
+          })
+      );
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.log(`Apollo III stats scan failed: ${err.message}`);
+      }
+    }
+
+    return stats;
   }
 
   // Helper method to get ckpool stats

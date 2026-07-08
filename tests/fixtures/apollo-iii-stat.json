@@ -1,0 +1,230 @@
+{
+  "date": "2026-06-18 12:00:00",
+  "statVersion": "2.0",
+  "versions": {
+    "miner": "3.0.0",
+    "minerDate": "2026-06-01",
+    "minerDebug": "0",
+    "firmware": "apollo-iii-1.0.0"
+  },
+  "comport": "internal",
+  "powermode": "balanced",
+  "master": {
+    "upTime": 86400,
+    "diff": 65536,
+    "boards": 4,
+    "errorSpi": 0,
+    "osc": 0,
+    "hwAddr": "aa:bb:cc:dd:ee:ff",
+    "boardsI": "120.5",
+    "boardsW": "850.0",
+    "wattPerGHs": "0.025",
+    "intervals": {
+      "30": {
+        "name": "30 sec",
+        "interval": 30,
+        "bySol": "32000.0",
+        "byDiff": "31500.0",
+        "byPool": "31800.0",
+        "byJobs": "32100.0",
+        "solutions": "12345",
+        "errors": "5",
+        "errorRate": "0.1",
+        "chipSpeed": "150.00",
+        "chipRestarts": "0"
+      },
+      "300": {
+        "name": "300 sec",
+        "interval": 300,
+        "bySol": "31900.0",
+        "byDiff": "31700.0",
+        "byPool": "31850.0",
+        "byJobs": "32000.0",
+        "solutions": "120000",
+        "errors": "40",
+        "errorRate": "0.1",
+        "chipSpeed": "150.00",
+        "chipRestarts": "0"
+      },
+      "900": {
+        "name": "900 sec",
+        "interval": 900,
+        "bySol": "31950.0",
+        "byDiff": "31750.0",
+        "byPool": "31900.0",
+        "byJobs": "32050.0",
+        "solutions": "360000",
+        "errors": "120",
+        "errorRate": "0.1",
+        "chipSpeed": "150.00",
+        "chipRestarts": "0"
+      },
+      "3600": {
+        "name": "3600 sec",
+        "interval": 3600,
+        "bySol": "32000.0",
+        "byDiff": "31800.0",
+        "byPool": "31950.0",
+        "byJobs": "32100.0",
+        "solutions": "1440000",
+        "errors": "500",
+        "errorRate": "0.1",
+        "chipSpeed": "150.00",
+        "chipRestarts": "0"
+      },
+      "0": {
+        "name": "0 sec",
+        "interval": 86400,
+        "bySol": "32000.0",
+        "byDiff": "31800.0",
+        "byPool": "31950.0",
+        "byJobs": "32100.0",
+        "solutions": "2764800000",
+        "errors": "9500",
+        "errorRate": "0.1",
+        "chipSpeed": "150.00",
+        "chipRestarts": "0"
+      }
+    }
+  },
+  "pool": {
+    "host": "stratum.braiins.com",
+    "port": "3333",
+    "userName": "michelem09.apollo-iii",
+    "diff": 65536,
+    "intervals": {
+      "30": {
+        "name": "30 sec",
+        "interval": 30,
+        "sharesSent": "8",
+        "sharesAccepted": "8",
+        "sharesRejected": "0"
+      },
+      "300": {
+        "name": "300 sec",
+        "interval": 300,
+        "sharesSent": "85",
+        "sharesAccepted": "85",
+        "sharesRejected": "0"
+      },
+      "900": {
+        "name": "900 sec",
+        "interval": 900,
+        "sharesSent": "255",
+        "sharesAccepted": "255",
+        "sharesRejected": "0"
+      },
+      "3600": {
+        "name": "3600 sec",
+        "interval": 3600,
+        "sharesSent": "1020",
+        "sharesAccepted": "1018",
+        "sharesRejected": "2"
+      },
+      "0": {
+        "name": "0 sec",
+        "interval": 86400,
+        "sharesSent": "24480",
+        "sharesAccepted": "24430",
+        "sharesRejected": "50"
+      }
+    }
+  },
+  "fans": {
+    "0": {
+      "rpm": [3200, 3250, 3180, 3220]
+    }
+  },
+  "temperature": {
+    "count": 4,
+    "min": 45,
+    "avr": 58,
+    "max": 72
+  },
+  "slots": {
+    "0": {
+      "revision": 30,
+      "spiNum": 1,
+      "spiLen": 4,
+      "pwrNum": 2,
+      "pwrLen": 2,
+      "btcNum": 11,
+      "specVoltage": 12,
+      "chips": 72,
+      "pwrOn": 1,
+      "pwrOnTarget": 1,
+      "revAdc": 3879,
+      "temperature": "56.5",
+      "currents": [22000, 21800],
+      "solutions": "0",
+      "errors": "0",
+      "ghs": "8000.0",
+      "errorRate": "0.1",
+      "chipRestarts": "0",
+      "wattPerGHs": "0.025"
+    },
+    "1": {
+      "revision": 30,
+      "spiNum": 1,
+      "spiLen": 4,
+      "pwrNum": 2,
+      "pwrLen": 2,
+      "btcNum": 11,
+      "specVoltage": 12,
+      "chips": 72,
+      "pwrOn": 1,
+      "pwrOnTarget": 1,
+      "revAdc": 3881,
+      "temperature": "58.2",
+      "currents": [22100, 21900],
+      "solutions": "0",
+      "errors": "0",
+      "ghs": "8000.0",
+      "errorRate": "0.1",
+      "chipRestarts": "0",
+      "wattPerGHs": "0.025"
+    },
+    "2": {
+      "revision": 30,
+      "spiNum": 1,
+      "spiLen": 4,
+      "pwrNum": 2,
+      "pwrLen": 2,
+      "btcNum": 11,
+      "specVoltage": 12,
+      "chips": 72,
+      "pwrOn": 1,
+      "pwrOnTarget": 1,
+      "revAdc": 3877,
+      "temperature": "59.1",
+      "currents": [22050, 21850],
+      "solutions": "0",
+      "errors": "0",
+      "ghs": "8000.0",
+      "errorRate": "0.1",
+      "chipRestarts": "0",
+      "wattPerGHs": "0.025"
+    },
+    "3": {
+      "revision": 30,
+      "spiNum": 1,
+      "spiLen": 4,
+      "pwrNum": 2,
+      "pwrLen": 2,
+      "btcNum": 11,
+      "specVoltage": 12,
+      "chips": 72,
+      "pwrOn": 1,
+      "pwrOnTarget": 1,
+      "revAdc": 3880,
+      "temperature": "57.8",
+      "currents": [22020, 21820],
+      "solutions": "0",
+      "errors": "0",
+      "ghs": "8000.0",
+      "errorRate": "0.1",
+      "chipRestarts": "0",
+      "wattPerGHs": "0.025"
+    }
+  }
+}
