@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const _ = require('lodash');
 
-const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'apollo-iii-stat.json');
+const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'apollo-miner-3.json');
 
 // Mirrors the renaming performed in src/services/miner.js _getMinerStats.
 const renameIntervals = (received) => {
