@@ -113,6 +113,33 @@ class LogsService {
             );
           }
           break;
+        case 'APOLLO_API':
+          // The backend's own logs. They live in the journal (systemd captures the
+          // service's stdout), not in a file — so far they only reached the user
+          // second-hand, mixed into /var/log/syslog.
+          if (process.env.NODE_ENV === 'production') {
+            const apiLines = Math.min(Math.max(parseInt(lines) || 100, 1), 1000);
+            try {
+              const { stdout } = await execPromise(
+                `journalctl -u apollo-api -n ${apiLines} --no-pager -o short-iso`
+              );
+              return {
+                content: stdout || 'No apollo-api log entries.',
+                timestamp: new Date().toISOString(),
+              };
+            } catch (error) {
+              console.error(`Error reading apollo-api journal: ${error.message}`);
+              return {
+                content: `Unable to read the apollo-api journal: ${error.message}`,
+                timestamp: new Date().toISOString(),
+              };
+            }
+          }
+          // In development the backend logs to the terminal, not to a journal.
+          return {
+            content: '[DEV MODE] apollo-api logs are printed to the terminal running `yarn dev`.',
+            timestamp: new Date().toISOString(),
+          };
         case 'NODE':
           logPath = '/media/nvme/Bitcoin/debug.log';
           break;

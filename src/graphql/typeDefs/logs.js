@@ -10,6 +10,7 @@ module.exports = gql`
     MINER
     NODE
     SYSLOG
+    APOLLO_API
   }
 
   type LogsActions {
