@@ -1,5 +1,6 @@
 const pubsub = require('../pubsub');
 const TOPICS = require('../topics');
+const { serializeState } = require('../serialize/automation');
 
 module.exports = {
   Subscription: {
@@ -26,6 +27,15 @@ module.exports = {
     settings: {
       subscribe: () => pubsub.asyncIterator([TOPICS.SETTINGS]),
       resolve: (payload) => payload.settings,
+    },
+    automation: {
+      subscribe: () => pubsub.asyncIterator([TOPICS.AUTOMATION]),
+      // The scheduler publishes the raw evaluate() result; give the client the
+      // same shape the Automation.state query returns.
+      resolve: (payload) => ({
+        result: serializeState(payload.automation?.result),
+        error: payload.automation?.error || null,
+      }),
     },
   },
 };

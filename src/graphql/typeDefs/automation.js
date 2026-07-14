@@ -1,0 +1,279 @@
+const gql = require('graphql-tag');
+
+module.exports = gql`
+  extend type Query {
+    Automation: AutomationActions
+  }
+
+  type AutomationActions {
+    config: AutomationConfigOutput! @auth
+    rules: AutomationRulesOutput! @auth
+    events(limit: Int): AutomationEventsOutput! @auth
+
+    """
+    The signals the engine can reason about, self-described: the UI builds the
+    condition form from these instead of hardcoding a list.
+    """
+    signals: AutomationSignalsOutput! @auth
+
+    """
+    What the engine would do right now, with the values behind it. Evaluates
+    without acting and without writing to the event log.
+    """
+    state: AutomationStateOutput! @auth
+
+    updateConfig(input: AutomationConfigInput!): AutomationConfigOutput! @auth
+    createRule(input: AutomationRuleInput!): AutomationRuleOutput! @auth
+    updateRule(id: Int!, input: AutomationRuleInput!): AutomationRuleOutput! @auth
+    deleteRule(id: Int!): EmptyOutput! @auth
+
+    "Pause the automation for a while — what a manual start/stop does implicitly."
+    setOverride(input: OverrideInput): AutomationConfigOutput! @auth
+    clearOverride: AutomationConfigOutput! @auth
+  }
+
+  enum MatchMode {
+    all
+    any
+  }
+
+  enum ActionType {
+    off
+    mode
+  }
+
+  # ---------------------------------------------------------------- config
+
+  type AutomationConfig {
+    enabled: Boolean!
+    "Evaluate and log every decision, but never touch the miner."
+    dryRun: Boolean!
+    latitude: Float
+    longitude: Float
+    timezone: String
+    "keep | off | on:<mode>"
+    fallbackAction: String!
+    tariff: Tariff
+    minOnMinutes: Int!
+    minOffMinutes: Int!
+    minChangeMinutes: Int!
+    maxCyclesPerHour: Int!
+    defaultHysteresis: Float!
+    overrideMinutes: Int!
+    overrideUntil: String
+    overrideReason: String
+  }
+
+  type Tariff {
+    currency: String
+    flatPrice: Float
+    periods: [TariffPeriod!]
+  }
+
+  type TariffPeriod {
+    "ISO weekdays, Monday = 1. Empty means every day."
+    days: [Int!]
+    from: String!
+    to: String!
+    price: Float!
+    band: String
+  }
+
+  input AutomationConfigInput {
+    enabled: Boolean
+    dryRun: Boolean
+    latitude: Float
+    longitude: Float
+    timezone: String
+    fallbackAction: String
+    tariff: TariffInput
+    minOnMinutes: Int
+    minOffMinutes: Int
+    minChangeMinutes: Int
+    maxCyclesPerHour: Int
+    defaultHysteresis: Float
+    overrideMinutes: Int
+  }
+
+  input TariffInput {
+    currency: String
+    flatPrice: Float
+    periods: [TariffPeriodInput!]
+  }
+
+  input TariffPeriodInput {
+    days: [Int!]
+    from: String!
+    to: String!
+    price: Float!
+    band: String
+  }
+
+  input OverrideInput {
+    minutes: Int
+    reason: String
+  }
+
+  # ----------------------------------------------------------------- rules
+
+  type AutomationRule {
+    id: Int!
+    name: String!
+    enabled: Boolean!
+    "Lower runs first."
+    priority: Int!
+    "Safety rules run even while the automation is paused, and bypass the guard rails."
+    isSafety: Boolean!
+    match: MatchMode!
+    conditions: [RuleCondition!]!
+    action: RuleAction!
+    createdAt: String
+    updatedAt: String
+  }
+
+  type RuleCondition {
+    signal: String!
+    "One of the operators the signal declares (see Automation.signals)."
+    op: String!
+    "Stringified; the engine casts it to the signal's type."
+    value: String
+    values: [String!]
+    "Makes the threshold sticky while this rule is the one in charge: 'stop above X, resume below X - hysteresis'."
+    hysteresis: Float
+  }
+
+  type RuleAction {
+    type: ActionType!
+    mode: MinerMode
+  }
+
+  input AutomationRuleInput {
+    name: String
+    enabled: Boolean
+    priority: Int
+    isSafety: Boolean
+    match: MatchMode
+    conditions: [RuleConditionInput!]
+    action: RuleActionInput
+  }
+
+  input RuleConditionInput {
+    signal: String!
+    op: String!
+    value: String
+    values: [String!]
+    hysteresis: Float
+  }
+
+  input RuleActionInput {
+    type: ActionType!
+    mode: MinerMode
+  }
+
+  # --------------------------------------------------------------- signals
+
+  type SignalDescriptor {
+    id: String!
+    "number | boolean | time | string"
+    type: String!
+    unit: String
+    ops: [String!]!
+    supportsHysteresis: Boolean!
+  }
+
+  type SignalValue {
+    id: String!
+    "Stringified; null when stale."
+    value: String
+    "The signal could not be read. A rule that uses it does not match."
+    stale: Boolean!
+    error: String
+  }
+
+  # ----------------------------------------------------------------- state
+
+  type AutomationState {
+    enabled: Boolean!
+    dryRun: Boolean!
+    decision: Decision
+    guard: Guard
+    miner: MinerAutomationState
+    signals: [SignalValue!]!
+  }
+
+  type Decision {
+    "off | mode:<mode> | none"
+    target: String!
+    ruleId: Int
+    ruleName: String
+    "safety | rule | fallback | override"
+    reason: String!
+  }
+
+  type Guard {
+    "False when nothing needs to change, or when a guard rail is holding it back."
+    apply: Boolean!
+    "start | stop | mode | null"
+    changeType: String
+    "override | min_on | min_off | min_change | max_cycles"
+    blockedBy: String
+    message: String
+  }
+
+  type MinerAutomationState {
+    running: Boolean!
+    mode: String
+    lastChangeAt: String
+    cyclesLastHour: Int!
+    overrideUntil: String
+  }
+
+  # ---------------------------------------------------------------- events
+
+  type AutomationEvent {
+    id: Int!
+    ruleId: Int
+    ruleName: String
+    decision: String!
+    changeType: String
+    applied: Boolean!
+    dryRun: Boolean!
+    blockedBy: String
+    message: String
+    "The values that produced the decision — a verdict is useless without them."
+    signals: [SignalValue!]!
+    createdAt: String
+  }
+
+  # --------------------------------------------------------------- outputs
+
+  type AutomationConfigOutput {
+    result: AutomationConfig
+    error: Error
+  }
+
+  type AutomationRulesOutput {
+    result: [AutomationRule!]
+    error: Error
+  }
+
+  type AutomationRuleOutput {
+    result: AutomationRule
+    error: Error
+  }
+
+  type AutomationSignalsOutput {
+    result: [SignalDescriptor!]
+    error: Error
+  }
+
+  type AutomationStateOutput {
+    result: AutomationState
+    error: Error
+  }
+
+  type AutomationEventsOutput {
+    result: [AutomationEvent!]
+    error: Error
+  }
+`;

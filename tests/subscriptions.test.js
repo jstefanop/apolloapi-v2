@@ -27,6 +27,9 @@ describe('Subscription resolvers', () => {
     asyncIteratorSpy.mockRestore();
   });
 
+  // Fields whose resolve() simply forwards its slice of the payload.
+  // `automation` is deliberately not here: it reshapes the raw evaluate() result
+  // into the GraphQL shape, and is covered in tests/automation.graphql.test.js.
   const fields = [
     { name: 'miner',    topic: 'MINER',    payloadKey: 'miner'    },
     { name: 'node',     topic: 'NODE',     payloadKey: 'node'     },
@@ -35,6 +38,8 @@ describe('Subscription resolvers', () => {
     { name: 'services', topic: 'SERVICES', payloadKey: 'services' },
     { name: 'settings', topic: 'SETTINGS', payloadKey: 'settings' },
   ];
+
+  const allFields = [...fields.map((f) => f.name), 'automation'];
 
   describe('subscribe() calls asyncIterator with the correct TOPIC', () => {
     for (const { name, topic } of fields) {
@@ -70,12 +75,15 @@ describe('Subscription resolvers', () => {
   });
 
   describe('Subscription object structure', () => {
-    it('exports exactly the 6 expected subscription fields', () => {
+    it('exports exactly the expected subscription fields', () => {
       const keys = Object.keys(resolvers.Subscription);
-      expect(keys).toHaveLength(6);
-      expect(keys).toEqual(
-        expect.arrayContaining(['miner', 'node', 'mcu', 'solo', 'services', 'settings'])
-      );
+      expect(keys).toHaveLength(allFields.length);
+      expect(keys).toEqual(expect.arrayContaining(allFields));
+    });
+
+    it('automation subscribes to its own topic', () => {
+      expect(resolvers.Subscription.automation.subscribe()).toBe('MOCK_ITERATOR');
+      expect(asyncIteratorSpy).toHaveBeenCalledWith([TOPICS.AUTOMATION]);
     });
 
     it('each field has both subscribe and resolve functions', () => {
