@@ -10,6 +10,9 @@ const schema = require('../src/graphql/schema');
 // Handles the UI's realities:
 //  - gql`` templates with ${FRAGMENT} interpolation, incl. fragments that
 //    interpolate other fragments (resolved iteratively).
+//  - plain template constants used to share a selection set between operations
+//    in the same file (e.g. const CONFIG_FIELDS = `...`), which are not
+//    fragments and only exist in that file's scope.
 //  - duplicate fragment definitions after inlining (deduped by name).
 //  - Apollo Client local-only fields/directives (@client) which are NOT part of
 //    the server schema by design (stripped before validation).
@@ -73,12 +76,28 @@ const stripClient = (doc) =>
     },
   });
 
+// Selection sets shared between the operations of a single file, declared as
+// plain template literals: `const RULE_FIELDS = \`id name ...\``. Not fragments,
+// so they are scoped to the file that declares them.
+const buildLocalMap = (src) => {
+  const map = {};
+  const re = /(?:const|let)\s+([A-Za-z0-9_]+)\s*=\s*`([\s\S]*?)`/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    // Skip gql`` templates: those are documents, not selection-set snippets.
+    if (/gql\s*$/.test(src.slice(0, m.index + m[0].indexOf('`')))) continue;
+    map[m[1]] = m[2];
+  }
+  return map;
+};
+
 const collectOperations = (fragMap) => {
   const ops = [];
   for (const file of fs.readdirSync(GQL_DIR).filter((f) => f.endsWith('.js'))) {
     const src = fs.readFileSync(path.join(GQL_DIR, file), 'utf8');
+    const localMap = { ...fragMap, ...buildLocalMap(src) };
     extractGqlBlocks(src).forEach((body, i) => {
-      const resolved = resolveInterpolations(body, fragMap);
+      const resolved = resolveInterpolations(body, localMap);
       if (!/\b(query|mutation|subscription)\b/i.test(resolved)) return; // pure fragment file
       ops.push({ file: `${file}#${i}`, body: resolved });
     });
@@ -92,6 +111,11 @@ describe('UI GraphQL documents ↔ backend schema contract', () => {
 
   it('finds UI operations to validate', () => {
     expect(ops.length).toBeGreaterThan(0);
+  });
+
+  it('resolves every interpolation — an unresolved one would silently skip an operation', () => {
+    const unresolved = ops.filter((op) => op.body.includes('${')).map((op) => op.file);
+    expect(unresolved).toEqual([]);
   });
 
   it('every UI operation validates against the backend schema', () => {
