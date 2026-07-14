@@ -55,6 +55,52 @@ class McuService {
     }
   }
 
+  /**
+   * Read the system timezone and the list the device can be set to.
+   *
+   * Devices ship with the factory image default (America/New_York), which most
+   * owners never change: it skews journal timestamps, the DB timestamps behind
+   * the charts, and — since the automation reads the wall clock — the hour at
+   * which a time rule fires.
+   */
+  async getTimezone() {
+    try {
+      const current = await this._spawnCommand('timedatectl', ['show', '-p', 'Timezone', '--value']);
+      const available = await this._spawnCommand('timedatectl', ['list-timezones']);
+
+      return {
+        timezone: current.trim() || 'UTC',
+        available: available
+          .split('\n')
+          .map((zone) => zone.trim())
+          .filter(Boolean),
+      };
+    } catch (error) {
+      throw new GraphQLError(`Failed to read timezone: ${error.message}`);
+    }
+  }
+
+  async setTimezone({ timezone }) {
+    try {
+      // Validate against what the system actually knows, and pass the value as an
+      // argv element — never interpolated into a shell string.
+      const { available } = await this.getTimezone();
+      if (!available.includes(timezone)) {
+        throw new Error(`Unknown timezone: ${timezone}`);
+      }
+
+      if (process.env.NODE_ENV === 'production') {
+        await this._spawnCommand('sudo', ['timedatectl', 'set-timezone', timezone]);
+      } else {
+        console.log(`[DEV] Would set system timezone to ${timezone}`);
+      }
+
+      return this.getTimezone();
+    } catch (error) {
+      throw new GraphQLError(`Failed to set timezone: ${error.message}`);
+    }
+  }
+
   // Reboot device
   async reboot() {
     try {
@@ -302,6 +348,31 @@ class McuService {
           const address = stdout.trim();
           resolve(address);
         }
+      });
+    });
+  }
+
+  // Run a command with an argv array: no shell, so no argument can be turned into
+  // one (same rule as the nmcli and chpasswd paths).
+  _spawnCommand(command, args) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr.trim() || `${command} exited with code ${code}`));
+          return;
+        }
+        resolve(stdout);
       });
     });
   }

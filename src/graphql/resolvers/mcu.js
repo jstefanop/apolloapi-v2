@@ -13,6 +13,24 @@ module.exports = {
       }
     },
 
+    timezone: async (_, __, { services }) => {
+      try {
+        const result = await services.mcu.getTimezone();
+        return { result, error: null };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
+    setTimezone: async (_, { input }, { services }) => {
+      try {
+        const result = await services.mcu.setTimezone(input);
+        return { result, error: null };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
     wifiScan: async (_, __, { services }) => {
       try {
         const result = await services.mcu.scanWifi();

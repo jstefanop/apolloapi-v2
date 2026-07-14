@@ -57,6 +57,8 @@ module.exports = {
   ],
 
   async read({ now, config }) {
+    // No explicit timezone means "follow the device": passing undefined lets Intl
+    // use the system zone, so fixing it in Settings fixes the rules too.
     const { time, weekday, date } = localParts(now, config.timezone || undefined);
     return {
       'clock.time': { value: time },

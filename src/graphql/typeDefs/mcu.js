@@ -15,6 +15,24 @@ module.exports = gql`
     version: McuAppVersionOutput! @auth
     update: EmptyOutput! @auth
     updateProgress: McuUpdateProgressOutput! @auth
+    timezone: McuTimezoneOutput! @auth
+    setTimezone(input: McuSetTimezoneInput!): McuTimezoneOutput! @auth
+  }
+
+  type McuTimezoneOutput {
+    result: McuTimezoneResult
+    error: Error
+  }
+
+  type McuTimezoneResult {
+    "The system timezone, as timedatectl reports it (e.g. Europe/Rome)."
+    timezone: String!
+    "Every IANA zone this device accepts."
+    available: [String!]!
+  }
+
+  input McuSetTimezoneInput {
+    timezone: String!
   }
 
   type McuStatsOutput {
