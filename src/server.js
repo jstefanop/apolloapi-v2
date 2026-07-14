@@ -1,13 +1,12 @@
 const config = require('config');
 
-// Import the app promise
+// Import the httpServer promise (wraps Express + Apollo + WebSocket)
 const appPromise = require('./app');
 
 const port = config.get('server.port');
 
-// Start the server once the app is initialized
-appPromise.then(app => {
-  app.listen(port, () => {
+appPromise.then(httpServer => {
+  httpServer.listen(port, () => {
     console.log(`ENV: ${process.env.NODE_ENV || 'dev'} - Server listening on port ${port}`);
   });
 }).catch(error => {

@@ -38,6 +38,7 @@ const runMigrations = async () => {
         'node_allow_lan as nodeAllowLan',
         'btcsig',
         'startdiff',
+        'mindiff',
         'node_software as nodeSoftware'
       ])
       .orderBy('created_at', 'desc')

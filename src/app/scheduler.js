@@ -1,6 +1,8 @@
 const { knex } = require('../db');
 const _ = require('lodash');
 const services = require('../services');
+const pubsub = require('../graphql/pubsub');
+const TOPICS = require('../graphql/topics');
 
 /**
  * Parse hashrate string (e.g., "810M", "3.2T", "1.5G") to GH/s
@@ -372,6 +374,111 @@ async function fetchRecentBlocks() {
 }
 
 /**
+ * Wrap a promise with a timeout so slow/unreachable services don't block forever.
+ */
+function withTimeout(promise, ms, label) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
+/**
+ * Push miner stats + online status to all active WebSocket subscribers.
+ * Runs every 5 seconds — replaces the client-side 5 s poll.
+ */
+async function pushMinerStats() {
+  try {
+    const [statsResult, onlineResult] = await Promise.all([
+      withTimeout(services.miner.getStats(),    8000, 'miner.getStats'),
+      withTimeout(services.miner.checkOnline(), 8000, 'miner.checkOnline'),
+    ]);
+    pubsub.publish(TOPICS.MINER, {
+      miner: {
+        stats:  { result: statsResult,  error: null },
+        online: { result: onlineResult, error: null },
+      },
+    });
+    if (process.env.NODE_ENV === 'development') console.log('[PubSub] MINER published');
+  } catch (e) {
+    console.error('[PubSub] MINER error:', e.message);
+    pubsub.publish(TOPICS.MINER, {
+      miner: {
+        stats:  { result: null, error: { message: e.message } },
+        online: { result: null, error: { message: e.message } },
+      },
+    });
+  }
+}
+
+/**
+ * Push MCU stats to all active WebSocket subscribers.
+ * Runs every 5 seconds — replaces the client-side 5 s poll.
+ */
+async function pushMcuStats() {
+  try {
+    const result = await withTimeout(services.mcu.getStats(), 8000, 'mcu.getStats');
+    pubsub.publish(TOPICS.MCU, { mcu: { result, error: null } });
+    if (process.env.NODE_ENV === 'development') console.log('[PubSub] MCU published');
+  } catch (e) {
+    console.error('[PubSub] MCU error:', e.message);
+    pubsub.publish(TOPICS.MCU, { mcu: { result: null, error: { message: e.message } } });
+  }
+}
+
+/**
+ * Push Node stats to all active WebSocket subscribers.
+ * Runs every 8 seconds — replaces the client-side 8 s poll.
+ */
+async function pushNodeStats() {
+  try {
+    const result = await withTimeout(services.node.getStats(), 10000, 'node.getStats');
+    pubsub.publish(TOPICS.NODE, { node: { result, error: null } });
+    if (process.env.NODE_ENV === 'development') console.log('[PubSub] NODE published');
+  } catch (e) {
+    console.error('[PubSub] NODE error:', e.message);
+    pubsub.publish(TOPICS.NODE, { node: { result: null, error: { message: e.message } } });
+  }
+}
+
+/**
+ * Push the current services status from the DB to all active WebSocket subscribers.
+ * Called immediately on new WS client connect so services are populated right away
+ * (the subscription only fires on status changes, so we need this initial push).
+ * Uses services.services.getStats() so column names are camelCase (serviceName etc.)
+ * matching what the GraphQL StatusData type and the frontend selector expect.
+ */
+async function pushServicesStatus() {
+  try {
+    const result = await services.services.getStats();
+    pubsub.publish(TOPICS.SERVICES, {
+      services: { result, error: null },
+    });
+    if (process.env.NODE_ENV === 'development') console.log('[PubSub] SERVICES pushed (initial)');
+  } catch (e) {
+    console.error('[PubSub] SERVICES error:', e.message);
+    pubsub.publish(TOPICS.SERVICES, {
+      services: { result: null, error: { message: e.message } },
+    });
+  }
+}
+
+/**
+ * Push solo mining stats to all active WebSocket subscribers.
+ * Runs every 5 seconds — replaces the client-side 5 s poll.
+ */
+async function pushSoloStats() {
+  try {
+    const result = await withTimeout(services.solo.getStats(), 8000, 'solo.getStats');
+    pubsub.publish(TOPICS.SOLO, { solo: { result, error: null } });
+    if (process.env.NODE_ENV === 'development') console.log('[PubSub] SOLO published');
+  } catch (e) {
+    console.error('[PubSub] SOLO error:', e.message);
+    pubsub.publish(TOPICS.SOLO, { solo: { result: null, error: { message: e.message } } });
+  }
+}
+
+/**
  * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
@@ -397,6 +504,22 @@ async function startAllSchedulers() {
     
     // Then run periodically every 5 minutes
     setInterval(fetchRecentBlocks, 5 * 60 * 1000); // Every 5 minutes (300000 ms)
+
+    // Push stats to WebSocket subscribers (replaces client-side polling)
+    setInterval(pushMinerStats,     5000);
+    setInterval(pushMcuStats,       5000);
+    setInterval(pushNodeStats,      8000);
+    setInterval(pushSoloStats,      5000);
+    // Services status is event-driven (serviceMonitor), but also push periodically so
+    // new clients never wait forever for a "change" event that might not come.
+    setInterval(pushServicesStatus, 10000);
+
+    // Initial push so subscribers get data immediately on first connect
+    pushMinerStats().catch(() => {});
+    pushMcuStats().catch(() => {});
+    pushNodeStats().catch(() => {});
+    pushSoloStats().catch(() => {});
+    pushServicesStatus().catch(() => {});;
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }
@@ -407,4 +530,18 @@ if (process.env.NODE_ENV !== 'test') {
   startAllSchedulers();
 }
 
-module.exports = { startAllSchedulers, fetchStatistics, fetchRecentBlocks };
+module.exports = {
+  startAllSchedulers,
+  fetchStatistics,
+  fetchRecentBlocks,
+  // Called by action resolvers (start/stop/restart) to immediately push the updated
+  // service status to all connected subscribers instead of waiting for the periodic timer.
+  pushServicesStatus,
+  pushAllStats: () => Promise.allSettled([
+    pushMinerStats(),
+    pushMcuStats(),
+    pushNodeStats(),
+    pushSoloStats(),
+    pushServicesStatus(),
+  ]),
+};

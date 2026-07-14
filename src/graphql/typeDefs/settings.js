@@ -7,7 +7,7 @@ module.exports = gql`
 
   enum MinerMode { eco, balanced, turbo, custom }
   enum TemperatureUnit { f, c }
-  enum NodeSoftware { core_25_1, core_28_1, core_29_2, knots_29_2 }
+  enum NodeSoftware { core_25_1, core_28_1, core_29_2, core_31_0, knots_29_2, knots_29_3 }
 
   type SettingsActions {
     list: SettingListOutput! @auth
@@ -57,6 +57,7 @@ module.exports = gql`
     nodeAllowLan: Boolean
     btcsig: String
     startdiff: Int
+    mindiff: Int
     nodeSoftware: NodeSoftware
   }
 
@@ -86,6 +87,7 @@ module.exports = gql`
     nodeAllowLan: Boolean
     btcsig: String
     startdiff: Int
+    mindiff: Int
     nodeSoftware: NodeSoftware
   }
 `;

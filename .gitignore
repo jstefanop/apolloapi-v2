@@ -89,3 +89,15 @@ backend/node/user.conf
 
 .claudeignore
 .claudesync
+
+# AI docs and Cursor skills (local only)
+docs-ai/
+.cursor/skills/
+.claude/
+/CLAUDE.md
+
+# E2E (Playwright) artifacts
+/e2e/.tmp/
+/test-results/
+/playwright-report/
+/playwright/.cache/

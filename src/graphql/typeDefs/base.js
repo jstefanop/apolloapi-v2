@@ -11,6 +11,10 @@ module.exports = gql`
     _: Boolean
   }
 
+  type Subscription {
+    _: Boolean
+  }
+
   type Error {
     message: String!
     path: String

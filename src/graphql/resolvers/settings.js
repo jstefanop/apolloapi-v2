@@ -1,3 +1,6 @@
+const pubsub = require('../pubsub');
+const TOPICS = require('../topics');
+
 module.exports = {
   Query: {
     Settings: () => ({})
@@ -25,7 +28,10 @@ module.exports = {
     update: async (_, { input }, { services }) => {
       try {
         const settings = await services.settings.update(input);
-        return { result: { settings }, error: null };
+        const payload = { result: { settings }, error: null };
+        // Push updated settings to all active WebSocket subscribers
+        pubsub.publish(TOPICS.SETTINGS, { settings: payload });
+        return payload;
       } catch (error) {
         return { result: null, error: { message: error.message } };
       }

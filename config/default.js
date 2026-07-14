@@ -5,7 +5,9 @@ dotenv.config({ silent: true })
 
 module.exports = {
   db: {
-    url: join(__dirname, '..', 'futurebit.sqlite')
+    // Honor DATABASE_URL (used by tests/E2E to point at a throwaway DB);
+    // default to the repo/device sqlite when unset.
+    url: process.env.DATABASE_URL || join(__dirname, '..', 'futurebit.sqlite')
   },
   settings: {
   },
