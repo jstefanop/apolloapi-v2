@@ -18,6 +18,9 @@ module.exports = gql`
     # Scanning is per radio: two adapters report different signals for the same
     # network, so a merged list could not say which one can reach it.
     wifiNetworks(ifname: String!): McuWifiNetworksOutput! @auth
+
+    # The system timezone, and every zone this device will accept.
+    timezone: McuTimezoneOutput! @auth
     wifiSaved: McuWifiSavedOutput! @auth
 
     wifiScan: McuWifiScanOutput!
@@ -77,6 +80,26 @@ module.exports = gql`
     # Deletes ONE saved network, addressed by uuid. The operation this splits
     # away from wifiDisconnect used to delete every profile it could match.
     wifiForget(uuid: String!): EmptyOutput! @auth
+
+    # Writing the system clock's zone is side-effectful, so it lives here and
+    # not among the queries, like every other action on this device.
+    setTimezone(input: McuSetTimezoneInput!): McuTimezoneOutput! @auth
+  }
+
+  type McuTimezoneOutput {
+    result: McuTimezoneResult
+    error: Error
+  }
+
+  type McuTimezoneResult {
+    "The system timezone, as timedatectl reports it (e.g. Europe/Rome)."
+    timezone: String!
+    "Every IANA zone this device accepts."
+    available: [String!]!
+  }
+
+  input McuSetTimezoneInput {
+    timezone: String!
   }
 
   type McuStatsOutput {

@@ -101,6 +101,15 @@ module.exports = {
       }
     },
 
+    setTimezone: async (_, { input }, { services }) => {
+      try {
+        const result = await services.mcu.setTimezone(input);
+        return { result, error: null };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
     reboot,
     shutdown,
     update
@@ -111,6 +120,15 @@ module.exports = {
     reboot,
     shutdown,
     update,
+    timezone: async (_, __, { services }) => {
+      try {
+        const result = await services.mcu.getTimezone();
+        return { result, error: null };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
     stats: async (_, __, { services }) => {
       try {
         const result = await services.mcu.getStats();
