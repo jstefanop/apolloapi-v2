@@ -25,7 +25,29 @@ class MinerService {
     } catch (_) {}
   }
 
-  async start() {
+  /**
+   * A manual start/stop pauses the automation rather than fighting it: a miner
+   * that undoes the user's click a minute later is the fastest way to get the
+   * feature switched off for good. Commands coming *from* the automation
+   * obviously must not pause it.
+   *
+   * Lazy require: services/index builds the automation service with this one as a
+   * dependency, so requiring it at module load would close the loop.
+   */
+  async _pauseAutomation(source) {
+    if (source !== 'user') return;
+    try {
+      const { automation } = require('./index');
+      const config = await automation.getConfig();
+      if (config.enabled) await automation.setOverride({ reason: 'manual' });
+    } catch (error) {
+      // Never let this block a miner command (e.g. a device that has not run the
+      // automation migration yet).
+      console.log('Could not pause automation:', error.message);
+    }
+  }
+
+  async start({ source = 'user' } = {}) {
     try {
       // Update service status in the database
       await this.knex('service_status')
@@ -39,6 +61,7 @@ class MinerService {
       // Notify subscribers immediately so the UI shows "pending" without waiting
       // for the next periodic push (up to 10s later).
       this._notifyServicesStatus();
+      await this._pauseAutomation(source);
 
       // Start the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -63,7 +86,7 @@ class MinerService {
   }
 
   // Stop the miner
-  async stop() {
+  async stop({ source = 'user' } = {}) {
     try {
       // Update service status in the database
       await this.knex('service_status')
@@ -75,6 +98,7 @@ class MinerService {
         });
 
       this._notifyServicesStatus();
+      await this._pauseAutomation(source);
 
       // Stop the miner based on environment
       if (process.env.NODE_ENV === 'development') {
@@ -99,7 +123,7 @@ class MinerService {
   }
 
   // Restart the miner
-  async restart() {
+  async restart({ source = 'user' } = {}) {
     try {
       // Update service status in the database
       await this.knex('service_status')
@@ -111,6 +135,7 @@ class MinerService {
         });
 
       this._notifyServicesStatus();
+      await this._pauseAutomation(source);
 
       // Restart the miner based on environment
       if (process.env.NODE_ENV === 'development') {

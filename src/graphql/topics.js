@@ -6,6 +6,7 @@ const TOPICS = {
   SOLO: 'SOLO',
   SERVICES: 'SERVICES',
   SETTINGS: 'SETTINGS',
+  AUTOMATION: 'AUTOMATION',
 };
 
 module.exports = TOPICS;

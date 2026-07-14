@@ -4,6 +4,8 @@ const services = require('../services');
 const pubsub = require('../graphql/pubsub');
 const TOPICS = require('../graphql/topics');
 
+const isDev = process.env.NODE_ENV === 'development';
+
 /**
  * Parse hashrate string (e.g., "810M", "3.2T", "1.5G") to GH/s
  * @param {string} hashrateStr - Hashrate string with suffix (K, M, G, T, P)
@@ -197,22 +199,17 @@ async function fetchStatistics() {
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
       // Delete old data (older than 30 days)
-      const rowsBefore = await trx('time_series_data').count('* as count');
-      console.log('Rows before deletion:', rowsBefore[0].count);
-
       const deletedRows = await trx('time_series_data')
         .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
-      console.log('Deleted rows:', deletedRows);
-
-      const rowsAfter = await trx('time_series_data').count('* as count');
-      console.log('Rows after deletion:', rowsAfter[0].count);
 
       // Insert new data
       await trx('time_series_data').insert(boards);
-    });
 
-    console.log('Time series data inserted');
+      // Table bookkeeping, once a minute, forever: useful while debugging, pure
+      // noise in production, where it buried everything else in the journal.
+      if (isDev) console.log(`Time series data inserted (pruned ${deletedRows} rows)`);
+    });
   } catch (error) {
     console.error('Error while fetching statistics from the miner:', error);
   }
@@ -253,22 +250,15 @@ async function fetchSoloStatistics() {
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
       // Delete old data (older than 30 days)
-      const rowsBefore = await trx('time_series_solo_data').count('* as count');
-      console.log('Solo rows before deletion:', rowsBefore[0].count);
-
       const deletedRows = await trx('time_series_solo_data')
         .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
-      console.log('Solo deleted rows:', deletedRows);
-
-      const rowsAfter = await trx('time_series_solo_data').count('* as count');
-      console.log('Solo rows after deletion:', rowsAfter[0].count);
 
       // Insert new data
       await trx('time_series_solo_data').insert(soloData);
-    });
 
-    console.log('Time series solo data inserted');
+      if (isDev) console.log(`Time series solo data inserted (pruned ${deletedRows} rows)`);
+    });
   } catch (error) {
     console.error('Error while fetching statistics from solo pool:', error);
   }
@@ -479,6 +469,29 @@ async function pushSoloStats() {
 }
 
 /**
+ * Run one automation cycle: read signals, decide, apply (unless the user keeps it
+ * in dry-run). Every minute is the right granularity here — time bands, sunset
+ * and board temperature all move on that scale, and anything faster would fight
+ * the guard rails rather than help.
+ */
+async function evaluateAutomation() {
+  try {
+    const result = await withTimeout(services.automation.evaluate(), 20000, 'automation.evaluate');
+
+    // The miner just moved: push the new service status instead of letting the UI
+    // discover it on the next periodic tick.
+    if (result.applied) await pushServicesStatus();
+
+    pubsub.publish(TOPICS.AUTOMATION, { automation: { result, error: null } });
+  } catch (e) {
+    console.error('[automation] tick failed:', e.message);
+    pubsub.publish(TOPICS.AUTOMATION, {
+      automation: { result: null, error: { message: e.message } },
+    });
+  }
+}
+
+/**
  * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
@@ -504,6 +517,9 @@ async function startAllSchedulers() {
     
     // Then run periodically every 5 minutes
     setInterval(fetchRecentBlocks, 5 * 60 * 1000); // Every 5 minutes (300000 ms)
+
+    // Miner scheduling & automation
+    setInterval(evaluateAutomation, 60 * 1000); // Every minute
 
     // Push stats to WebSocket subscribers (replaces client-side polling)
     setInterval(pushMinerStats,     5000);
@@ -534,6 +550,7 @@ module.exports = {
   startAllSchedulers,
   fetchStatistics,
   fetchRecentBlocks,
+  evaluateAutomation,
   // Called by action resolvers (start/stop/restart) to immediately push the updated
   // service status to all connected subscribers instead of waiting for the periodic timer.
   pushServicesStatus,

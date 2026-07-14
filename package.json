@@ -43,6 +43,7 @@
     "moment": "^2.30.1",
     "normalize-object": "^2.0.6",
     "sqlite3": "^5.1.7",
+    "suncalc": "^2.0.1",
     "ws": "^8.20.0"
   },
   "devDependencies": {

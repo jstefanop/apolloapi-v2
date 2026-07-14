@@ -4,8 +4,9 @@
 describe('TOPICS constants', () => {
   const TOPICS = require('../src/graphql/topics');
 
-  it('exports the 6 expected topic keys', () => {
-    const expected = ['MINER', 'NODE', 'MCU', 'SOLO', 'SERVICES', 'SETTINGS'];
+  const expected = ['MINER', 'NODE', 'MCU', 'SOLO', 'SERVICES', 'SETTINGS', 'AUTOMATION'];
+
+  it('exports the expected topic keys', () => {
     for (const key of expected) {
       expect(TOPICS).toHaveProperty(key);
       expect(typeof TOPICS[key]).toBe('string');
@@ -13,7 +14,7 @@ describe('TOPICS constants', () => {
   });
 
   it('has no extra unexpected keys', () => {
-    expect(Object.keys(TOPICS)).toHaveLength(6);
+    expect(Object.keys(TOPICS)).toHaveLength(expected.length);
   });
 
   it('topic values are non-empty strings', () => {

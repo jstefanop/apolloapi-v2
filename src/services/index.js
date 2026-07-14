@@ -21,6 +21,13 @@ const serviceMonitor = require('./serviceMonitor')(knex, {
   solo: soloService
 });
 
+// Miner scheduling & automation. Takes the services it drives explicitly, like
+// serviceMonitor does, so there is no cycle through this index.
+const automationService = require('./automation')(knex, {
+  miner: minerService,
+  settings: settingsService
+});
+
 // Export all services
 module.exports = {
   auth: authService,
@@ -33,5 +40,6 @@ module.exports = {
   services: servicesService,
   logs: logsService,
   solo: soloService,
-  serviceMonitor: serviceMonitor
+  serviceMonitor: serviceMonitor,
+  automation: automationService
 };

@@ -87,10 +87,14 @@ jest.mock('fs', () => {
 
 // Mock per child_process
 jest.mock('child_process', () => ({
+  // exec accepts both exec(cmd, cb) and exec(cmd, options, cb). Handling only the
+  // 3-arg form left the 2-arg one without a callback, so any promise wrapped
+  // around it never settled — the test just hung until Jest's timeout.
   exec: jest.fn((cmd, options, callback) => {
-    if (callback) {
+    const cb = typeof options === 'function' ? options : callback;
+    if (cb) {
       // Node exec callback is (err, stdout, stderr) with stdout/stderr as strings
-      callback(null, 'Mock command output', '');
+      cb(null, 'Mock command output', '');
     }
     return { stdout: 'Mock command output' };
   }),
@@ -222,6 +226,65 @@ beforeAll(async () => {
     }
   });
 
+  // Automation (miner scheduling) — mirrors migrations/20260714120000_create_automation.js
+  await knex.schema.hasTable('automation_config').then(exists => {
+    if (!exists) {
+      return knex.schema.createTable('automation_config', table => {
+        table.increments('id').primary();
+        table.boolean('enabled').defaultTo(false);
+        table.boolean('dry_run').defaultTo(true);
+        table.float('latitude').nullable();
+        table.float('longitude').nullable();
+        table.string('timezone').nullable();
+        table.string('fallback_action').defaultTo('keep');
+        table.text('tariff').nullable();
+        table.integer('min_on_minutes').defaultTo(30);
+        table.integer('min_off_minutes').defaultTo(30);
+        table.integer('min_change_minutes').defaultTo(15);
+        table.integer('max_cycles_per_hour').defaultTo(2);
+        table.float('default_hysteresis').defaultTo(2);
+        table.integer('override_minutes').defaultTo(60);
+        table.timestamp('override_until').nullable();
+        table.string('override_reason').nullable();
+        table.timestamps(true, true);
+      }).then(() => knex('automation_config').insert({ id: 1 }));
+    }
+  });
+
+  await knex.schema.hasTable('automation_rules').then(exists => {
+    if (!exists) {
+      return knex.schema.createTable('automation_rules', table => {
+        table.increments('id').primary();
+        table.string('name').notNullable();
+        table.boolean('enabled').defaultTo(true);
+        table.integer('priority').defaultTo(100);
+        table.boolean('is_safety').defaultTo(false);
+        table.string('match').defaultTo('all');
+        table.text('conditions').notNullable();
+        table.text('action').notNullable();
+        table.timestamps(true, true);
+      });
+    }
+  });
+
+  await knex.schema.hasTable('automation_events').then(exists => {
+    if (!exists) {
+      return knex.schema.createTable('automation_events', table => {
+        table.increments('id').primary();
+        table.integer('rule_id').nullable();
+        table.string('rule_name').nullable();
+        table.string('decision').notNullable();
+        table.string('change_type').nullable();
+        table.boolean('applied').defaultTo(false);
+        table.boolean('dry_run').defaultTo(false);
+        table.string('blocked_by').nullable();
+        table.text('signals').nullable();
+        table.text('message').nullable();
+        table.timestamp('created_at').defaultTo(knex.fn.now());
+      });
+    }
+  });
+
   // Inserisci dati di default per le impostazioni
   const settingsCount = await knex('settings').count('* as count').first();
   if (!settingsCount || settingsCount.count === 0) {
@@ -293,6 +356,9 @@ afterAll(async () => {
     await knex.schema.dropTableIfExists('settings');
     await knex.schema.dropTableIfExists('pools');
     await knex.schema.dropTableIfExists('time_series_data');
+    await knex.schema.dropTableIfExists('automation_events');
+    await knex.schema.dropTableIfExists('automation_rules');
+    await knex.schema.dropTableIfExists('automation_config');
   } catch (error) {
     console.error('Error during cleanup:', error);
   } finally {
