@@ -159,13 +159,23 @@ describe('automation service — rules', () => {
 });
 
 describe('automation service — evaluate (dry run)', () => {
-  it('does nothing at all while disabled', async () => {
+  it('does not decide or log while disabled, but still reads the signals', async () => {
     await automation.createRule(thermalProtection);
     const result = await automation.evaluate();
 
     expect(result.enabled).toBe(false);
     expect(result.skipped).toBe('disabled');
     expect(await automation.listEvents()).toHaveLength(0);
+
+    // Signals are still read so the "current conditions" panel works when off.
+    expect(result.signals).toBeTruthy();
+    expect(result.signals['clock.time']).toBeDefined();
+    // …and they serialize for the UI even with the automation disabled.
+    const { serializeState } = require('../src/graphql/serialize/automation');
+    const out = serializeState(result);
+    expect(out.enabled).toBe(false);
+    expect(out.decision).toBeNull();
+    expect(out.signals.length).toBeGreaterThan(0);
   });
 
   it('decides to stop an overheating miner, and says so without touching it', async () => {

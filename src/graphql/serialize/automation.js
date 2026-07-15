@@ -88,44 +88,37 @@ function serializeEvent(event) {
 }
 
 // The result of automation.evaluate(), in either its query or subscription form.
+// Signals and miner state are serialized even when the automation is disabled, so
+// the "current conditions" panel keeps working; only decision/guard are gated.
 function serializeState(result) {
   if (!result) return null;
 
-  if (!result.enabled) {
-    return {
-      enabled: false,
-      dryRun: false,
-      decision: null,
-      guard: null,
-      miner: null,
-      signals: [],
-    };
-  }
-
-  const { decision, guard, state, signals, dryRun, loggedEvent } = result;
+  const { enabled, decision, guard, state, signals, dryRun, loggedEvent } = result;
 
   return {
-    enabled: true,
+    enabled: !!enabled,
     dryRun: !!dryRun,
     // Present only on a real tick that recorded an event, so the UI can append it
     // to the history live.
     event: loggedEvent ? serializeEvent(loggedEvent) : null,
-    decision: decision
-      ? {
-          target: describeTarget(decision.target),
-          ruleId: decision.ruleId,
-          ruleName: decision.ruleName,
-          reason: decision.reason,
-        }
-      : null,
-    guard: guard
-      ? {
-          apply: guard.apply,
-          changeType: guard.changeType,
-          blockedBy: guard.blockedBy,
-          message: guard.message,
-        }
-      : null,
+    decision:
+      enabled && decision
+        ? {
+            target: describeTarget(decision.target),
+            ruleId: decision.ruleId,
+            ruleName: decision.ruleName,
+            reason: decision.reason,
+          }
+        : null,
+    guard:
+      enabled && guard
+        ? {
+            apply: guard.apply,
+            changeType: guard.changeType,
+            blockedBy: guard.blockedBy,
+            message: guard.message,
+          }
+        : null,
     miner: state
       ? {
           // Prefer the miner.* signals so the status card and the conditions tiles

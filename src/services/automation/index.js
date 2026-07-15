@@ -384,15 +384,18 @@ class AutomationService {
     const now = new Date();
     const config = await this.getConfig();
 
-    if (!config.enabled) {
-      return { enabled: false, skipped: 'disabled', decision: null, guard: null, signals: null };
-    }
-
-    const [rules, state, currentSignals] = await Promise.all([
-      this.listRules(),
+    // Signals are read regardless of `enabled` so the "current conditions" panel
+    // works even with the automation off; only the decision/apply is gated.
+    const [state, currentSignals] = await Promise.all([
       this.getState(config),
       this.readSignals(config),
     ]);
+
+    if (!config.enabled) {
+      return { enabled: false, skipped: 'disabled', decision: null, guard: null, state, signals: currentSignals };
+    }
+
+    const rules = await this.listRules();
 
     const decision = decide({
       signals: currentSignals,
