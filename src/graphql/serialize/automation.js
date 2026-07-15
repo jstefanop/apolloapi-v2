@@ -102,11 +102,14 @@ function serializeState(result) {
     };
   }
 
-  const { decision, guard, state, signals, dryRun } = result;
+  const { decision, guard, state, signals, dryRun, loggedEvent } = result;
 
   return {
     enabled: true,
     dryRun: !!dryRun,
+    // Present only on a real tick that recorded an event, so the UI can append it
+    // to the history live.
+    event: loggedEvent ? serializeEvent(loggedEvent) : null,
     decision: decision
       ? {
           target: describeTarget(decision.target),

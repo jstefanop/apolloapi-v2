@@ -27,9 +27,9 @@ module.exports = {
   namespace: 'sun',
 
   descriptors: [
-    { id: 'sun.isDay', type: 'boolean', ops: ['==' , '!='], supportsHysteresis: false },
-    { id: 'sun.minutesToSunset', type: 'number', unit: 'min', ops: ['<', '<=', '>', '>='], supportsHysteresis: true },
-    { id: 'sun.minutesToSunrise', type: 'number', unit: 'min', ops: ['<', '<=', '>', '>='], supportsHysteresis: true },
+    { id: 'sun.isDay', type: 'boolean', widget: 'boolean', ops: ['==', '!='], supportsHysteresis: false },
+    { id: 'sun.minutesToSunset', type: 'number', widget: 'number', unit: 'min', ops: ['<', '<=', '>', '>='], supportsHysteresis: true },
+    { id: 'sun.minutesToSunrise', type: 'number', widget: 'number', unit: 'min', ops: ['<', '<=', '>', '>='], supportsHysteresis: true },
   ],
 
   async read({ now, config }) {

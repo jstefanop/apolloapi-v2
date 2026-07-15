@@ -200,6 +200,23 @@ describe('automation service — evaluate (dry run)', () => {
     expect(event.message).toMatch(/stop applied/);
   });
 
+  it('returns the recorded event so the tick can push it to the UI live', async () => {
+    await overheating({ dryRun: false });
+
+    const { loggedEvent } = await automation.evaluate();
+    expect(loggedEvent).toMatchObject({ decision: 'off', changeType: 'stop', applied: true });
+    expect(loggedEvent.id).toBeDefined();
+    expect(loggedEvent.createdAt).toBeTruthy();
+  });
+
+  it('returns no event on a quiet tick, so there is nothing to push', async () => {
+    await automation.updateConfig({ enabled: true, dryRun: true }); // cool miner, no rules → fallback none
+    await automation.evaluate(); // logs the first 'none'
+
+    const { loggedEvent } = await automation.evaluate(); // unchanged → nothing recorded
+    expect(loggedEvent).toBeFalsy();
+  });
+
   it('records a failed command instead of pretending it worked', async () => {
     await overheating({ dryRun: false });
     deps.miner.stop.mockRejectedValue(new Error('systemd: unit not found'));

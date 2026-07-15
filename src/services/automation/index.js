@@ -17,8 +17,9 @@ const { canApply } = require('./guards');
 const { apply } = require('./apply');
 const { parseDbTime, toDbTime } = require('./time');
 
+const { MINER_MODES } = require('../../constants/minerModes');
+
 const EVENTS_CAP = 500;
-const MINER_MODES = ['eco', 'balanced', 'turbo', 'custom'];
 
 // Everything the engine decides goes to the journal too, not just to the events
 // table: on a device you read `journalctl -u apollo-api | grep '\[automation\]'`,
@@ -239,8 +240,10 @@ class AutomationService {
     }));
   }
 
+  // Returns the inserted event (with its id) so a live tick can push it to the UI
+  // without waiting for a refetch.
   async _recordEvent(event) {
-    await this.knex('automation_events').insert({
+    const [id] = await this.knex('automation_events').insert({
       rule_id: event.ruleId || null,
       rule_name: event.ruleName || null,
       decision: event.decision,
@@ -259,6 +262,8 @@ class AutomationService {
       .limit(EVENTS_CAP);
 
     await this.knex('automation_events').whereNotIn('id', keep).del();
+
+    return { id, ...event, createdAt: new Date().toISOString() };
   }
 
   // ----------------------------------------------------------------- state
@@ -372,9 +377,10 @@ class AutomationService {
 
     const message = this._describeOutcome({ guard, dryRun, applied, failure, decision });
 
+    let loggedEvent = null;
     try {
       if (await this._shouldLog({ decision, guard })) {
-        await this._recordEvent({
+        loggedEvent = await this._recordEvent({
           ruleId: decision.ruleId,
           ruleName: decision.ruleName,
           decision: describeTarget(decision.target),
@@ -399,7 +405,9 @@ class AutomationService {
       logError(`failed to record event: ${error.message}`);
     }
 
-    return { enabled: true, decision, guard, state, signals: currentSignals, applied, dryRun, failure };
+    // loggedEvent is the fresh row (or null) — the scheduler pushes it so the UI
+    // history updates in real time instead of only on the next refetch.
+    return { enabled: true, decision, guard, state, signals: currentSignals, applied, dryRun, failure, loggedEvent };
   }
 
   _describeOutcome({ guard, dryRun, applied, failure, decision }) {

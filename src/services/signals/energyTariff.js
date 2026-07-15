@@ -50,6 +50,7 @@ module.exports = {
     {
       id: 'energy.price',
       type: 'number',
+      widget: 'number',
       unit: 'currency/kWh',
       ops: ['<', '<=', '>', '>='],
       supportsHysteresis: true,
@@ -57,6 +58,9 @@ module.exports = {
     {
       id: 'energy.band',
       type: 'string',
+      // The options are the user's own tariff band names, not a fixed list, so
+      // the UI sources them from the tariff rather than from a static `options`.
+      widget: 'band',
       ops: ['==', '!=', 'in', 'not_in'],
       supportsHysteresis: false,
     },

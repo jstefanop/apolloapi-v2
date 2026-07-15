@@ -39,18 +39,22 @@ module.exports = {
     {
       id: 'clock.time',
       type: 'time',
+      widget: 'time',
       ops: ['between', 'not_between', '<', '>'],
       supportsHysteresis: false,
     },
     {
       id: 'clock.weekday',
       type: 'number',
-      ops: ['in', 'not_in', '==', '!='],
+      widget: 'weekday',
+      options: ['1', '2', '3', '4', '5', '6', '7'],
+      ops: ['in', 'not_in'],
       supportsHysteresis: false,
     },
     {
       id: 'clock.date',
       type: 'string',
+      widget: 'date',
       ops: ['==', '!=', 'between'],
       supportsHysteresis: false,
     },

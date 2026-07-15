@@ -16,6 +16,18 @@ const wrap = async (fn) => {
   }
 };
 
+// Re-evaluate immediately after a change so a new/edited rule (a safety one above
+// all) takes effect now, not at the next 60s tick. Fire-and-forget; lazy require
+// avoids the scheduler↔services cycle. The tick pushes the new state + event.
+const triggerTick = () => {
+  try {
+    const { evaluateAutomation } = require('../../app/scheduler');
+    Promise.resolve(evaluateAutomation()).catch(() => {});
+  } catch (e) {
+    /* scheduler not running (e.g. tests) — nothing to trigger */
+  }
+};
+
 module.exports = {
   Query: {
     Automation: () => ({}),
@@ -39,19 +51,30 @@ module.exports = {
       wrap(async () => serializeState(await services.automation.evaluate({ preview: true }))),
 
     updateConfig: (_, { input }, { services }) =>
-      wrap(async () => serializeConfig(await services.automation.updateConfig(input))),
+      wrap(async () => {
+        const config = serializeConfig(await services.automation.updateConfig(input));
+        triggerTick();
+        return config;
+      }),
 
     createRule: (_, { input }, { services }) =>
-      wrap(async () => serializeRule(await services.automation.createRule(deserializeRuleInput(input)))),
+      wrap(async () => {
+        const rule = serializeRule(await services.automation.createRule(deserializeRuleInput(input)));
+        triggerTick();
+        return rule;
+      }),
 
     updateRule: (_, { id, input }, { services }) =>
-      wrap(async () =>
-        serializeRule(await services.automation.updateRule(id, deserializeRuleInput(input)))
-      ),
+      wrap(async () => {
+        const rule = serializeRule(await services.automation.updateRule(id, deserializeRuleInput(input)));
+        triggerTick();
+        return rule;
+      }),
 
     deleteRule: async (_, { id }, { services }) => {
       try {
         await services.automation.deleteRule(id);
+        triggerTick();
         return { error: null };
       } catch (error) {
         return { error: { message: error.message } };
@@ -59,9 +82,17 @@ module.exports = {
     },
 
     setOverride: (_, { input }, { services }) =>
-      wrap(async () => serializeConfig(await services.automation.setOverride(input || {}))),
+      wrap(async () => {
+        const config = serializeConfig(await services.automation.setOverride(input || {}));
+        triggerTick();
+        return config;
+      }),
 
     clearOverride: (_, __, { services }) =>
-      wrap(async () => serializeConfig(await services.automation.clearOverride())),
+      wrap(async () => {
+        const config = serializeConfig(await services.automation.clearOverride());
+        triggerTick();
+        return config;
+      }),
   },
 };

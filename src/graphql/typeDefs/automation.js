@@ -174,8 +174,12 @@ module.exports = gql`
 
   type SignalDescriptor {
     id: String!
-    "number | boolean | time | string"
+    "The data type the engine casts to: number | boolean | time | string"
     type: String!
+    "Which input the UI should render: number | time | date | weekday | boolean | enum | text"
+    widget: String
+    "Allowed values for enum/weekday widgets (e.g. the miner modes, or 1-7)."
+    options: [String!]
     unit: String
     ops: [String!]!
     supportsHysteresis: Boolean!
@@ -199,6 +203,8 @@ module.exports = gql`
     guard: Guard
     miner: MinerAutomationState
     signals: [SignalValue!]!
+    "Set only when this tick recorded a history event — pushed so the UI appends it live."
+    event: AutomationEvent
   }
 
   type Decision {

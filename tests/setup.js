@@ -26,6 +26,7 @@ jest.mock('../src/app/scheduler', () => ({
   startAllSchedulers: jest.fn(),
   pushServicesStatus: jest.fn().mockResolvedValue(undefined),
   pushAllStats: jest.fn().mockResolvedValue([]),
+  evaluateAutomation: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock delle operazioni del file system

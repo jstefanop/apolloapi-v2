@@ -1,6 +1,7 @@
 const { knex } = require('../src/db');
 const { graphql } = require('graphql');
 const schema = require('../src/graphql/schema');
+const scheduler = require('../src/app/scheduler'); // mocked in tests/setup.js
 const resolver = require('../src/graphql/resolvers/automation');
 const subscriptions = require('../src/graphql/resolvers/subscriptions');
 const { serializeState } = require('../src/graphql/serialize/automation');
@@ -114,6 +115,20 @@ describe('automation resolvers', () => {
     const temperature = result.find((d) => d.id === 'miner.temperature');
     expect(temperature).toMatchObject({ type: 'number', unit: '°C', supportsHysteresis: true });
     expect(temperature.ops).toContain('>');
+  });
+
+  it('re-evaluates immediately after a rule change, so a new safety rule acts now', async () => {
+    scheduler.evaluateAutomation.mockClear();
+
+    await actions.createRule(
+      {},
+      { input: { name: 'X', conditions: [{ signal: 'clock.weekday', op: 'in', values: ['1'] }], action: { type: 'off' } } },
+      context
+    );
+    expect(scheduler.evaluateAutomation).toHaveBeenCalledTimes(1);
+
+    await actions.updateConfig({}, { input: { enabled: true } }, context);
+    expect(scheduler.evaluateAutomation).toHaveBeenCalledTimes(2);
   });
 
   it('previews the current decision without acting on it', async () => {

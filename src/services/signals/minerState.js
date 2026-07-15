@@ -6,12 +6,22 @@
  * running and temperature > 80"), and the engine also uses them as its state.
  */
 
+const { MINER_MODES } = require('../../constants/minerModes');
+
 module.exports = {
   namespace: 'miner',
 
   descriptors: [
-    { id: 'miner.running', type: 'boolean', ops: ['==', '!='], supportsHysteresis: false },
-    { id: 'miner.mode', type: 'string', ops: ['==', '!=', 'in'], supportsHysteresis: false },
+    { id: 'miner.running', type: 'boolean', widget: 'boolean', ops: ['==', '!='], supportsHysteresis: false },
+    {
+      id: 'miner.mode',
+      type: 'string',
+      widget: 'enum',
+      // The single source of truth for the mode list — the UI reads it from here.
+      options: MINER_MODES,
+      ops: ['==', '!='],
+      supportsHysteresis: false,
+    },
   ],
 
   async read({ knex, deps }) {

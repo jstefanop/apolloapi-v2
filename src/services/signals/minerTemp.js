@@ -20,6 +20,7 @@ module.exports = {
     {
       id: 'miner.temperature',
       type: 'number',
+      widget: 'number',
       unit: '°C',
       ops: ['<', '<=', '>', '>='],
       supportsHysteresis: true,
@@ -27,6 +28,7 @@ module.exports = {
     {
       id: 'miner.temperatureAvg',
       type: 'number',
+      widget: 'number',
       unit: '°C',
       ops: ['<', '<=', '>', '>='],
       supportsHysteresis: true,
