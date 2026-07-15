@@ -64,20 +64,45 @@ class McuService {
    * which a time rule fires.
    */
   async getTimezone() {
-    try {
-      const current = await this._spawnCommand('timedatectl', ['show', '-p', 'Timezone', '--value']);
-      const available = await this._spawnCommand('timedatectl', ['list-timezones']);
+    // The device runs Linux with systemd, but a dev machine (macOS) has no
+    // timedatectl. Fall back to the platform's own IANA data so the feature is
+    // testable locally instead of exploding with spawn ENOENT.
+    const detectedZone = () => {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      } catch (e) {
+        return 'UTC';
+      }
+    };
+    const zoneList = () => {
+      try {
+        if (typeof Intl.supportedValuesOf === 'function') {
+          return Intl.supportedValuesOf('timeZone');
+        }
+      } catch (e) {
+        /* fall through */
+      }
+      return [detectedZone(), 'UTC', 'Europe/Rome', 'America/New_York'];
+    };
 
-      return {
-        timezone: current.trim() || 'UTC',
-        available: available
-          .split('\n')
-          .map((zone) => zone.trim())
-          .filter(Boolean),
-      };
-    } catch (error) {
-      throw new GraphQLError(`Failed to read timezone: ${error.message}`);
+    let timezone;
+    try {
+      timezone = (await this._spawnCommand('timedatectl', ['show', '-p', 'Timezone', '--value'])).trim();
+    } catch (e) {
+      timezone = detectedZone();
     }
+
+    let available;
+    try {
+      const raw = await this._spawnCommand('timedatectl', ['list-timezones']);
+      available = raw.split('\n').map((zone) => zone.trim()).filter(Boolean);
+    } catch (e) {
+      available = [];
+    }
+    if (!available.length) available = zoneList();
+    if (timezone && !available.includes(timezone)) available = [timezone, ...available];
+
+    return { timezone: timezone || 'UTC', available };
   }
 
   async setTimezone({ timezone }) {

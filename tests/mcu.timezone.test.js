@@ -29,6 +29,23 @@ const mockSpawn = (impl) => {
   });
 };
 
+// Simulate a platform without timedatectl (macOS dev): spawn fails to launch.
+const mockSpawnENOENT = () => {
+  childProcess.spawn.mockImplementation(() => {
+    const listeners = {};
+    setImmediate(() => {
+      if (listeners.error) listeners.error(Object.assign(new Error('spawn timedatectl ENOENT'), { code: 'ENOENT' }));
+    });
+    return {
+      stdout: { on: () => {} },
+      stderr: { on: () => {} },
+      on: (event, handler) => {
+        listeners[event] = handler;
+      },
+    };
+  });
+};
+
 const ZONES = 'Europe/Rome\nAmerica/New_York\nUTC\n';
 
 beforeEach(() => {
@@ -54,6 +71,17 @@ describe('Mcu.getTimezone', () => {
       expect(Array.isArray(call[1])).toBe(true); // argv array, not a command string
       expect(call[2]?.shell).toBeFalsy();
     }
+  });
+
+  it('falls back to the platform IANA data when timedatectl is missing (dev on macOS)', async () => {
+    mockSpawnENOENT();
+
+    const result = await mcu.getTimezone();
+
+    // No throw, a usable current zone, and a non-trivial list to pick from.
+    expect(result.timezone).toBeTruthy();
+    expect(result.available.length).toBeGreaterThan(10);
+    expect(result.available).toContain(result.timezone);
   });
 });
 
@@ -89,6 +117,17 @@ describe('Mcu.setTimezone', () => {
 
     const executed = childProcess.spawn.mock.calls.filter((c) => c[1].includes('set-timezone'));
     expect(executed).toHaveLength(0);
+  });
+
+  it('works in dev without timedatectl, validating against the fallback list', async () => {
+    mockSpawnENOENT(); // NODE_ENV is 'test' here → dev path, no set-timezone spawn
+
+    // A real IANA zone is accepted (validated against the Intl fallback), no throw.
+    const result = await mcu.setTimezone({ timezone: 'Europe/Rome' });
+    expect(result.available).toContain('Europe/Rome');
+
+    // A bogus zone is still rejected.
+    await expect(mcu.setTimezone({ timezone: 'Mars/Olympus' })).rejects.toThrow(/Unknown timezone/);
   });
 });
 
