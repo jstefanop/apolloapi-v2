@@ -94,5 +94,11 @@ module.exports = {
         triggerTick();
         return config;
       }),
+
+    testMqtt: (_, { input }, { services }) =>
+      wrap(async () => {
+        const { ok, error } = await services.automation.testMqtt(input);
+        return { ok, message: error };
+      }),
   },
 };

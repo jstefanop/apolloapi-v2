@@ -99,6 +99,17 @@ describe('MQTT config round-trip', () => {
     expect(rule.conditions[0].signal).toBe('input.surplus');
   });
 
+  it('tests the connection, filling in the stored password when the form left it blank', async () => {
+    const spy = jest.spyOn(client, 'testConnection').mockResolvedValue({ ok: true, error: null });
+
+    await automation.updateConfig({ mqtt: { enabled: true, host: 'h', password: 'stored', inputs: [] } });
+    const result = await automation.testMqtt({ host: 'h', password: '' });
+
+    expect(result).toEqual({ ok: true, error: null });
+    expect(spy.mock.calls[0][0].password).toBe('stored'); // merged from the stored config
+    spy.mockRestore();
+  });
+
   it('never returns the broker password through GraphQL serialization', () => {
     const { serializeConfig } = require('../src/graphql/serialize/automation');
     const out = serializeConfig({

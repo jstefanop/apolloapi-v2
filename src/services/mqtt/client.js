@@ -102,9 +102,54 @@ function configure(mqttConfig) {
   });
 }
 
+// Human-readable MQTT CONNACK refusal reasons.
+const CONNACK = {
+  1: 'unacceptable protocol version',
+  2: 'client id rejected',
+  3: 'broker unavailable',
+  4: 'bad username or password',
+  5: 'not authorized',
+};
+
+// One-off connection attempt with the given config — does not touch the shared
+// client. Resolves { ok, error } so the UI can tell the user exactly what failed.
+function testConnection(mqttConfig) {
+  return new Promise((resolve) => {
+    const cfg = mqttConfig || {};
+    if (!cfg.host) return resolve({ ok: false, error: 'No broker host set' });
+
+    const url = `${cfg.tls ? 'mqtts' : 'mqtt'}://${cfg.host}:${cfg.port || 1883}`;
+    const probe = mqtt.connect(url, {
+      username: cfg.username || undefined,
+      password: cfg.password || undefined,
+      connectTimeout: 6000,
+      reconnectPeriod: 0, // one shot
+    });
+
+    let done = false;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      try {
+        probe.end(true);
+      } catch (e) {
+        /* ignore */
+      }
+      resolve(result);
+    };
+
+    probe.on('connect', () => finish({ ok: true, error: null }));
+    probe.on('error', (e) =>
+      finish({ ok: false, error: e.code && CONNACK[e.code] ? `Rejected: ${CONNACK[e.code]}` : e.code ? `Error ${e.code}` : e.message })
+    );
+    setTimeout(() => finish({ ok: false, error: 'Timed out — no response from the broker' }), 7000);
+  });
+}
+
 module.exports = {
   configure,
   disconnect,
+  testConnection,
   getValue: (name) => cache.get(name) || null,
   getStatus: () => ({ ...status }),
   // Test helpers.

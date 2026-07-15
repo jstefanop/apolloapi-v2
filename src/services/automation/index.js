@@ -136,6 +136,18 @@ class AutomationService {
     this._configureMqtt(await this.getConfig());
   }
 
+  // One-off connection probe for the "Test connection" button. Uses the stored
+  // password when the form left it blank.
+  async testMqtt(input) {
+    const client = require('../mqtt/client');
+    let mqtt = input || {};
+    if (!mqtt.password) {
+      const existing = await this.getConfig();
+      if (existing.mqtt && existing.mqtt.password) mqtt = { ...mqtt, password: existing.mqtt.password };
+    }
+    return client.testConnection(mqtt);
+  }
+
   /**
    * A manual start/stop pauses the automation instead of fighting it: the miner
    * doing the opposite of what you just asked, 30 seconds later, is the fastest

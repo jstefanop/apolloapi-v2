@@ -30,6 +30,19 @@ module.exports = gql`
     "Pause the automation for a while — what a manual start/stop does implicitly."
     setOverride(input: OverrideInput): AutomationConfigOutput! @auth
     clearOverride: AutomationConfigOutput! @auth
+
+    "One-off probe of the MQTT broker with the given (or stored) credentials."
+    testMqtt(input: MqttConfigInput!): MqttTestOutput! @auth
+  }
+
+  type MqttTestOutput {
+    result: MqttTestResult
+    error: Error
+  }
+
+  type MqttTestResult {
+    ok: Boolean!
+    message: String
   }
 
   enum MatchMode {
