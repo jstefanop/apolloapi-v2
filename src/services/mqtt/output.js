@@ -129,7 +129,7 @@ class MqttOutput {
       sensor('hashrate', {
         name: 'Hashrate',
         value_template: '{{ value_json.hashrate }}',
-        unit_of_measurement: 'GH/s',
+        unit_of_measurement: 'TH/s',
         icon: 'mdi:speedometer',
       }),
       sensor('temperature', {
@@ -199,12 +199,12 @@ class MqttOutput {
       this.deps.automation.getConfig(),
     ]);
 
-    let hashrate = 0;
+    let hashrateGh = 0;
     let power = 0;
     let temp = null;
     for (const board of statsRes?.stats || []) {
       const h = Number(board?.master?.intervals?.int_30?.bySol);
-      if (Number.isFinite(h)) hashrate += h;
+      if (Number.isFinite(h)) hashrateGh += h;
       const w = Number(board?.master?.boardsW);
       if (Number.isFinite(w)) power += w;
       const t = Number(board?.slots?.int_0?.temperature);
@@ -215,7 +215,8 @@ class MqttOutput {
 
     return {
       mining: statusRow?.status === 'online' ? 'ON' : 'OFF',
-      hashrate: Math.round(hashrate * 100) / 100,
+      // apollo-miner reports GH/s; Home Assistant shows TH/s.
+      hashrate: Math.round((hashrateGh / 1000) * 1000) / 1000,
       power: Math.round(power),
       temp: temp == null ? null : Math.round(temp * 10) / 10,
       mode: settings?.minerMode || 'unknown',

@@ -53,7 +53,7 @@ describe('mqtt output — telemetry', () => {
 
     expect(t).toEqual({
       mining: 'ON',
-      hashrate: 300, // 100 + 200
+      hashrate: 0.3, // (100 + 200) GH/s -> TH/s
       power: 100, // 50 + 50
       temp: 70, // hottest board
       mode: 'turbo',
@@ -78,7 +78,7 @@ describe('mqtt output — telemetry', () => {
     const t = await output.buildTelemetry();
 
     expect(t.temp).toBe(66.5);
-    expect(t.hashrate).toBe(120);
+    expect(t.hashrate).toBe(0.12); // 120 GH/s -> TH/s
   });
 });
 
