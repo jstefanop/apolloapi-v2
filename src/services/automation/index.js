@@ -116,8 +116,17 @@ class AutomationService {
     }
 
     const config = await this.getConfig();
-    // Reconnect/resubscribe the MQTT client whenever the broker or mappings change.
-    if (input.mqtt !== undefined) this._configureMqtt(config);
+    // Reconnect/resubscribe the MQTT client whenever the broker or mappings change,
+    // and reconcile the Home Assistant discovery for the output side (toggling
+    // output on/off does not change the connection, so onConnect won't fire).
+    if (input.mqtt !== undefined) {
+      this._configureMqtt(config);
+      try {
+        require('../index').mqttOutput.syncDiscovery().catch(() => {});
+      } catch (e) {
+        /* output not wired (tests) */
+      }
+    }
     return config;
   }
 

@@ -1,9 +1,13 @@
 /**
  * A single MQTT connection to the user's broker (their Home Assistant broker),
- * shared by the whole automation. Right now it only reads: it subscribes to the
- * topics the user mapped and caches the latest value per input, so the
- * `input.<name>` signals can react to them (e.g. the solar surplus published by
- * the SUN2000→MQTT bridge).
+ * shared by the whole automation. It reads and writes:
+ *   - reads: subscribes to the topics the user mapped and caches the latest value
+ *     per input, so the `input.<name>` signals can react to them (e.g. the solar
+ *     surplus published by the SUN2000→MQTT bridge);
+ *   - writes: publishes the device's own state and (optionally) exposes command
+ *     topics, so Home Assistant can watch and control the miner. The output side
+ *     lives in ./output; here we only own the connection, publish() and command
+ *     routing.
  *
  * Singleton module state: there is one broker connection for the process.
  */
@@ -14,6 +18,11 @@ let signature = null; // connection identity — reconnect only when it changes
 let status = { connected: false, error: null };
 let inputs = []; // [{ name, topic, jsonPath, unit }]
 const cache = new Map(); // name -> { value, at }
+
+// The output side registers itself here (set once at boot, before the first
+// connect): { will, commandTopics, onCommand, onConnect }. Kept out of the
+// connection signature so toggling output on/off never drops the input link.
+let output = null;
 
 const getByPath = (obj, path) =>
   String(path)
@@ -34,6 +43,14 @@ function extractValue(input, payloadStr) {
 
 function onMessage(topic, payload) {
   const str = payload.toString();
+
+  // A command topic (miner/mode set from Home Assistant) — route it and stop; a
+  // command topic is never also an input topic.
+  if (output && output.commandTopics && output.commandTopics.includes(topic)) {
+    if (output.onCommand) Promise.resolve(output.onCommand(topic, str)).catch(() => {});
+    return;
+  }
+
   for (const input of inputs) {
     if (input.topic !== topic) continue;
     const value = extractValue(input, str);
@@ -87,11 +104,19 @@ function configure(mqttConfig) {
     password: cfg.password || undefined,
     reconnectPeriod: 5000,
     connectTimeout: 8000,
+    // Last-will: if the link drops, the broker marks the device unavailable so
+    // Home Assistant greys the entities out instead of showing stale values.
+    ...(output && output.will
+      ? { will: { topic: output.will.topic, payload: output.will.payload, qos: 1, retain: true } }
+      : {}),
   });
 
   client.on('connect', () => {
     status = { connected: true, error: null };
-    if (topics.length) client.subscribe(topics, () => {});
+    const subs = [...topics, ...((output && output.commandTopics) || [])];
+    if (subs.length) client.subscribe(subs, () => {});
+    // Let the output side (re)publish its discovery + availability + first state.
+    if (output && output.onConnect) Promise.resolve(output.onConnect()).catch(() => {});
   });
   client.on('message', onMessage);
   client.on('error', (e) => {
@@ -225,11 +250,40 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
   });
 }
 
+/**
+ * Register the output side (once, at boot). Stores the last-will, the command
+ * topics to subscribe, and the callbacks. If the link is already up, subscribe
+ * the command topics and fire onConnect now so a late registration still works.
+ */
+function setOutput(o) {
+  output = o || null;
+  if (client && status.connected && output) {
+    if (output.commandTopics && output.commandTopics.length) client.subscribe(output.commandTopics, () => {});
+    if (output.onConnect) Promise.resolve(output.onConnect()).catch(() => {});
+  }
+}
+
+// Publish, but only when the link is up — telemetry is disposable, so a message
+// sent while disconnected is simply dropped (retained state catches HA up on the
+// next connect).
+function publish(topic, payload, { retain = false, qos = 0 } = {}) {
+  if (!client || !status.connected) return false;
+  try {
+    client.publish(topic, typeof payload === 'string' ? payload : JSON.stringify(payload), { retain, qos });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 module.exports = {
   configure,
   disconnect,
   testConnection,
   discoverTopics,
+  setOutput,
+  publish,
+  isConnected: () => status.connected,
   getValue: (name) => cache.get(name) || null,
   getStatus: () => ({ ...status }),
   // Test helpers.
@@ -237,6 +291,7 @@ module.exports = {
     disconnect();
     signature = null;
     inputs = [];
+    output = null;
     cache.clear();
   },
   _ingest: onMessage, // simulate an incoming message in tests

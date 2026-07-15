@@ -28,6 +28,15 @@ const automationService = require('./automation')(knex, {
   settings: settingsService
 });
 
+// MQTT output: publishes the device state to the broker and (optionally) exposes
+// command topics, announced to Home Assistant via MQTT Discovery. Wired after the
+// services it reads/drives, like automation.
+const mqttOutputService = require('./mqtt/output')(knex, {
+  miner: minerService,
+  settings: settingsService,
+  automation: automationService
+});
+
 // Export all services
 module.exports = {
   auth: authService,
@@ -41,5 +50,6 @@ module.exports = {
   logs: logsService,
   solo: soloService,
   serviceMonitor: serviceMonitor,
-  automation: automationService
+  automation: automationService,
+  mqttOutput: mqttOutputService
 };

@@ -110,11 +110,22 @@ module.exports = gql`
     status: MqttStatus
     "Topic → signal mappings; each becomes an input.<name> number signal."
     inputs: [MqttInput!]
+    "Publishing the device state to the broker (Home Assistant discovery)."
+    output: MqttOutput
   }
 
   type MqttStatus {
     connected: Boolean!
     error: String
+  }
+
+  type MqttOutput {
+    "Publish the device state to the broker and announce it to Home Assistant."
+    enabled: Boolean
+    "Also expose command topics so Home Assistant can start/stop and set the mode."
+    control: Boolean
+    "Stable id used for the HA device and topic prefix (apollo/<deviceId>/…)."
+    deviceId: String
   }
 
   type MqttInput {
@@ -133,6 +144,12 @@ module.exports = gql`
     password: String
     tls: Boolean
     inputs: [MqttInputInput!]
+    output: MqttOutputInput
+  }
+
+  input MqttOutputInput {
+    enabled: Boolean
+    control: Boolean
   }
 
   input MqttInputInput {

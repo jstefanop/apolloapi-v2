@@ -158,6 +158,15 @@ function serializeMqtt(mqtt) {
   } catch (e) {
     /* client not available */
   }
+  let deviceId = null;
+  try {
+    deviceId = require('../../services/mqtt/output').deviceId();
+  } catch (e) {
+    /* output not available */
+  }
+
+  const output = mqtt.output || {};
+
   return {
     enabled: !!mqtt.enabled,
     host: mqtt.host || null,
@@ -171,6 +180,11 @@ function serializeMqtt(mqtt) {
       jsonPath: i.jsonPath || null,
       unit: i.unit || null,
     })),
+    output: {
+      enabled: !!output.enabled,
+      control: output.control !== false, // default on
+      deviceId,
+    },
   };
 }
 

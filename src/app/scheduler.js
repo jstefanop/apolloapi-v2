@@ -479,8 +479,11 @@ async function evaluateAutomation() {
     const result = await withTimeout(services.automation.evaluate(), 20000, 'automation.evaluate');
 
     // The miner just moved: push the new service status instead of letting the UI
-    // discover it on the next periodic tick.
-    if (result.applied) await pushServicesStatus();
+    // discover it on the next periodic tick, and refresh the MQTT/HA state too.
+    if (result.applied) {
+      await pushServicesStatus();
+      services.mqttOutput.publishState().catch(() => {});
+    }
 
     pubsub.publish(TOPICS.AUTOMATION, { automation: { result, error: null } });
   } catch (e) {
@@ -488,6 +491,19 @@ async function evaluateAutomation() {
     pubsub.publish(TOPICS.AUTOMATION, {
       automation: { result: null, error: { message: e.message } },
     });
+  }
+}
+
+/**
+ * Publish the device state to MQTT for Home Assistant. No-op unless the user
+ * enabled the output; runs on its own timer so HA stays fresh between the
+ * automation ticks.
+ */
+async function pushMqttState() {
+  try {
+    await withTimeout(services.mqttOutput.publishState(), 8000, 'mqttOutput.publishState');
+  } catch (e) {
+    console.error('[mqtt] publish state error:', e.message);
   }
 }
 
@@ -505,7 +521,10 @@ async function startAllSchedulers() {
     // Optional: Check services for logging (read-only, no DB updates)
     await checkServices();
 
-    // Open the MQTT connection (if configured) so input.* signals get fed.
+    // Register the MQTT output (last-will, command topics, discovery hook) BEFORE
+    // opening the connection, so the will is set on connect. Then open the broker
+    // link (if configured) so input.* signals get fed and the output can publish.
+    services.mqttOutput.init();
     services.automation.initMqtt().catch((err) =>
       console.error('[automation] MQTT init failed:', err.message)
     );
@@ -531,6 +550,7 @@ async function startAllSchedulers() {
     setInterval(pushMcuStats,       5000);
     setInterval(pushNodeStats,      8000);
     setInterval(pushSoloStats,      5000);
+    setInterval(pushMqttState,      15000); // keep Home Assistant fresh between automation ticks
     // Services status is event-driven (serviceMonitor), but also push periodically so
     // new clients never wait forever for a "change" event that might not come.
     setInterval(pushServicesStatus, 10000);
