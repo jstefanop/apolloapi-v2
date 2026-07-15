@@ -43,8 +43,11 @@ module.exports = {
       return { 'miner.temperature': STALE, 'miner.temperatureAvg': STALE };
     }
 
+    // The stat file reports temperature as a string ("62.43"), so coerce before
+    // checking — Number.isFinite('62.43') is false, which used to drop every
+    // reading and leave the signal stale even with the miner running.
     const temps = (stats || [])
-      .map((board) => board?.slots?.int_0?.temperature)
+      .map((board) => Number(board?.slots?.int_0?.temperature))
       .filter((t) => Number.isFinite(t) && t > 0);
 
     if (!temps.length) return { 'miner.temperature': STALE, 'miner.temperatureAvg': STALE };

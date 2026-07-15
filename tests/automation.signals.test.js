@@ -130,6 +130,14 @@ describe('signal: miner temperature', () => {
     expect(signals['miner.temperatureAvg'].value).toBe(66.5);
   });
 
+  it('handles the string temperature the stat file actually reports', async () => {
+    // The real stat file gives "62.43" (a string); it must not be dropped.
+    const deps = { miner: { getStats: async () => ({ stats: [{ slots: { int_0: { temperature: '62.43' } } }] }) } };
+    const signals = await read(minerTemp, { deps });
+    expect(signals['miner.temperature'].value).toBe(62.43);
+    expect(signals['miner.temperature'].stale).toBeFalsy();
+  });
+
   it('is stale — not zero — when the miner is off', async () => {
     const deps = { miner: { getStats: async () => ({ stats: [] }) } };
     const signals = await read(minerTemp, { deps });
