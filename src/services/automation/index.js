@@ -136,16 +136,25 @@ class AutomationService {
     this._configureMqtt(await this.getConfig());
   }
 
-  // One-off connection probe for the "Test connection" button. Uses the stored
-  // password when the form left it blank.
-  async testMqtt(input) {
-    const client = require('../mqtt/client');
+  // Fill in the stored password when the form left it blank (used by both the
+  // test probe and topic discovery).
+  async _mqttWithPassword(input) {
     let mqtt = input || {};
     if (!mqtt.password) {
       const existing = await this.getConfig();
       if (existing.mqtt && existing.mqtt.password) mqtt = { ...mqtt, password: existing.mqtt.password };
     }
-    return client.testConnection(mqtt);
+    return mqtt;
+  }
+
+  // One-off connection probe for the "Test connection" button.
+  async testMqtt(input) {
+    return require('../mqtt/client').testConnection(await this._mqttWithPassword(input));
+  }
+
+  // Browse the broker for topics (subscribe to a wildcard for a few seconds).
+  async discoverMqtt(input, { prefix, seconds } = {}) {
+    return require('../mqtt/client').discoverTopics(await this._mqttWithPassword(input), { prefix, seconds });
   }
 
   /**

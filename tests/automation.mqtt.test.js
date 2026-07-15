@@ -110,6 +110,20 @@ describe('MQTT config round-trip', () => {
     spy.mockRestore();
   });
 
+  it('browses topics, passing the prefix and the stored password through', async () => {
+    const spy = jest
+      .spyOn(client, 'discoverTopics')
+      .mockResolvedValue({ ok: true, error: null, topics: [{ topic: 'sun2000/x', sample: '5', jsonPaths: [] }] });
+
+    await automation.updateConfig({ mqtt: { enabled: true, host: 'h', password: 'stored', inputs: [] } });
+    const result = await automation.discoverMqtt({ host: 'h', password: '' }, { prefix: 'sun2000', seconds: 5 });
+
+    expect(result.topics).toHaveLength(1);
+    expect(spy.mock.calls[0][0].password).toBe('stored');
+    expect(spy.mock.calls[0][1]).toMatchObject({ prefix: 'sun2000', seconds: 5 });
+    spy.mockRestore();
+  });
+
   it('never returns the broker password through GraphQL serialization', () => {
     const { serializeConfig } = require('../src/graphql/serialize/automation');
     const out = serializeConfig({

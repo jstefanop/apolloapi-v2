@@ -100,5 +100,8 @@ module.exports = {
         const { ok, error } = await services.automation.testMqtt(input);
         return { ok, message: error };
       }),
+
+    discoverMqtt: (_, { input, prefix, seconds }, { services }) =>
+      wrap(async () => services.automation.discoverMqtt(input, { prefix, seconds })),
   },
 };

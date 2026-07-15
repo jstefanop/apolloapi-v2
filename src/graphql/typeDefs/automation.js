@@ -33,6 +33,9 @@ module.exports = gql`
 
     "One-off probe of the MQTT broker with the given (or stored) credentials."
     testMqtt(input: MqttConfigInput!): MqttTestOutput! @auth
+
+    "Subscribe to a wildcard for a few seconds and return the topics seen."
+    discoverMqtt(input: MqttConfigInput!, prefix: String, seconds: Int): MqttDiscoverOutput! @auth
   }
 
   type MqttTestOutput {
@@ -43,6 +46,25 @@ module.exports = gql`
   type MqttTestResult {
     ok: Boolean!
     message: String
+  }
+
+  type MqttDiscoverOutput {
+    result: MqttDiscoverResult
+    error: Error
+  }
+
+  type MqttDiscoverResult {
+    ok: Boolean!
+    error: String
+    topics: [MqttTopic!]!
+  }
+
+  type MqttTopic {
+    topic: String!
+    "A sample of the last payload (truncated)."
+    sample: String
+    "Dot-paths to numeric fields when the payload is JSON — candidate jsonPaths."
+    jsonPaths: [String!]
   }
 
   enum MatchMode {

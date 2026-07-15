@@ -146,10 +146,90 @@ function testConnection(mqttConfig) {
   });
 }
 
+// Dot-paths to numeric-ish leaves in a JSON payload — the candidate jsonPaths a
+// user would map (e.g. "battery.soc", "active_power").
+function numericPaths(obj, prefix = '', out = [], depth = 0) {
+  if (depth > 4 || out.length > 50) return out;
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      numericPaths(v, path, out, depth + 1);
+    } else if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)))) {
+      out.push(path);
+    }
+  }
+  return out;
+}
+
+/**
+ * Browse the broker: subscribe to a wildcard for a few seconds and collect the
+ * topics that publish (retained ones arrive immediately). One-off connection,
+ * separate from the shared client.
+ */
+function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
+  return new Promise((resolve) => {
+    const cfg = mqttConfig || {};
+    if (!cfg.host) return resolve({ ok: false, error: 'No broker host set', topics: [] });
+
+    const window = Math.min(Math.max(seconds || 4, 1), 15);
+    const filter = prefix ? `${String(prefix).replace(/[/#\s]+$/, '')}/#` : '#';
+    const url = `${cfg.tls ? 'mqtts' : 'mqtt'}://${cfg.host}:${cfg.port || 1883}`;
+    const probe = mqtt.connect(url, {
+      username: cfg.username || undefined,
+      password: cfg.password || undefined,
+      connectTimeout: 6000,
+      reconnectPeriod: 0,
+    });
+
+    const found = new Map(); // topic -> sample payload (truncated)
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try {
+        probe.end(true);
+      } catch (e) {
+        /* ignore */
+      }
+      resolve(result);
+    };
+
+    probe.on('error', (e) =>
+      finish({ ok: false, error: e.code && CONNACK[e.code] ? `Rejected: ${CONNACK[e.code]}` : e.code ? `Error ${e.code}` : e.message, topics: [] })
+    );
+    probe.on('connect', () => {
+      probe.subscribe(filter, (err) => {
+        if (err) finish({ ok: false, error: err.message, topics: [] });
+      });
+    });
+    probe.on('message', (topic, payload) => {
+      if (found.size >= 400 && !found.has(topic)) return;
+      found.set(topic, payload.toString().slice(0, 300));
+    });
+
+    setTimeout(() => {
+      const topics = [...found.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([topic, sample]) => {
+          let jsonPaths = [];
+          try {
+            const parsed = JSON.parse(sample);
+            if (parsed && typeof parsed === 'object') jsonPaths = numericPaths(parsed);
+          } catch (e) {
+            /* not JSON */
+          }
+          return { topic, sample, jsonPaths };
+        });
+      finish({ ok: true, error: null, topics });
+    }, window * 1000);
+  });
+}
+
 module.exports = {
   configure,
   disconnect,
   testConnection,
+  discoverTopics,
   getValue: (name) => cache.get(name) || null,
   getStatus: () => ({ ...status }),
   // Test helpers.
