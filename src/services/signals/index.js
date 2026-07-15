@@ -17,8 +17,9 @@ const sun = require('./sun');
 const minerTemp = require('./minerTemp');
 const minerState = require('./minerState');
 const energyTariff = require('./energyTariff');
+const weather = require('./weather');
 
-const PROVIDERS = [clock, sun, minerTemp, minerState, energyTariff];
+const PROVIDERS = [clock, sun, minerTemp, minerState, energyTariff, weather];
 
 const READ_TIMEOUT_MS = 5000;
 

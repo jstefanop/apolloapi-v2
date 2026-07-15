@@ -1,7 +1,10 @@
+jest.mock('axios');
+const axios = require('axios');
 const clock = require('../src/services/signals/clock');
 const sun = require('../src/services/signals/sun');
 const energyTariff = require('../src/services/signals/energyTariff');
 const minerTemp = require('../src/services/signals/minerTemp');
+const weather = require('../src/services/signals/weather');
 const registry = require('../src/services/signals');
 
 const read = (provider, ctx) => provider.read({ now: new Date(), ...ctx });
@@ -146,6 +149,40 @@ describe('signal: miner temperature', () => {
 
     const signals = await read(minerTemp, { deps });
     expect(signals['miner.temperature'].stale).toBe(true);
+  });
+});
+
+describe('signal: weather (Open-Meteo)', () => {
+  beforeEach(() => weather._reset());
+
+  it('is stale without a location — a rule on it does not match', async () => {
+    const signals = await weather.read({ config: { latitude: null, longitude: null } });
+    expect(signals['weather.temperature'].stale).toBe(true);
+    expect(signals['weather.cloudCover'].stale).toBe(true);
+  });
+
+  it('exposes outdoor temperature, cloud cover and solar radiation once fetched', async () => {
+    axios.get.mockResolvedValue({
+      data: { current: { temperature_2m: 12.3, cloud_cover: 40, shortwave_radiation: 550 } },
+    });
+    await weather._refresh(41.9, 12.5);
+
+    const signals = await weather.read({ config: { latitude: 41.9, longitude: 12.5 } });
+    expect(signals['weather.temperature'].value).toBe(12.3);
+    expect(signals['weather.cloudCover'].value).toBe(40);
+    expect(signals['weather.solarRadiation'].value).toBe(550);
+  });
+
+  it('stays stale (never throws) when Open-Meteo is unreachable', async () => {
+    axios.get.mockRejectedValue(new Error('network down'));
+    await weather._refresh(41.9, 12.5);
+
+    const signals = await weather.read({ config: { latitude: 41.9, longitude: 12.5 } });
+    expect(signals['weather.temperature'].stale).toBe(true);
+  });
+
+  it('reports outdoor temperature in °C so the UI can convert to the user unit', () => {
+    expect(weather.descriptors.find((d) => d.id === 'weather.temperature').unit).toBe('°C');
   });
 });
 
