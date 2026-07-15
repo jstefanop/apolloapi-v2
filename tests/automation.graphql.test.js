@@ -236,6 +236,21 @@ describe('automation subscription', () => {
     });
   });
 
+  it('derives the miner status from the signals so the card and tiles agree', () => {
+    const out = serializeState({
+      enabled: true,
+      dryRun: false,
+      decision: null,
+      guard: null,
+      state: { running: true, mode: 'turbo', lastChangeAt: null, cyclesLastHour: 0, overrideUntil: null },
+      // A race left the engine state and the signal disagreeing: the display
+      // follows the signal (what the tiles show).
+      signals: { 'miner.running': { value: false, stale: false }, 'miner.mode': { value: 'eco', stale: false } },
+    });
+    expect(out.miner.running).toBe(false);
+    expect(out.miner.mode).toBe('eco');
+  });
+
   it('forwards an error from a failed tick', () => {
     const pushed = subscriptions.Subscription.automation.resolve({
       automation: { result: null, error: { message: 'tick failed' } },

@@ -47,6 +47,20 @@ class MinerService {
     }
   }
 
+  // Re-evaluate + push the automation state after a *user* start/stop so the
+  // automation page reflects the new miner status immediately instead of at the
+  // next 60s tick. Only for user actions — the automation's own commands would
+  // otherwise recurse.
+  _reevaluateAutomation(source) {
+    if (source !== 'user') return;
+    try {
+      const { evaluateAutomation } = require('../app/scheduler');
+      Promise.resolve(evaluateAutomation()).catch(() => {});
+    } catch (e) {
+      /* scheduler not running */
+    }
+  }
+
   async start({ source = 'user' } = {}) {
     try {
       // Update service status in the database
@@ -80,6 +94,7 @@ class MinerService {
       } else {
         await this._execCommand('sudo systemctl start apollo-miner');
       }
+      this._reevaluateAutomation(source);
     } catch (error) {
       throw new GraphQLError(`Failed to start miner: ${error.message}`);
     }
@@ -117,6 +132,7 @@ class MinerService {
       } else {
         await this._execCommand('sudo systemctl stop apollo-miner');
       }
+      this._reevaluateAutomation(source);
     } catch (error) {
       throw new GraphQLError(`Failed to stop miner: ${error.message}`);
     }
@@ -154,6 +170,7 @@ class MinerService {
       } else {
         await this._execCommand('sudo systemctl restart apollo-miner');
       }
+      this._reevaluateAutomation(source);
     } catch (error) {
       throw new GraphQLError(`Failed to restart miner: ${error.message}`);
     }

@@ -659,6 +659,18 @@ class ServiceMonitor {
           } catch (pubErr) {
             console.error('Error publishing services update:', pubErr.message);
           }
+
+          // A miner online/offline change is an automation input — re-evaluate so
+          // the automation page reflects it now, not at the next 60s tick. Lazy
+          // require avoids the scheduler↔services cycle.
+          if (serviceName === 'miner') {
+            try {
+              const { evaluateAutomation } = require('../app/scheduler');
+              Promise.resolve(evaluateAutomation()).catch(() => {});
+            } catch (e) {
+              /* scheduler not running */
+            }
+          }
         } else {
           // Update only the last checked timestamp
           await this.knex('service_status')

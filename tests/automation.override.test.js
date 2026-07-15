@@ -1,5 +1,6 @@
 const { knex } = require('../src/db');
 const childProcess = require('child_process');
+const scheduler = require('../src/app/scheduler'); // mocked in tests/setup.js
 const services = require('../src/services');
 
 const { miner, automation } = services;
@@ -71,5 +72,16 @@ describe('manual actions vs the automation', () => {
     await miner.start();
 
     expect((await automation.getConfig()).overrideUntil).toBeNull();
+  });
+
+  it('re-evaluates on a user stop so the automation page updates now, not at the next tick', async () => {
+    scheduler.evaluateAutomation.mockClear();
+    await miner.stop({ source: 'user' });
+    expect(scheduler.evaluateAutomation).toHaveBeenCalled();
+
+    // The automation's own commands must not trigger it (would recurse).
+    scheduler.evaluateAutomation.mockClear();
+    await miner.stop({ source: 'automation' });
+    expect(scheduler.evaluateAutomation).not.toHaveBeenCalled();
   });
 });

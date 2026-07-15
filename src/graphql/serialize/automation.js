@@ -128,8 +128,16 @@ function serializeState(result) {
       : null,
     miner: state
       ? {
-          running: state.running,
-          mode: state.mode,
+          // Prefer the miner.* signals so the status card and the conditions tiles
+          // always agree (they read the same values); fall back to the engine state.
+          running:
+            signals && signals['miner.running'] && !signals['miner.running'].stale
+              ? !!signals['miner.running'].value
+              : state.running,
+          mode:
+            signals && signals['miner.mode'] && !signals['miner.mode'].stale
+              ? signals['miner.mode'].value
+              : state.mode,
           lastChangeAt: state.lastChangeAt ? state.lastChangeAt.toISOString() : null,
           cyclesLastHour: state.cyclesLastHour,
           overrideUntil: state.overrideUntil ? state.overrideUntil.toISOString() : null,
