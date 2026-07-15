@@ -410,17 +410,22 @@ class AutomationService {
   }
 
   /**
-   * Only log something worth reading: an action, a block, or a change of mind.
-   * A tick that says "nothing to do" every minute would flush the ring buffer in
-   * eight hours and bury the three events that mattered.
+   * Only log when the outcome changes — an action, a block, or a change of mind.
+   *
+   * The outcome is (target, rule, block), not "would something happen": in
+   * dry-run the miner never reaches its target, so the guard reports "would
+   * apply" on every single tick. Keying off that logged a row a minute and
+   * flushed the ring buffer overnight, burying the two events that mattered.
    */
   async _shouldLog({ decision, guard }) {
-    if (guard.apply || guard.blockedBy) return true;
-
     const last = await this.knex('automation_events').orderBy('id', 'desc').first();
     if (!last) return true;
 
-    return last.decision !== describeTarget(decision.target) || last.rule_id !== decision.ruleId;
+    const sameTarget = last.decision === describeTarget(decision.target);
+    const sameRule = (last.rule_id ?? null) === (decision.ruleId ?? null);
+    const sameBlock = (last.blocked_by ?? null) === (guard.blockedBy ?? null);
+
+    return !(sameTarget && sameRule && sameBlock);
   }
 
   _snapshot(currentSignals) {

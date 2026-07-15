@@ -279,6 +279,43 @@ describe('automation service — evaluate (dry run)', () => {
     expect(await automation.listEvents()).toHaveLength(1);
   });
 
+  it('logs a standing dry-run decision once, not every minute', async () => {
+    // The regression behind 480 identical rows overnight: in dry-run the miner
+    // never reaches its target, so the guard says "would apply" on every tick.
+    await automation.updateConfig({ enabled: true, dryRun: true });
+    await automation.createRule({
+      name: 'Night eco',
+      priority: 100,
+      conditions: [{ signal: 'clock.time', op: 'between', values: ['00:00', '23:59'] }],
+      action: { type: 'mode', mode: 'eco' },
+    });
+    await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
+
+    for (let i = 0; i < 5; i++) await automation.evaluate();
+
+    const events = await automation.listEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ decision: 'mode:eco', applied: false });
+  });
+
+  it('logs again when a standing decision finally changes', async () => {
+    await automation.updateConfig({ enabled: true, dryRun: true, fallbackAction: 'off' });
+    const rule = await automation.createRule(thermalProtection);
+    await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
+
+    // Hot: decision is "off" (safety). Several ticks, one row.
+    deps.miner.getStats.mockResolvedValue({ stats: [{ slots: { int_0: { temperature: 88 } } }] });
+    await automation.evaluate();
+    await automation.evaluate();
+    expect(await automation.listEvents()).toHaveLength(1);
+
+    // Cools down: safety releases, fallback stops it — a real change, a new row.
+    await automation.updateRule(rule.id, { enabled: false });
+    const { decision } = await automation.evaluate();
+    expect(decision.reason).toBe('fallback');
+    expect(await automation.listEvents()).toHaveLength(2);
+  });
+
   it('records why a change was throttled, so a blocked rule does not look broken', async () => {
     await automation.updateConfig({ enabled: true, fallbackAction: 'off' });
     await knex('service_status')
