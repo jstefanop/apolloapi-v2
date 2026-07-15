@@ -505,6 +505,11 @@ async function startAllSchedulers() {
     // Optional: Check services for logging (read-only, no DB updates)
     await checkServices();
 
+    // Open the MQTT connection (if configured) so input.* signals get fed.
+    services.automation.initMqtt().catch((err) =>
+      console.error('[automation] MQTT init failed:', err.message)
+    );
+
     // Service status checks are now handled by ServiceMonitor
     // We only need to collect statistics periodically
     setInterval(fetchStatistics, process.env.TIMESERIES_INTERVAL || 60000); // Collect miner statistics every 60 seconds

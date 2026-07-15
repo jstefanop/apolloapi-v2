@@ -62,6 +62,49 @@ module.exports = gql`
     overrideMinutes: Int!
     overrideUntil: String
     overrideReason: String
+    mqtt: MqttConfig
+  }
+
+  type MqttConfig {
+    enabled: Boolean
+    host: String
+    port: Int
+    username: String
+    tls: Boolean
+    "Live connection state of the broker link."
+    status: MqttStatus
+    "Topic → signal mappings; each becomes an input.<name> number signal."
+    inputs: [MqttInput!]
+  }
+
+  type MqttStatus {
+    connected: Boolean!
+    error: String
+  }
+
+  type MqttInput {
+    name: String!
+    topic: String!
+    "Optional dot-path into a JSON payload (e.g. 'solar.surplus')."
+    jsonPath: String
+    unit: String
+  }
+
+  input MqttConfigInput {
+    enabled: Boolean
+    host: String
+    port: Int
+    username: String
+    password: String
+    tls: Boolean
+    inputs: [MqttInputInput!]
+  }
+
+  input MqttInputInput {
+    name: String!
+    topic: String!
+    jsonPath: String
+    unit: String
   }
 
   type Tariff {
@@ -93,6 +136,7 @@ module.exports = gql`
     maxCyclesPerHour: Int
     defaultHysteresis: Float
     overrideMinutes: Int
+    mqtt: MqttConfigInput
   }
 
   input TariffInput {

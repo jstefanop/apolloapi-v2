@@ -64,6 +64,7 @@ class AutomationService {
       timezone: row.timezone,
       fallbackAction: row.fallback_action || 'keep',
       tariff: parseJson(row.tariff, null),
+      mqtt: parseJson(row.mqtt, null),
       minOnMinutes: row.min_on_minutes,
       minOffMinutes: row.min_off_minutes,
       minChangeMinutes: row.min_change_minutes,
@@ -98,13 +99,41 @@ class AutomationService {
     if (input.tariff !== undefined) {
       update.tariff = input.tariff === null ? null : JSON.stringify(input.tariff);
     }
+    if (input.mqtt !== undefined) {
+      let mqtt = input.mqtt;
+      // The password is never sent back to the UI, so an empty one on save means
+      // "unchanged" — keep the stored one instead of wiping it.
+      if (mqtt && !mqtt.password) {
+        const existing = await this.getConfig();
+        if (existing.mqtt && existing.mqtt.password) mqtt = { ...mqtt, password: existing.mqtt.password };
+      }
+      update.mqtt = mqtt === null ? null : JSON.stringify(mqtt);
+    }
 
     if (Object.keys(update).length) {
       update.updated_at = this.knex.fn.now();
       await this.knex('automation_config').where({ id: 1 }).update(update);
     }
 
-    return this.getConfig();
+    const config = await this.getConfig();
+    // Reconnect/resubscribe the MQTT client whenever the broker or mappings change.
+    if (input.mqtt !== undefined) this._configureMqtt(config);
+    return config;
+  }
+
+  // Point the shared MQTT client at the current config. Lazy require avoids a
+  // hard dependency at module load (and keeps tests that never touch MQTT clean).
+  _configureMqtt(config) {
+    try {
+      require('../mqtt/client').configure((config || {}).mqtt);
+    } catch (e) {
+      console.log('[automation] MQTT configure failed:', e.message);
+    }
+  }
+
+  // Called by the scheduler on boot to open the connection from stored config.
+  async initMqtt() {
+    this._configureMqtt(await this.getConfig());
   }
 
   /**
@@ -137,7 +166,7 @@ class AutomationService {
   }
 
   async createRule(input) {
-    this._validateRule(input);
+    this._validateRule(input, await this.getConfig());
     const [id] = await this.knex('automation_rules').insert(this._ruleToRow(input));
     return this.getRule(id);
   }
@@ -146,7 +175,7 @@ class AutomationService {
     const existing = await this.knex('automation_rules').where({ id }).first();
     if (!existing) throw new GraphQLError(`Rule ${id} not found`);
 
-    this._validateRule({ ...this._hydrateRule(existing), ...input });
+    this._validateRule({ ...this._hydrateRule(existing), ...input }, await this.getConfig());
 
     await this.knex('automation_rules')
       .where({ id })
@@ -193,10 +222,11 @@ class AutomationService {
     return row;
   }
 
-  _validateRule(rule) {
+  _validateRule(rule, config) {
     if (!rule.name) throw new GraphQLError('Rule name is required');
 
-    const known = signals.descriptorsById();
+    // Config-aware so user-defined MQTT input signals validate too.
+    const known = signals.descriptorsById(config);
     const conditions = rule.conditions || [];
     if (!conditions.length) throw new GraphQLError('A rule needs at least one condition');
 
@@ -316,8 +346,8 @@ class AutomationService {
     });
   }
 
-  descriptors() {
-    return signals.descriptors();
+  async descriptors() {
+    return signals.descriptors(await this.getConfig());
   }
 
   // ------------------------------------------------------------------ tick
@@ -349,7 +379,7 @@ class AutomationService {
       config,
       state,
       now,
-      descriptors: signals.descriptorsById(),
+      descriptors: signals.descriptorsById(config),
     });
 
     const guard = canApply({ decision, state, config, now });

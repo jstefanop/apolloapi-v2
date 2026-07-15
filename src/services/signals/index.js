@@ -18,8 +18,9 @@ const minerTemp = require('./minerTemp');
 const minerState = require('./minerState');
 const energyTariff = require('./energyTariff');
 const weather = require('./weather');
+const mqttInput = require('./mqttInput');
 
-const PROVIDERS = [clock, sun, minerTemp, minerState, energyTariff, weather];
+const PROVIDERS = [clock, sun, minerTemp, minerState, energyTariff, weather, mqttInput];
 
 const READ_TIMEOUT_MS = 5000;
 
@@ -32,14 +33,18 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+// A provider's descriptors, static or config-derived (MQTT inputs are dynamic).
+const providerDescriptors = (provider, config) =>
+  provider.describe ? provider.describe(config) : provider.descriptors;
+
 // Flat list of descriptors — the UI builds the condition form from these, so no
-// signal is hardcoded on the frontend.
-function descriptors() {
-  return PROVIDERS.flatMap((p) => p.descriptors);
+// signal is hardcoded on the frontend. `config` supplies the dynamic ones.
+function descriptors(config) {
+  return PROVIDERS.flatMap((p) => providerDescriptors(p, config));
 }
 
-function descriptorsById() {
-  return Object.fromEntries(descriptors().map((d) => [d.id, d]));
+function descriptorsById(config) {
+  return Object.fromEntries(descriptors(config).map((d) => [d.id, d]));
 }
 
 // Read every provider. Returns { 'signal.id': { value, stale?, error? } }.
@@ -51,7 +56,10 @@ async function readAll(ctx) {
       } catch (error) {
         // Mark every signal this provider owns as stale, keeping the reason.
         return Object.fromEntries(
-          provider.descriptors.map((d) => [d.id, { value: null, stale: true, error: error.message }])
+          providerDescriptors(provider, ctx.config).map((d) => [
+            d.id,
+            { value: null, stale: true, error: error.message },
+          ])
         );
       }
     })

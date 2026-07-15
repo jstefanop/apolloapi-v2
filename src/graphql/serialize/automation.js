@@ -144,6 +144,32 @@ function serializeConfig(config) {
   return {
     ...config,
     overrideUntil: config.overrideUntil ? config.overrideUntil.toISOString() : null,
+    mqtt: serializeMqtt(config.mqtt),
+  };
+}
+
+// The password is never returned; the live connection status is added.
+function serializeMqtt(mqtt) {
+  if (!mqtt) return null;
+  let status = { connected: false, error: null };
+  try {
+    status = require('../../services/mqtt/client').getStatus();
+  } catch (e) {
+    /* client not available */
+  }
+  return {
+    enabled: !!mqtt.enabled,
+    host: mqtt.host || null,
+    port: mqtt.port || null,
+    username: mqtt.username || null,
+    tls: !!mqtt.tls,
+    status,
+    inputs: (mqtt.inputs || []).map((i) => ({
+      name: i.name,
+      topic: i.topic,
+      jsonPath: i.jsonPath || null,
+      unit: i.unit || null,
+    })),
   };
 }
 

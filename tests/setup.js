@@ -29,6 +29,11 @@ jest.mock('../src/app/scheduler', () => ({
   evaluateAutomation: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Never open a real MQTT connection in tests; a fake client is enough.
+jest.mock('mqtt', () => ({
+  connect: () => ({ on: jest.fn(), subscribe: jest.fn(), end: jest.fn(), publish: jest.fn() }),
+}));
+
 // Mock delle operazioni del file system
 jest.mock('fs', () => {
   const originalFs = jest.requireActual('fs');
@@ -245,6 +250,7 @@ beforeAll(async () => {
         table.integer('max_cycles_per_hour').defaultTo(2);
         table.float('default_hysteresis').defaultTo(2);
         table.integer('override_minutes').defaultTo(60);
+        table.text('mqtt').nullable();
         table.timestamp('override_until').nullable();
         table.string('override_reason').nullable();
         table.timestamps(true, true);
