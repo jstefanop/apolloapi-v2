@@ -227,6 +227,20 @@ describe('automation service — evaluate (dry run)', () => {
     expect(loggedEvent).toBeFalsy();
   });
 
+  it('re-reads the miner status after applying, so the push reflects the action', async () => {
+    // The apply just started the miner; service_status is now online. The state
+    // read before the apply said offline — the re-read corrects it.
+    await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
+    const state = { running: false, mode: 'x' };
+    const sig = { 'miner.running': { value: false, stale: false }, 'miner.mode': { value: 'x', stale: false } };
+
+    await automation._refreshMinerStatus(state, sig);
+
+    expect(state.running).toBe(true);
+    expect(sig['miner.running'].value).toBe(true);
+    expect(sig['miner.mode'].value).toBe('balanced'); // from settings.read()
+  });
+
   it('records a failed command instead of pretending it worked', async () => {
     await overheating({ dryRun: false });
     deps.miner.stop.mockRejectedValue(new Error('systemd: unit not found'));

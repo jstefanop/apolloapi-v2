@@ -420,6 +420,11 @@ class AutomationService {
       try {
         await apply({ target: decision.target, changeType: guard.changeType, deps: this.deps });
         applied = true;
+        // The signals/state were read before we acted, so the pushed state would
+        // still show the pre-action status. Re-read the miner status so the UI
+        // reflects the action now (in prod it may still be 'pending' until the
+        // service monitor confirms, which then pushes again).
+        await this._refreshMinerStatus(state, currentSignals);
       } catch (error) {
         // The miner refused (systemd, a stale unit, a bad settings write). Log it
         // loudly and leave the state alone: the next tick will try again, and the
@@ -462,6 +467,28 @@ class AutomationService {
     // loggedEvent is the fresh row (or null) — the scheduler pushes it so the UI
     // history updates in real time instead of only on the next refetch.
     return { enabled: true, decision, guard, state, signals: currentSignals, applied, dryRun, failure, loggedEvent };
+  }
+
+  // Re-read the miner running state + mode after an apply and patch the state and
+  // signals in place, so the pushed state reflects what we just did.
+  async _refreshMinerStatus(state, currentSignals) {
+    try {
+      const [status, settings] = await Promise.all([
+        this.knex('service_status').select('status').where({ service_name: 'miner' }).first(),
+        this.deps.settings.read(),
+      ]);
+      const running = status?.status === 'online';
+      state.running = running;
+      state.mode = settings?.minerMode ?? state.mode;
+      if (currentSignals['miner.running']) {
+        currentSignals['miner.running'] = { ...currentSignals['miner.running'], value: running, stale: false };
+      }
+      if (currentSignals['miner.mode']) {
+        currentSignals['miner.mode'] = { ...currentSignals['miner.mode'], value: state.mode, stale: false };
+      }
+    } catch (e) {
+      /* leave the pre-action values */
+    }
   }
 
   _describeOutcome({ guard, dryRun, applied, failure, decision }) {
