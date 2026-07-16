@@ -255,9 +255,9 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
     const cfg = mqttConfig || {};
     if (!cfg.host) return resolve({ ok: false, error: 'No broker host set', topics: [] });
 
-    // Up to 45s: non-retained topics (e.g. a SUN2000 bridge that publishes every
+    // Up to 60s: non-retained topics (e.g. a SUN2000 bridge that publishes every
     // ~40s) need a window near their interval for a value to be caught at all.
-    const window = Math.min(Math.max(seconds || 4, 1), 45);
+    const window = Math.min(Math.max(seconds || 4, 1), 60);
     const filter = prefix ? `${String(prefix).replace(/[/#\s]+$/, '')}/#` : '#';
     const url = `${cfg.tls ? 'mqtts' : 'mqtt'}://${cfg.host}:${cfg.port || 1883}`;
     const probe = mqtt.connect(url, {
