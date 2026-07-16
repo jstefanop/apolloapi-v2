@@ -289,6 +289,23 @@ class AutomationService {
     if (action.type === 'mode' && !MINER_MODES.includes(action.mode)) {
       throw new GraphQLError(`Unknown miner mode: ${action.mode}`);
     }
+
+    // A rule that turns the miner on must be evaluable while it is off. A signal
+    // like board temperature is unreadable then (the sensor lives on the miner),
+    // so a "turn on" rule that hinges on it could never fire — it would leave the
+    // miner stuck off. With match=all a single such condition breaks it; with
+    // match=any it breaks only if every condition is running-only.
+    if (action.type === 'mode') {
+      const runningOnly = (id) => known[id] && known[id].availableWhileOff === false;
+      const offenders = conditions.filter((c) => runningOnly(c.signal)).map((c) => c.signal);
+      const cannotFireWhileOff =
+        (rule.match || 'all') === 'all' ? offenders.length > 0 : offenders.length === conditions.length;
+      if (offenders.length && cannotFireWhileOff) {
+        throw new GraphQLError(
+          `This rule turns the miner on, but it depends on ${offenders.join(', ')}, which can only be read while the miner runs — so it could never turn it back on. Use that signal to stop the miner (over-temperature), and drive turning it on with a signal available while off (time, sunrise/sunset, outdoor temperature).`
+        );
+      }
+    }
   }
 
   // ---------------------------------------------------------------- events

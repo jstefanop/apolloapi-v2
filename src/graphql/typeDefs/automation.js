@@ -287,6 +287,8 @@ module.exports = gql`
     unit: String
     ops: [String!]!
     supportsHysteresis: Boolean!
+    "False when the signal can only be read while the miner runs (board temperature): such a signal may stop the miner but not decide to turn it on."
+    availableWhileOff: Boolean
   }
 
   type SignalValue {

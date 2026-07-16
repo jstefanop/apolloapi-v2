@@ -158,6 +158,55 @@ describe('automation service — rules', () => {
   });
 });
 
+describe('automation service — running-only signal validation', () => {
+  it('rejects a "turn on" rule that hinges on board temperature (unreadable while off)', async () => {
+    await expect(
+      automation.createRule({
+        name: 'Resume when cool',
+        conditions: [{ signal: 'miner.temperature', op: '<', value: 60 }],
+        action: { type: 'mode', mode: 'turbo' },
+      })
+    ).rejects.toThrow(/could never turn it back on/);
+  });
+
+  it('still allows board temperature to stop the miner (over-temperature)', async () => {
+    const rule = await automation.createRule({
+      name: 'Over-temp',
+      is_safety: true,
+      conditions: [{ signal: 'miner.temperature', op: '>', value: 80 }],
+      action: { type: 'off' },
+    });
+    expect(rule.id).toBeDefined();
+  });
+
+  it('rejects match=all "turn on" mixing board temp with an off-readable signal', async () => {
+    await expect(
+      automation.createRule({
+        name: 'Bad mix',
+        match: 'all',
+        conditions: [
+          { signal: 'clock.time', op: '>', value: '08:00' },
+          { signal: 'miner.temperature', op: '<', value: 70 },
+        ],
+        action: { type: 'mode', mode: 'eco' },
+      })
+    ).rejects.toThrow(/could never turn it back on/);
+  });
+
+  it('allows match=any "turn on" when an off-readable condition can fire it', async () => {
+    const rule = await automation.createRule({
+      name: 'Any ok',
+      match: 'any',
+      conditions: [
+        { signal: 'clock.time', op: '>', value: '08:00' },
+        { signal: 'miner.temperature', op: '<', value: 70 },
+      ],
+      action: { type: 'mode', mode: 'eco' },
+    });
+    expect(rule.id).toBeDefined();
+  });
+});
+
 describe('automation service — evaluate (dry run)', () => {
   it('does not decide or log while disabled, but still reads the signals', async () => {
     await automation.createRule(thermalProtection);

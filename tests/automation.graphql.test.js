@@ -66,12 +66,13 @@ describe('automation schema', () => {
 describe('automation resolvers', () => {
   it('round-trips a rule: GraphQL input → DB → GraphQL output', async () => {
     const input = {
-      name: 'Thermal protection',
+      name: 'Warm-weather eco',
       isSafety: true,
       priority: 0,
       match: 'all',
-      // Condition values travel as strings; the engine casts them by signal type.
-      conditions: [{ signal: 'miner.temperature', op: '>', value: '80', hysteresis: 5 }],
+      // Off-readable signal (weather), so a "turn on" rule is allowed; board
+      // temperature would be rejected here. Condition values travel as strings.
+      conditions: [{ signal: 'weather.temperature', op: '>', value: '25', hysteresis: 5 }],
       action: { type: 'mode', mode: 'eco' },
     };
 
@@ -79,15 +80,15 @@ describe('automation resolvers', () => {
 
     expect(created.error).toBeNull();
     expect(created.result).toMatchObject({
-      name: 'Thermal protection',
+      name: 'Warm-weather eco',
       isSafety: true, // camelCase out, is_safety in the DB
       match: 'all',
       action: { type: 'mode', mode: 'eco' },
     });
     expect(created.result.conditions[0]).toMatchObject({
-      signal: 'miner.temperature',
+      signal: 'weather.temperature',
       op: '>',
-      value: '80',
+      value: '25',
       hysteresis: 5,
     });
 

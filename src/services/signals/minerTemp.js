@@ -24,6 +24,9 @@ module.exports = {
       unit: '°C',
       ops: ['<', '<=', '>', '>='],
       supportsHysteresis: true,
+      // The sensor lives on the miner: readable only while it runs. So it can stop
+      // a running miner (over-temp) but can never decide to turn one back on.
+      availableWhileOff: false,
     },
     {
       id: 'miner.temperatureAvg',
@@ -32,6 +35,7 @@ module.exports = {
       unit: '°C',
       ops: ['<', '<=', '>', '>='],
       supportsHysteresis: true,
+      availableWhileOff: false,
     },
   ],
 
