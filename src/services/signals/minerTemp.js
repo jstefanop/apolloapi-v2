@@ -1,14 +1,18 @@
 /**
- * Board temperature signals — the hottest and the mean board, read from the
- * miner stat files (same shape the scheduler already consumes).
+ * Board temperature signal — the hottest board, read from the miner stat files
+ * (same shape the scheduler already consumes).
  *
- * This is the temperature of the *miner*, not of the room: it is good for
- * thermal protection ("stop above X°C, resume below Y°C"), not for a room
- * thermostat. See docs-ai/MINER_SCHEDULING.md §4b.
+ * One signal on purpose: the Apollo II reports a single board temperature, so a
+ * separate "average" would just duplicate it. When multi-board hardware makes an
+ * average meaningful, add it back as its own descriptor.
+ *
+ * This is the temperature of the *miner*, not of the room: it is good for thermal
+ * protection ("stop above X°C"), not for a room thermostat. See
+ * docs-ai/MINER_SCHEDULING.md §4b.
  *
  * A miner that is off or unreadable reports as stale, never as 0 — a rule that
- * reads a stale signal does not match, so we never stop a miner because we
- * failed to read its temperature.
+ * reads a stale signal does not match, so we never stop a miner because we failed
+ * to read its temperature.
  */
 
 const STALE = { value: null, stale: true };
@@ -26,15 +30,6 @@ module.exports = {
       supportsHysteresis: true,
       // The sensor lives on the miner: readable only while it runs. So it can stop
       // a running miner (over-temp) but can never decide to turn one back on.
-      availableWhileOff: false,
-    },
-    {
-      id: 'miner.temperatureAvg',
-      type: 'number',
-      widget: 'number',
-      unit: '°C',
-      ops: ['<', '<=', '>', '>='],
-      supportsHysteresis: true,
       availableWhileOff: false,
     },
   ],
@@ -56,7 +51,7 @@ module.exports = {
     try {
       ({ stats } = await deps.miner.getStats());
     } catch (e) {
-      return { 'miner.temperature': stale, 'miner.temperatureAvg': stale };
+      return { 'miner.temperature': stale };
     }
 
     // The stat file reports temperature as a string ("62.43"), so coerce before
@@ -66,13 +61,8 @@ module.exports = {
       .map((board) => Number(board?.slots?.int_0?.temperature))
       .filter((t) => Number.isFinite(t) && t > 0);
 
-    if (!temps.length) return { 'miner.temperature': stale, 'miner.temperatureAvg': stale };
+    if (!temps.length) return { 'miner.temperature': stale };
 
-    const mean = temps.reduce((a, b) => a + b, 0) / temps.length;
-
-    return {
-      'miner.temperature': { value: Math.max(...temps) },
-      'miner.temperatureAvg': { value: Math.round(mean * 10) / 10 },
-    };
+    return { 'miner.temperature': { value: Math.max(...temps) } };
   },
 };

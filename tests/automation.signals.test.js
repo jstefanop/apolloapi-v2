@@ -127,7 +127,6 @@ describe('signal: miner temperature', () => {
 
     const signals = await read(minerTemp, { deps });
     expect(signals['miner.temperature'].value).toBe(71);
-    expect(signals['miner.temperatureAvg'].value).toBe(66.5);
   });
 
   it('handles the string temperature the stat file actually reports', async () => {
