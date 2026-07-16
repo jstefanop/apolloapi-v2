@@ -158,6 +158,31 @@ describe('signal: miner temperature', () => {
     const signals = await read(minerTemp, { deps });
     expect(signals['miner.temperature'].stale).toBe(true);
   });
+
+  // A tiny knex stand-in: knex('service_status').select().where().first() -> row.
+  const fakeKnex = (status) => () => ({
+    select() {
+      return this;
+    },
+    where() {
+      return this;
+    },
+    first: async () => (status ? { status } : undefined),
+  });
+
+  it('is pending (spinner, not "no data") while the miner is starting', async () => {
+    const deps = { miner: { getStats: async () => ({ stats: [] }) } };
+    const signals = await read(minerTemp, { knex: fakeKnex('online'), deps });
+    expect(signals['miner.temperature'].stale).toBe(true);
+    expect(signals['miner.temperature'].pending).toBe(true);
+  });
+
+  it('is not pending when the miner is off — there is genuinely no temperature', async () => {
+    const deps = { miner: { getStats: async () => ({ stats: [] }) } };
+    const signals = await read(minerTemp, { knex: fakeKnex('offline'), deps });
+    expect(signals['miner.temperature'].stale).toBe(true);
+    expect(signals['miner.temperature'].pending).toBeFalsy();
+  });
 });
 
 describe('signal: weather (Open-Meteo)', () => {
@@ -167,6 +192,14 @@ describe('signal: weather (Open-Meteo)', () => {
     const signals = await weather.read({ config: { latitude: null, longitude: null } });
     expect(signals['weather.temperature'].stale).toBe(true);
     expect(signals['weather.cloudCover'].stale).toBe(true);
+    // Nothing to fetch without coordinates, so not pending (no spinner).
+    expect(signals['weather.temperature'].pending).toBeFalsy();
+  });
+
+  it('is pending (spinner) while the first value is being fetched', async () => {
+    const signals = await weather.read({ config: { latitude: 41.9, longitude: 12.5 } });
+    expect(signals['weather.temperature'].stale).toBe(true);
+    expect(signals['weather.temperature'].pending).toBe(true);
   });
 
   it('exposes outdoor temperature, cloud cover and solar radiation once fetched', async () => {

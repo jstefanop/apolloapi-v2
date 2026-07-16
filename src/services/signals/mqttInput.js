@@ -36,8 +36,10 @@ module.exports = {
     const out = {};
     for (const input of inputsOf(config)) {
       const entry = client.getValue(input.name);
+      // Connected but nothing received yet → pending (a value may still arrive, and
+      // non-retained topics only publish on an interval); disconnected → plain stale.
       out[`input.${input.name}`] =
-        entry && connected ? { value: entry.value } : { value: null, stale: true };
+        entry && connected ? { value: entry.value } : { value: null, stale: true, pending: connected };
     }
     return out;
   },

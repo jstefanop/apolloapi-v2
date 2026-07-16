@@ -22,6 +22,7 @@ function serializeSignals(signals) {
     id,
     value: signal.stale ? null : asString(signal.value),
     stale: !!signal.stale,
+    pending: !!signal.pending,
     error: signal.error || null,
   }));
 }

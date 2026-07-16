@@ -35,12 +35,24 @@ module.exports = {
     },
   ],
 
-  async read({ deps }) {
+  async read({ knex, deps }) {
+    // A reading is "pending" (show a spinner, not "no data") when the miner is
+    // running or starting but its stats have not arrived yet; when it is off there
+    // is genuinely no board temperature, so leave it a plain stale.
+    let pending = false;
+    try {
+      const row = await knex('service_status').select('status').where({ service_name: 'miner' }).first();
+      pending = row?.status === 'online' || row?.status === 'pending';
+    } catch (e) {
+      /* leave pending false */
+    }
+    const stale = pending ? { value: null, stale: true, pending: true } : STALE;
+
     let stats;
     try {
       ({ stats } = await deps.miner.getStats());
     } catch (e) {
-      return { 'miner.temperature': STALE, 'miner.temperatureAvg': STALE };
+      return { 'miner.temperature': stale, 'miner.temperatureAvg': stale };
     }
 
     // The stat file reports temperature as a string ("62.43"), so coerce before
@@ -50,7 +62,7 @@ module.exports = {
       .map((board) => Number(board?.slots?.int_0?.temperature))
       .filter((t) => Number.isFinite(t) && t > 0);
 
-    if (!temps.length) return { 'miner.temperature': STALE, 'miner.temperatureAvg': STALE };
+    if (!temps.length) return { 'miner.temperature': stale, 'miner.temperatureAvg': stale };
 
     const mean = temps.reduce((a, b) => a + b, 0) / temps.length;
 

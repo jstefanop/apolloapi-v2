@@ -47,11 +47,15 @@ async function refresh(latitude, longitude) {
   }
 }
 
-function staleAll() {
+// `pending` = a value is on its way (coordinates are set, a fetch is running),
+// so the UI can show a spinner instead of "no data". Without coordinates there is
+// nothing to fetch, so it stays a plain stale.
+function staleAll(pending) {
+  const s = pending ? { value: null, stale: true, pending: true } : STALE;
   return {
-    'weather.temperature': STALE,
-    'weather.cloudCover': STALE,
-    'weather.solarRadiation': STALE,
+    'weather.temperature': s,
+    'weather.cloudCover': s,
+    'weather.solarRadiation': s,
   };
 }
 
@@ -68,7 +72,7 @@ module.exports = {
 
   async read({ config }) {
     const { latitude, longitude } = config;
-    if (latitude == null || longitude == null) return staleAll();
+    if (latitude == null || longitude == null) return staleAll(false);
 
     const key = `${latitude},${longitude}`;
     // Refresh in the background when the cache is old or the location changed.
@@ -76,7 +80,8 @@ module.exports = {
       refresh(latitude, longitude);
     }
 
-    if (!cache.data || cache.key !== key) return staleAll();
+    // No value yet (cold start or a new location): it is being fetched → pending.
+    if (!cache.data || cache.key !== key) return staleAll(true);
 
     return {
       'weather.temperature': { value: cache.data.temperature },

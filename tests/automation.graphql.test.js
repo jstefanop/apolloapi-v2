@@ -232,6 +232,7 @@ describe('automation subscription', () => {
       id: 'miner.temperature',
       value: '88',
       stale: false,
+      pending: false,
       error: null,
     });
   });

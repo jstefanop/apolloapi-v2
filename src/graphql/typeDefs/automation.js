@@ -295,6 +295,8 @@ module.exports = gql`
     value: String
     "The signal could not be read. A rule that uses it does not match."
     stale: Boolean!
+    "Stale because a value is still being fetched (vs. genuinely unavailable) — the UI shows a spinner."
+    pending: Boolean
     error: String
   }
 

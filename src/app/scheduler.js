@@ -560,7 +560,10 @@ async function startAllSchedulers() {
     pushMcuStats().catch(() => {});
     pushNodeStats().catch(() => {});
     pushSoloStats().catch(() => {});
-    pushServicesStatus().catch(() => {});;
+    pushServicesStatus().catch(() => {});
+    // Warm the signal caches (weather fetch, etc.) at boot so the conditions are
+    // ready by the time a client lands, instead of cold on the first page load.
+    evaluateAutomation().catch(() => {});
   } catch (error) {
     console.error('Failed to initialize schedulers:', error);
   }
@@ -585,5 +588,8 @@ module.exports = {
     pushNodeStats(),
     pushSoloStats(),
     pushServicesStatus(),
+    // Include the automation conditions so a client that just landed gets them
+    // ~1s after connecting instead of waiting up to the next 60s tick.
+    evaluateAutomation(),
   ]),
 };
