@@ -111,6 +111,20 @@ class AutomationService {
     }
 
     if (Object.keys(update).length) {
+      // Audit the master switch and dry-run flips. These are rare, deliberate acts
+      // (there is no code path that toggles them on its own), so if the automation
+      // ever seems to disable itself, this line in the journal pins down exactly
+      // when it happened, to correlate with what was going on.
+      if (input.enabled !== undefined || input.dryRun !== undefined) {
+        const before = await this.getConfig();
+        if (input.enabled !== undefined && !!before.enabled !== !!input.enabled) {
+          log(`config: enabled ${before.enabled} -> ${input.enabled}`);
+        }
+        if (input.dryRun !== undefined && !!before.dryRun !== !!input.dryRun) {
+          log(`config: dryRun ${before.dryRun} -> ${input.dryRun}`);
+        }
+      }
+
       update.updated_at = this.knex.fn.now();
       await this.knex('automation_config').where({ id: 1 }).update(update);
     }

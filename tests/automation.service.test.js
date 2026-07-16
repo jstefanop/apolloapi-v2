@@ -287,7 +287,8 @@ describe('automation service — evaluate (dry run)', () => {
     await overheating({ dryRun: true });
     await automation.evaluate();
 
-    const line = spy.mock.calls.map(([m]) => m).find((m) => String(m).startsWith('[automation]'));
+    // The decision line, not the config-audit lines that share the [automation] tag.
+    const line = spy.mock.calls.map(([m]) => m).find((m) => String(m).includes('→'));
 
     expect(line).toContain('dry-run');
     expect(line).toContain('Thermal protection');
