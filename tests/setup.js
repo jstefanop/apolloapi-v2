@@ -292,6 +292,24 @@ beforeAll(async () => {
     }
   });
 
+  // System-level MQTT config — mirrors migrations/20260716120000_create_mqtt_config.js
+  await knex.schema.hasTable('mqtt_config').then(exists => {
+    if (!exists) {
+      return knex.schema.createTable('mqtt_config', table => {
+        table.integer('id').primary();
+        table.boolean('enabled').defaultTo(false);
+        table.string('host').nullable();
+        table.integer('port').defaultTo(1883);
+        table.string('username').nullable();
+        table.string('password').nullable();
+        table.boolean('tls').defaultTo(false);
+        table.text('output').nullable();
+        table.text('inputs').nullable();
+        table.timestamps(true, true);
+      }).then(() => knex('mqtt_config').insert({ id: 1 }));
+    }
+  });
+
   // Inserisci dati di default per le impostazioni
   const settingsCount = await knex('settings').count('* as count').first();
   if (!settingsCount || settingsCount.count === 0) {

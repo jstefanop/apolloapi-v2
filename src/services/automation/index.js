@@ -46,7 +46,7 @@ function describeTarget(target) {
 class AutomationService {
   constructor(knex, deps) {
     this.knex = knex;
-    this.deps = deps; // { miner, settings }
+    this.deps = deps; // { miner, settings, mqtt }
   }
 
   // ---------------------------------------------------------------- config
@@ -54,6 +54,16 @@ class AutomationService {
   async getConfig() {
     const row = await this.knex('automation_config').where({ id: 1 }).first();
     if (!row) throw new GraphQLError('Automation config row is missing');
+
+    // MQTT broker/output are system-level (Settings → MQTT); only the input
+    // mappings matter here, and they drive the input.* signals. Read them from the
+    // MQTT service so the signal layer keeps seeing config.mqtt.inputs.
+    let mqttInputs = [];
+    try {
+      mqttInputs = (await this.deps.mqtt.getConfig()).inputs || [];
+    } catch (e) {
+      /* mqtt service not wired (some tests) */
+    }
 
     return {
       id: row.id,
@@ -64,7 +74,7 @@ class AutomationService {
       timezone: row.timezone,
       fallbackAction: row.fallback_action || 'keep',
       tariff: parseJson(row.tariff, null),
-      mqtt: parseJson(row.mqtt, null),
+      mqtt: { inputs: mqttInputs },
       minOnMinutes: row.min_on_minutes,
       minOffMinutes: row.min_off_minutes,
       minChangeMinutes: row.min_change_minutes,
@@ -99,16 +109,6 @@ class AutomationService {
     if (input.tariff !== undefined) {
       update.tariff = input.tariff === null ? null : JSON.stringify(input.tariff);
     }
-    if (input.mqtt !== undefined) {
-      let mqtt = input.mqtt;
-      // The password is never sent back to the UI, so an empty one on save means
-      // "unchanged" — keep the stored one instead of wiping it.
-      if (mqtt && !mqtt.password) {
-        const existing = await this.getConfig();
-        if (existing.mqtt && existing.mqtt.password) mqtt = { ...mqtt, password: existing.mqtt.password };
-      }
-      update.mqtt = mqtt === null ? null : JSON.stringify(mqtt);
-    }
 
     if (Object.keys(update).length) {
       // Audit the master switch and dry-run flips. These are rare, deliberate acts
@@ -129,55 +129,7 @@ class AutomationService {
       await this.knex('automation_config').where({ id: 1 }).update(update);
     }
 
-    const config = await this.getConfig();
-    // Reconnect/resubscribe the MQTT client whenever the broker or mappings change,
-    // and reconcile the Home Assistant discovery for the output side (toggling
-    // output on/off does not change the connection, so onConnect won't fire).
-    if (input.mqtt !== undefined) {
-      this._configureMqtt(config);
-      try {
-        require('../index').mqttOutput.syncDiscovery().catch(() => {});
-      } catch (e) {
-        /* output not wired (tests) */
-      }
-    }
-    return config;
-  }
-
-  // Point the shared MQTT client at the current config. Lazy require avoids a
-  // hard dependency at module load (and keeps tests that never touch MQTT clean).
-  _configureMqtt(config) {
-    try {
-      require('../mqtt/client').configure((config || {}).mqtt);
-    } catch (e) {
-      console.log('[automation] MQTT configure failed:', e.message);
-    }
-  }
-
-  // Called by the scheduler on boot to open the connection from stored config.
-  async initMqtt() {
-    this._configureMqtt(await this.getConfig());
-  }
-
-  // Fill in the stored password when the form left it blank (used by both the
-  // test probe and topic discovery).
-  async _mqttWithPassword(input) {
-    let mqtt = input || {};
-    if (!mqtt.password) {
-      const existing = await this.getConfig();
-      if (existing.mqtt && existing.mqtt.password) mqtt = { ...mqtt, password: existing.mqtt.password };
-    }
-    return mqtt;
-  }
-
-  // One-off connection probe for the "Test connection" button.
-  async testMqtt(input) {
-    return require('../mqtt/client').testConnection(await this._mqttWithPassword(input));
-  }
-
-  // Browse the broker for topics (subscribe to a wildcard for a few seconds).
-  async discoverMqtt(input, { prefix, seconds } = {}) {
-    return require('../mqtt/client').discoverTopics(await this._mqttWithPassword(input), { prefix, seconds });
+    return this.getConfig();
   }
 
   /**

@@ -143,49 +143,12 @@ function serializeState(result) {
 
 function serializeConfig(config) {
   if (!config) return null;
+  // The MQTT broker/output config is served by the Mqtt namespace now; the
+  // automation config no longer carries it.
+  const { mqtt, ...rest } = config;
   return {
-    ...config,
+    ...rest,
     overrideUntil: config.overrideUntil ? config.overrideUntil.toISOString() : null,
-    mqtt: serializeMqtt(config.mqtt),
-  };
-}
-
-// The password is never returned; the live connection status is added.
-function serializeMqtt(mqtt) {
-  if (!mqtt) return null;
-  let status = { connected: false, error: null };
-  try {
-    status = require('../../services/mqtt/client').getStatus();
-  } catch (e) {
-    /* client not available */
-  }
-  let deviceId = null;
-  try {
-    deviceId = require('../../services/mqtt/output').deviceId();
-  } catch (e) {
-    /* output not available */
-  }
-
-  const output = mqtt.output || {};
-
-  return {
-    enabled: !!mqtt.enabled,
-    host: mqtt.host || null,
-    port: mqtt.port || null,
-    username: mqtt.username || null,
-    tls: !!mqtt.tls,
-    status,
-    inputs: (mqtt.inputs || []).map((i) => ({
-      name: i.name,
-      topic: i.topic,
-      jsonPath: i.jsonPath || null,
-      unit: i.unit || null,
-    })),
-    output: {
-      enabled: !!output.enabled,
-      control: output.control !== false, // default on
-      deviceId,
-    },
   };
 }
 

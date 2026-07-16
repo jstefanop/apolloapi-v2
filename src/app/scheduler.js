@@ -525,9 +525,7 @@ async function startAllSchedulers() {
     // opening the connection, so the will is set on connect. Then open the broker
     // link (if configured) so input.* signals get fed and the output can publish.
     services.mqttOutput.init();
-    services.automation.initMqtt().catch((err) =>
-      console.error('[automation] MQTT init failed:', err.message)
-    );
+    services.mqtt.init().catch((err) => console.error('[mqtt] init failed:', err.message));
 
     // Service status checks are now handled by ServiceMonitor
     // We only need to collect statistics periodically

@@ -21,11 +21,16 @@ const serviceMonitor = require('./serviceMonitor')(knex, {
   solo: soloService
 });
 
+// System-level MQTT: owns the broker connection, the input mappings and the
+// output settings, and is the single place that (re)configures the shared client.
+const mqttService = require('./mqtt/service')(knex);
+
 // Miner scheduling & automation. Takes the services it drives explicitly, like
 // serviceMonitor does, so there is no cycle through this index.
 const automationService = require('./automation')(knex, {
   miner: minerService,
-  settings: settingsService
+  settings: settingsService,
+  mqtt: mqttService
 });
 
 // MQTT output: publishes the device state to the broker and (optionally) exposes
@@ -34,7 +39,8 @@ const automationService = require('./automation')(knex, {
 const mqttOutputService = require('./mqtt/output')(knex, {
   miner: minerService,
   settings: settingsService,
-  automation: automationService
+  automation: automationService,
+  mqtt: mqttService
 });
 
 // Export all services
@@ -51,5 +57,6 @@ module.exports = {
   solo: soloService,
   serviceMonitor: serviceMonitor,
   automation: automationService,
+  mqtt: mqttService,
   mqttOutput: mqttOutputService
 };

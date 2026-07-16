@@ -3,15 +3,20 @@ const client = require('../src/services/mqtt/client');
 const mqttInput = require('../src/services/signals/mqttInput');
 const signals = require('../src/services/signals');
 
+const mqttService = require('../src/services/mqtt/service')(knex);
+
 const deps = {
   miner: { getStats: jest.fn().mockResolvedValue({ stats: [] }), start: jest.fn(), stop: jest.fn(), restart: jest.fn() },
   settings: { read: jest.fn().mockResolvedValue({ minerMode: 'balanced' }), update: jest.fn() },
+  mqtt: mqttService,
 };
 const automation = require('../src/services/automation')(knex, deps);
 
 beforeEach(async () => {
   client._reset();
-  await knex('automation_config').where({ id: 1 }).update({ mqtt: null });
+  await knex('mqtt_config')
+    .where({ id: 1 })
+    .update({ enabled: false, host: null, port: 1883, username: null, password: null, tls: false, output: null, inputs: null });
 });
 
 describe('MQTT client — reading topics into a cache', () => {
@@ -73,24 +78,22 @@ describe('MQTT input signals', () => {
   });
 });
 
-describe('MQTT config round-trip', () => {
+describe('MQTT config (system service)', () => {
   it('stores and reads the broker config; a rule can use the input signal', async () => {
-    await automation.updateConfig({
-      mqtt: {
-        enabled: true,
-        host: 'broker.local',
-        port: 1883,
-        username: 'ha',
-        password: 'secret',
-        inputs: [{ name: 'surplus', topic: 'sun2000/surplus', unit: 'W' }],
-      },
+    await mqttService.updateConfig({
+      enabled: true,
+      host: 'broker.local',
+      port: 1883,
+      username: 'ha',
+      password: 'secret',
+      inputs: [{ name: 'surplus', topic: 'sun2000/surplus', unit: 'W' }],
     });
 
-    const cfg = await automation.getConfig();
-    expect(cfg.mqtt).toMatchObject({ enabled: true, host: 'broker.local', port: 1883 });
-    expect(cfg.mqtt.inputs[0]).toMatchObject({ name: 'surplus', topic: 'sun2000/surplus' });
+    const cfg = await mqttService.getConfig();
+    expect(cfg).toMatchObject({ enabled: true, host: 'broker.local', port: 1883 });
+    expect(cfg.inputs[0]).toMatchObject({ name: 'surplus', topic: 'sun2000/surplus' });
 
-    // The rule validation accepts the dynamic input signal.
+    // The automation reads the inputs from the mqtt service; validation accepts it.
     const rule = await automation.createRule({
       name: 'Solar surplus',
       conditions: [{ signal: 'input.surplus', op: '>', value: '800' }],
@@ -102,8 +105,8 @@ describe('MQTT config round-trip', () => {
   it('tests the connection, filling in the stored password when the form left it blank', async () => {
     const spy = jest.spyOn(client, 'testConnection').mockResolvedValue({ ok: true, error: null });
 
-    await automation.updateConfig({ mqtt: { enabled: true, host: 'h', password: 'stored', inputs: [] } });
-    const result = await automation.testMqtt({ host: 'h', password: '' });
+    await mqttService.updateConfig({ enabled: true, host: 'h', password: 'stored', inputs: [] });
+    const result = await mqttService.testConnection({ host: 'h', password: '' });
 
     expect(result).toEqual({ ok: true, error: null });
     expect(spy.mock.calls[0][0].password).toBe('stored'); // merged from the stored config
@@ -115,8 +118,8 @@ describe('MQTT config round-trip', () => {
       .spyOn(client, 'discoverTopics')
       .mockResolvedValue({ ok: true, error: null, topics: [{ topic: 'sun2000/x', sample: '5', jsonPaths: [] }] });
 
-    await automation.updateConfig({ mqtt: { enabled: true, host: 'h', password: 'stored', inputs: [] } });
-    const result = await automation.discoverMqtt({ host: 'h', password: '' }, { prefix: 'sun2000', seconds: 5 });
+    await mqttService.updateConfig({ enabled: true, host: 'h', password: 'stored', inputs: [] });
+    const result = await mqttService.discoverTopics({ host: 'h', password: '' }, { prefix: 'sun2000', seconds: 5 });
 
     expect(result.topics).toHaveLength(1);
     expect(spy.mock.calls[0][0].password).toBe('stored');
@@ -125,12 +128,10 @@ describe('MQTT config round-trip', () => {
   });
 
   it('never returns the broker password through GraphQL serialization', () => {
-    const { serializeConfig } = require('../src/graphql/serialize/automation');
-    const out = serializeConfig({
-      mqtt: { enabled: true, host: 'h', username: 'u', password: 'secret', inputs: [] },
-    });
-    expect(out.mqtt).toMatchObject({ host: 'h', username: 'u' });
-    expect(out.mqtt.password).toBeUndefined();
-    expect(out.mqtt.status).toBeDefined();
+    const { serializeMqttConfig } = require('../src/graphql/serialize/mqtt');
+    const out = serializeMqttConfig({ enabled: true, host: 'h', username: 'u', password: 'secret', output: {}, inputs: [] });
+    expect(out).toMatchObject({ host: 'h', username: 'u' });
+    expect(out.password).toBeUndefined();
+    expect(out.status).toBeDefined();
   });
 });

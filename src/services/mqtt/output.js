@@ -56,7 +56,7 @@ function deviceId() {
 class MqttOutput {
   constructor(knex, deps) {
     this.knex = knex;
-    this.deps = deps; // { miner, settings, automation }
+    this.deps = deps; // { miner, settings, automation, mqtt }
     this.id = deviceId();
     this.base = `apollo/${this.id}`;
     this.stateTopic = `${this.base}/state`;
@@ -77,11 +77,9 @@ class MqttOutput {
   }
 
   async _outputConfig() {
-    const config = await this.deps.automation.getConfig();
-    const mqtt = config.mqtt || {};
+    const mqtt = await this.deps.mqtt.getConfig();
     const out = mqtt.output || {};
     return {
-      config,
       // Output rides on the broker link: it needs the connection enabled too.
       enabled: !!(mqtt.enabled && out.enabled),
       control: out.control !== false, // default on

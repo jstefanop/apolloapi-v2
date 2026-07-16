@@ -1,7 +1,8 @@
 const { knex } = require('../src/db');
 
-// Fake the services the output reads/drives. getConfig stands in for the stored
-// automation config (master switch + mqtt.output flags).
+// Fake the services the output reads/drives. mqtt.getConfig stands in for the
+// system MQTT config (broker enabled + output flags); automation.getConfig only
+// feeds the "automation" telemetry field.
 const deps = {
   miner: {
     getStats: jest.fn(),
@@ -14,6 +15,7 @@ const deps = {
     update: jest.fn().mockResolvedValue(undefined),
   },
   automation: { getConfig: jest.fn() },
+  mqtt: { getConfig: jest.fn() },
 };
 
 const output = require('../src/services/mqtt/output')(knex, deps);
@@ -24,18 +26,17 @@ const board = (bySol, watts, temp) => ({
   slots: { int_0: { temperature: temp } },
 });
 
-const outputOn = (extra = {}) => ({
-  enabled: true,
-  dryRun: false,
-  mqtt: { enabled: true, output: { enabled: true, control: true } },
-  ...extra,
-});
+// System MQTT config (broker + output), for deps.mqtt.getConfig.
+const mqttOn = (extra = {}) => ({ enabled: true, output: { enabled: true, control: true }, ...extra });
+// Automation config, for deps.automation.getConfig (the telemetry "automation" field).
+const autoCfg = (extra = {}) => ({ enabled: true, dryRun: false, ...extra });
 
 beforeEach(() => {
   jest.clearAllMocks();
   deps.settings.read.mockResolvedValue({ minerMode: 'turbo' });
   deps.miner.getStats.mockResolvedValue({ stats: [board(100, 50, 60), board(200, 50, 70)] });
-  deps.automation.getConfig.mockResolvedValue(outputOn());
+  deps.mqtt.getConfig.mockResolvedValue(mqttOn());
+  deps.automation.getConfig.mockResolvedValue(autoCfg());
 });
 
 describe('mqtt output — device id', () => {
@@ -63,7 +64,7 @@ describe('mqtt output — telemetry', () => {
 
   it('reports OFF and observing when the miner is stopped and automation is dry-run', async () => {
     await knex('service_status').where({ service_name: 'miner' }).update({ status: 'offline' });
-    deps.automation.getConfig.mockResolvedValue(outputOn({ dryRun: true }));
+    deps.automation.getConfig.mockResolvedValue(autoCfg({ dryRun: true }));
 
     const t = await output.buildTelemetry();
 
@@ -135,9 +136,7 @@ describe('mqtt output — commands from home assistant', () => {
   });
 
   it('ignores commands when control is disabled', async () => {
-    deps.automation.getConfig.mockResolvedValue(
-      outputOn({ mqtt: { enabled: true, output: { enabled: true, control: false } } })
-    );
+    deps.mqtt.getConfig.mockResolvedValue(mqttOn({ output: { enabled: true, control: false } }));
 
     await output.handleCommand(output.minerCmdTopic, 'ON');
 
@@ -145,9 +144,7 @@ describe('mqtt output — commands from home assistant', () => {
   });
 
   it('ignores commands when output is disabled entirely', async () => {
-    deps.automation.getConfig.mockResolvedValue(
-      outputOn({ mqtt: { enabled: false, output: { enabled: false, control: true } } })
-    );
+    deps.mqtt.getConfig.mockResolvedValue(mqttOn({ enabled: false, output: { enabled: false, control: true } }));
 
     await output.handleCommand(output.minerCmdTopic, 'ON');
 
