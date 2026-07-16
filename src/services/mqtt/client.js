@@ -231,6 +231,20 @@ function resolveHaSensorConfig(topic, sample) {
   };
 }
 
+// The current reading behind a resolved sensor: pull the field out of the state
+// topic's payload (or the raw payload when there is no jsonPath). Null when the
+// state topic has published nothing yet — which itself tells the user something.
+function currentValue(payload, jsonPath) {
+  if (payload === undefined || payload === null) return null;
+  if (!jsonPath) return String(payload).slice(0, 80);
+  try {
+    const v = getByPath(JSON.parse(payload), jsonPath);
+    return v === undefined || v === null ? null : String(v).slice(0, 80);
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * Browse the broker: subscribe to a wildcard for a few seconds and collect the
  * topics that publish (retained ones arrive immediately). One-off connection,
@@ -252,6 +266,7 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
     });
 
     const found = new Map(); // topic -> full payload (bounded; truncated only for display)
+    const stateSubs = new Set(); // state topics we subscribed to for current values
     let settled = false;
     const finish = (result) => {
       if (settled) return;
@@ -276,7 +291,19 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
       if (found.size >= 400 && !found.has(topic)) return;
       // Keep the whole payload (bounded) so HA discovery configs stay parseable;
       // they are long (the shared `device` object) and a 300-char cut broke them.
-      found.set(topic, payload.toString().slice(0, 4000));
+      const str = payload.toString().slice(0, 4000);
+      found.set(topic, str);
+      // When a sensor config arrives, also listen to the value it points at (often
+      // outside the browse prefix), so we can show the current reading.
+      const ha = resolveHaSensorConfig(topic, str);
+      if (ha && ha.topic && !stateSubs.has(ha.topic)) {
+        stateSubs.add(ha.topic);
+        try {
+          probe.subscribe(ha.topic, () => {});
+        } catch (e) {
+          /* ignore */
+        }
+      }
     });
 
     setTimeout(() => {
@@ -286,6 +313,7 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
       for (const [topic, sample] of [...found.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
         const ha = resolveHaSensorConfig(topic, sample);
         if (ha) {
+          ha.value = currentValue(found.get(ha.topic), ha.jsonPath);
           entities.push(ha);
           continue;
         }
@@ -300,7 +328,7 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
         } catch (e) {
           /* not JSON */
         }
-        plain.push({ topic, sample: sample.slice(0, 300), jsonPaths });
+        plain.push({ topic, sample: sample.slice(0, 300), jsonPaths, value: jsonPaths.length ? null : sample.slice(0, 80) });
       }
 
       entities.sort((a, b) => (a.name || a.jsonPath || '').localeCompare(b.name || b.jsonPath || ''));
@@ -359,4 +387,5 @@ module.exports = {
   },
   _jsonPathFromTemplate: jsonPathFromTemplate,
   _resolveHaSensorConfig: resolveHaSensorConfig,
+  _currentValue: currentValue,
 };

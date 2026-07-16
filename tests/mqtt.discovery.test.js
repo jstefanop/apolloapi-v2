@@ -55,4 +55,25 @@ describe('mqtt browse — Home Assistant discovery resolution', () => {
       expect(client._resolveHaSensorConfig('homeassistant/sensor/x/y/config', 'not json')).toBeNull();
     });
   });
+
+  describe('current value from the state payload', () => {
+    const state = JSON.stringify({ total_yield: 1234.5, battery: { soc: 87 } });
+
+    it('pulls the field out of a JSON state payload', () => {
+      expect(client._currentValue(state, 'total_yield')).toBe('1234.5');
+      expect(client._currentValue(state, 'battery.soc')).toBe('87');
+    });
+
+    it('returns the raw payload when there is no path', () => {
+      expect(client._currentValue('online', null)).toBe('online');
+    });
+
+    it('is null when nothing has been published yet', () => {
+      expect(client._currentValue(undefined, 'total_yield')).toBeNull();
+    });
+
+    it('is null when the field is absent', () => {
+      expect(client._currentValue(state, 'missing')).toBeNull();
+    });
+  });
 });

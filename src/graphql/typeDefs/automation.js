@@ -71,6 +71,8 @@ module.exports = gql`
     unit: String
     "Home Assistant discovery: the single value path resolved from a sensor config."
     jsonPath: String
+    "The current reading, if the topic has published one during the scan."
+    value: String
   }
 
   enum MatchMode {
