@@ -65,6 +65,12 @@ module.exports = gql`
     sample: String
     "Dot-paths to numeric fields when the payload is JSON — candidate jsonPaths."
     jsonPaths: [String!]
+    "Home Assistant discovery: friendly name of a resolved sensor value."
+    name: String
+    "Home Assistant discovery: unit of a resolved sensor value."
+    unit: String
+    "Home Assistant discovery: the single value path resolved from a sensor config."
+    jsonPath: String
   }
 
   enum MatchMode {

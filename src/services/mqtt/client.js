@@ -186,6 +186,51 @@ function numericPaths(obj, prefix = '', out = [], depth = 0) {
   return out;
 }
 
+// A Home Assistant discovery `value_template` -> the dot-path it reads, e.g.
+// "{{ value_json.total_yield }}" -> "total_yield", "{{ value_json['a']['b'] }}"
+// -> "a.b". Null when the template does not pull a field out of value_json.
+function jsonPathFromTemplate(tpl) {
+  if (!tpl || typeof tpl !== 'string') return null;
+  const i = tpl.indexOf('value_json');
+  if (i < 0) return null;
+  let rest = tpl.slice(i + 'value_json'.length);
+  const parts = [];
+  const re = /^\s*(?:\.([A-Za-z0-9_]+)|\[\s*['"]([^'"]+)['"]\s*\])/;
+  let m = rest.match(re);
+  while (m) {
+    parts.push(m[1] || m[2]);
+    rest = rest.slice(m[0].length);
+    m = rest.match(re);
+  }
+  return parts.length ? parts.join('.') : null;
+}
+
+/**
+ * Resolve a Home Assistant sensor discovery config to the value it describes.
+ * The `homeassistant/sensor/<x>/config` topics carry a definition, not a value:
+ * the real reading lives on the `state_topic` inside, pulled out by the
+ * `value_template`. Browsing showed users these config topics and they mapped the
+ * wrong one; here we turn each into a ready-to-use { topic, jsonPath, name, unit }.
+ */
+function resolveHaSensorConfig(topic, sample) {
+  if (!/^homeassistant\/sensor\/.+\/config$/.test(topic)) return null;
+  let cfg;
+  try {
+    cfg = JSON.parse(sample);
+  } catch (e) {
+    return null;
+  }
+  if (!cfg || typeof cfg !== 'object' || !cfg.state_topic) return null;
+  return {
+    topic: cfg.state_topic,
+    jsonPath: jsonPathFromTemplate(cfg.value_template),
+    name: cfg.name || null,
+    unit: cfg.unit_of_measurement || null,
+    sample: null,
+    jsonPaths: null,
+  };
+}
+
 /**
  * Browse the broker: subscribe to a wildcard for a few seconds and collect the
  * topics that publish (retained ones arrive immediately). One-off connection,
@@ -206,7 +251,7 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
       reconnectPeriod: 0,
     });
 
-    const found = new Map(); // topic -> sample payload (truncated)
+    const found = new Map(); // topic -> full payload (bounded; truncated only for display)
     let settled = false;
     const finish = (result) => {
       if (settled) return;
@@ -229,23 +274,37 @@ function discoverTopics(mqttConfig, { prefix, seconds } = {}) {
     });
     probe.on('message', (topic, payload) => {
       if (found.size >= 400 && !found.has(topic)) return;
-      found.set(topic, payload.toString().slice(0, 300));
+      // Keep the whole payload (bounded) so HA discovery configs stay parseable;
+      // they are long (the shared `device` object) and a 300-char cut broke them.
+      found.set(topic, payload.toString().slice(0, 4000));
     });
 
     setTimeout(() => {
-      const topics = [...found.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([topic, sample]) => {
-          let jsonPaths = [];
-          try {
-            const parsed = JSON.parse(sample);
-            if (parsed && typeof parsed === 'object') jsonPaths = numericPaths(parsed);
-          } catch (e) {
-            /* not JSON */
-          }
-          return { topic, sample, jsonPaths };
-        });
-      finish({ ok: true, error: null, topics });
+      const entities = []; // resolved HA sensors — the useful, named values
+      const plain = []; // everything else
+
+      for (const [topic, sample] of [...found.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const ha = resolveHaSensorConfig(topic, sample);
+        if (ha) {
+          entities.push(ha);
+          continue;
+        }
+        // Hide the rest of the Home Assistant discovery metadata (binary_sensor,
+        // switch, select, … /config): it is definitions, not states/values.
+        if (/^homeassistant\/.+\/config$/.test(topic)) continue;
+
+        let jsonPaths = [];
+        try {
+          const parsed = JSON.parse(sample);
+          if (parsed && typeof parsed === 'object') jsonPaths = numericPaths(parsed);
+        } catch (e) {
+          /* not JSON */
+        }
+        plain.push({ topic, sample: sample.slice(0, 300), jsonPaths });
+      }
+
+      entities.sort((a, b) => (a.name || a.jsonPath || '').localeCompare(b.name || b.jsonPath || ''));
+      finish({ ok: true, error: null, topics: [...entities, ...plain] });
     }, window * 1000);
   });
 }
@@ -298,4 +357,6 @@ module.exports = {
   _setStatus: (s) => {
     status = { ...status, ...s };
   },
+  _jsonPathFromTemplate: jsonPathFromTemplate,
+  _resolveHaSensorConfig: resolveHaSensorConfig,
 };
