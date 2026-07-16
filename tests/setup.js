@@ -370,6 +370,19 @@ beforeAll(async () => {
       last_checked: new Date()
     });
   }
+
+  const soloServiceCount = await knex('service_status')
+    .where({ service_name: 'solo' })
+    .count('* as count')
+    .first();
+
+  if (!soloServiceCount || soloServiceCount.count === 0) {
+    await knex('service_status').insert({
+      service_name: 'solo',
+      status: 'offline',
+      last_checked: new Date()
+    });
+  }
 });
 
 afterAll(async () => {

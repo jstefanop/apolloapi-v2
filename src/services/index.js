@@ -40,7 +40,10 @@ const mqttOutputService = require('./mqtt/output')(knex, {
   miner: minerService,
   settings: settingsService,
   automation: automationService,
-  mqtt: mqttService
+  mqtt: mqttService,
+  node: nodeService,
+  solo: soloService,
+  mcu: mcuService
 });
 
 // Export all services

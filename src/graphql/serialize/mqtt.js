@@ -32,6 +32,12 @@ function serializeMqttConfig(config) {
       enabled: !!output.enabled,
       control: output.control !== false, // default on
       deviceId,
+      exports: {
+        miner: output.exports?.miner !== false,
+        node: output.exports?.node !== false,
+        solo: output.exports?.solo !== false,
+        mcu: !!output.exports?.mcu, // default off
+      },
     },
     inputs: (config.inputs || []).map((i) => ({
       name: i.name,

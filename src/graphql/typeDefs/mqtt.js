@@ -49,6 +49,15 @@ module.exports = gql`
     control: Boolean
     "Stable id used for the HA device and topic prefix (apollo/<deviceId>/…)."
     deviceId: String
+    "Which domains to publish, one topic each."
+    exports: MqttExports
+  }
+
+  type MqttExports {
+    miner: Boolean
+    node: Boolean
+    solo: Boolean
+    mcu: Boolean
   }
 
   type MqttInput {
@@ -110,6 +119,14 @@ module.exports = gql`
   input MqttOutputInput {
     enabled: Boolean
     control: Boolean
+    exports: MqttExportsInput
+  }
+
+  input MqttExportsInput {
+    miner: Boolean
+    node: Boolean
+    solo: Boolean
+    mcu: Boolean
   }
 
   input MqttInputInput {

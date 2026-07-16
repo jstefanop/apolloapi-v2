@@ -16,6 +16,9 @@ const deps = {
   },
   automation: { getConfig: jest.fn() },
   mqtt: { getConfig: jest.fn() },
+  node: { getStats: jest.fn().mockResolvedValue({ stats: { error: null } }) },
+  solo: { getStats: jest.fn().mockResolvedValue({ pool: {} }) },
+  mcu: { getStats: jest.fn().mockResolvedValue({ stats: {} }) },
 };
 
 const output = require('../src/services/mqtt/output')(knex, deps);
@@ -46,17 +49,20 @@ describe('mqtt output — device id', () => {
   });
 });
 
-describe('mqtt output — telemetry', () => {
+describe('mqtt output — miner telemetry', () => {
   it('aggregates the boards and derives the labels', async () => {
     await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
 
-    const t = await output.buildTelemetry();
+    const t = await output.buildMinerState();
 
-    expect(t).toEqual({
+    expect(t).toMatchObject({
       mining: 'ON',
       hashrate: 0.3, // (100 + 200) GH/s -> TH/s
       power: 100, // 50 + 50
       temp: 70, // hottest board
+      efficiency: 333.3, // 100 W / 0.3 TH
+      shares_accepted: 0,
+      shares_rejected: 0,
       mode: 'turbo',
       automation: 'on',
     });
@@ -66,7 +72,7 @@ describe('mqtt output — telemetry', () => {
     await knex('service_status').where({ service_name: 'miner' }).update({ status: 'offline' });
     deps.automation.getConfig.mockResolvedValue(autoCfg({ dryRun: true }));
 
-    const t = await output.buildTelemetry();
+    const t = await output.buildMinerState();
 
     expect(t.mining).toBe('OFF');
     expect(t.automation).toBe('observing');
@@ -76,17 +82,51 @@ describe('mqtt output — telemetry', () => {
     await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
     deps.miner.getStats.mockResolvedValue({ stats: [board('120', '48', '66.5')] });
 
-    const t = await output.buildTelemetry();
+    const t = await output.buildMinerState();
 
     expect(t.temp).toBe(66.5);
     expect(t.hashrate).toBe(0.12); // 120 GH/s -> TH/s
   });
 });
 
+describe('mqtt output — node / solo / mcu telemetry', () => {
+  it('summarizes the node, or reports offline when it is down', async () => {
+    await knex('service_status').where({ service_name: 'node' }).update({ status: 'online' });
+    deps.node.getStats.mockResolvedValue({
+      stats: {
+        blockchainInfo: { blocks: 800000, headers: 800000, sizeOnDisk: '650000000000', verificationprogress: 0.99999, blockTime: Math.floor(Date.now() / 1000) - 300 },
+        connectionCount: 12,
+        miningInfo: { difficulty: 8e13, networkhashps: 6e20 },
+        networkInfo: { subversion: '/Satoshi:29.2.0/' },
+      },
+    });
+    const n = await output.buildNodeState();
+    expect(n).toMatchObject({ status: 'online', block_height: 800000, connections: 12, minutes_since_block: 5, software: '/Satoshi:29.2.0/' });
+    expect(n.sync_progress).toBeGreaterThan(99);
+
+    await knex('service_status').where({ service_name: 'node' }).update({ status: 'offline' });
+    expect(await output.buildNodeState()).toEqual({ status: 'offline' });
+  });
+
+  it('summarizes the solo pool, or offline', async () => {
+    await knex('service_status').where({ service_name: 'solo' }).update({ status: 'online' });
+    deps.solo.getStats.mockResolvedValue({ pool: { Workers: 2, hashrate15m: '3.5T', bestshare: 12345, accepted: 10, rejected: 1 } });
+    expect(await output.buildSoloState()).toEqual({ status: 'online', hashrate: '3.5T', best_share: 12345, workers: 2, shares_accepted: 10, shares_rejected: 1 });
+
+    await knex('service_status').where({ service_name: 'solo' }).update({ status: 'offline' });
+    expect(await output.buildSoloState()).toEqual({ status: 'offline' });
+  });
+
+  it('converts the SBC temperature from millidegrees and reads the 1m load', async () => {
+    deps.mcu.getStats.mockResolvedValue({ stats: { temperature: '48437', loadAverage: '1.27 1.26 1.34 2/321 3848474' } });
+    expect(await output.buildMcuState()).toEqual({ system_temp: 48.4, load: 1.27 });
+  });
+});
+
 describe('mqtt output — home assistant discovery', () => {
   it('adds a switch and a select only when control is allowed', () => {
-    const withControl = output._discoveryConfigs({ control: true }).map((c) => c.topic);
-    const readOnly = output._discoveryConfigs({ control: false }).map((c) => c.topic);
+    const withControl = output._entities('miner', { control: true }).map((c) => c.topic);
+    const readOnly = output._entities('miner', { control: false }).map((c) => c.topic);
 
     expect(withControl.some((t) => t.includes('/switch/'))).toBe(true);
     expect(withControl.some((t) => t.includes('/select/'))).toBe(true);
@@ -94,11 +134,18 @@ describe('mqtt output — home assistant discovery', () => {
     expect(readOnly.some((t) => t.includes('/select/'))).toBe(false);
   });
 
+  it('points each domain at its own topic', () => {
+    expect(output._entities('node')[0].payload.state_topic).toBe(`apollo/${deviceId()}/node`);
+    expect(output._entities('solo')[0].payload.state_topic).toBe(`apollo/${deviceId()}/solo`);
+    expect(output._entities('mcu')[0].payload.state_topic).toBe(`apollo/${deviceId()}/mcu`);
+  });
+
   it('groups every entity under one HA device with a shared availability topic', () => {
-    const configs = output._discoveryConfigs({ control: true });
-    configs.forEach((c) => {
-      expect(c.payload.device.identifiers).toContain(deviceId());
-      expect(c.payload.availability_topic).toBe(`apollo/${deviceId()}/status`);
+    ['miner', 'node', 'solo', 'mcu'].forEach((domain) => {
+      output._entities(domain, { control: true }).forEach((c) => {
+        expect(c.payload.device.identifiers).toContain(deviceId());
+        expect(c.payload.availability_topic).toBe(`apollo/${deviceId()}/status`);
+      });
     });
   });
 });

@@ -508,6 +508,18 @@ async function pushMqttState() {
 }
 
 /**
+ * Publish the node/solo/mcu topics to MQTT. Slower than the miner state: the node
+ * RPC is heavier, and these move less. Each is skipped if its service is offline.
+ */
+async function pushMqttExtras() {
+  try {
+    await withTimeout(services.mqttOutput.publishExtras(), 12000, 'mqttOutput.publishExtras');
+  } catch (e) {
+    console.error('[mqtt] publish extras error:', e.message);
+  }
+}
+
+/**
  * Main function that starts all scheduled tasks
  */
 async function startAllSchedulers() {
@@ -548,7 +560,8 @@ async function startAllSchedulers() {
     setInterval(pushMcuStats,       5000);
     setInterval(pushNodeStats,      8000);
     setInterval(pushSoloStats,      5000);
-    setInterval(pushMqttState,      15000); // keep Home Assistant fresh between automation ticks
+    setInterval(pushMqttState,      15000); // miner state — keep Home Assistant fresh between automation ticks
+    setInterval(pushMqttExtras,     30000); // node/solo/mcu — slower, heavier
     // Services status is event-driven (serviceMonitor), but also push periodically so
     // new clients never wait forever for a "change" event that might not come.
     setInterval(pushServicesStatus, 10000);
