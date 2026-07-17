@@ -61,7 +61,9 @@ module.exports = {
       // The options are the user's own tariff band names, not a fixed list, so
       // the UI sources them from the tariff rather than from a static `options`.
       widget: 'band',
-      ops: ['==', '!=', 'in', 'not_in'],
+      // Single-select only: the band widget edits condition.value, so list ops
+      // (in/not_in) would send values:[] and never match. Compare one band.
+      ops: ['==', '!='],
       supportsHysteresis: false,
     },
   ],
