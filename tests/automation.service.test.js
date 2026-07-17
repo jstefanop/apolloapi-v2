@@ -518,6 +518,22 @@ describe('automation service — evaluate (dry run)', () => {
     expect(serializeState(disabled).dryRun).toBe(true);
   });
 
+  it('serializes concurrent ticks so the hardware command fires once', async () => {
+    // Six sites fire evaluate(); without serialization two overlapping ticks read
+    // the same pre-apply snapshot and both act. The real miner flips its status as
+    // its first step, so a serialized second tick sees it already stopping — mirror
+    // that here.
+    await overheating({ dryRun: false });
+    deps.miner.stop.mockImplementation(async () => {
+      await knex('service_status').where({ service_name: 'miner' }).update({ status: 'offline' });
+    });
+
+    const [a, b] = await Promise.all([automation.evaluate(), automation.evaluate()]);
+
+    expect(deps.miner.stop).toHaveBeenCalledTimes(1);
+    expect([a.applied, b.applied].filter(Boolean)).toHaveLength(1);
+  });
+
   it('keeps the event log bounded', async () => {
     const rows = Array.from({ length: 520 }, (_, i) => ({
       decision: `mode:eco`,

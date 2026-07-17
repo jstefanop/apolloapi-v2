@@ -376,8 +376,28 @@ class AutomationService {
    * Called by the scheduler every minute, and by the UI to preview a decision
    * ("what would you do right now?") — which is what `preview: true` is for: it
    * evaluates and returns, without acting and without writing to the log.
+   *
+   * Real ticks are serialized. Six sites fire evaluate() (60s interval, the
+   * mutation-driven triggerTick, per-WS-connect push, manual miner start/stop),
+   * and the guard rails are a pure function of the snapshot each read up front —
+   * so two ticks reading concurrently both see the same pre-apply state and
+   * would fire the hardware command twice. Chaining them makes each tick run
+   * against the state the previous one left, so min_change/min_off/max_cycles
+   * can block the duplicate. Preview is read-only and never queues.
    */
   async evaluate({ preview = false } = {}) {
+    if (preview) return this._runEvaluate({ preview: true });
+
+    const next = (this._tickChain || Promise.resolve()).then(() =>
+      this._runEvaluate({ preview: false })
+    );
+    // Keep the chain alive regardless of this run's outcome (a rejection must
+    // not wedge later ticks), but hand the caller the real, awaitable result.
+    this._tickChain = next.catch(() => {});
+    return next;
+  }
+
+  async _runEvaluate({ preview = false } = {}) {
     const now = new Date();
     const config = await this.getConfig();
 
