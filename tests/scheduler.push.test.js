@@ -24,6 +24,12 @@ jest.mock('../src/services', () => ({
   services: {
     getStats: jest.fn(),
   },
+  automation: {
+    evaluate: jest.fn(),
+  },
+  mqttOutput: {
+    publishState: jest.fn().mockResolvedValue(undefined),
+  },
   serviceMonitor: null,
 }));
 
@@ -308,6 +314,45 @@ describe('scheduler push functions', () => {
       expect(publishedTopics).toContain(TOPICS.NODE);
       expect(publishedTopics).toContain(TOPICS.SOLO);
       expect(publishedTopics).toContain(TOPICS.SERVICES);
+    });
+  });
+
+  // ------------------------------------------------------------------ //
+  // evaluateAutomation (the scheduler wrapper around the tick)
+  // ------------------------------------------------------------------ //
+
+  describe('evaluateAutomation', () => {
+    it('publishes the tick result and does not push status when nothing was applied', async () => {
+      services.automation.evaluate.mockResolvedValue({ applied: false, decision: null });
+
+      await scheduler.evaluateAutomation();
+
+      const call = publishSpy.mock.calls.find(([t]) => t === TOPICS.AUTOMATION);
+      expect(call).toBeDefined();
+      expect(call[1]).toMatchObject({ automation: { error: null } });
+      expect(call[1].automation.result.applied).toBe(false);
+      expect(services.mqttOutput.publishState).not.toHaveBeenCalled();
+    });
+
+    it('pushes service status and MQTT state when the miner was actually moved', async () => {
+      services.automation.evaluate.mockResolvedValue({ applied: true });
+      services.services.getStats.mockResolvedValue({}); // read by pushServicesStatus
+      services.mqttOutput.publishState.mockResolvedValue(undefined);
+
+      await scheduler.evaluateAutomation();
+
+      expect(services.mqttOutput.publishState).toHaveBeenCalled();
+      const call = publishSpy.mock.calls.find(([t]) => t === TOPICS.AUTOMATION);
+      expect(call[1].automation.result.applied).toBe(true);
+    });
+
+    it('publishes an error payload when the tick throws, without crashing the loop', async () => {
+      services.automation.evaluate.mockRejectedValue(new Error('boom'));
+
+      await expect(scheduler.evaluateAutomation()).resolves.toBeUndefined();
+
+      const call = publishSpy.mock.calls.find(([t]) => t === TOPICS.AUTOMATION);
+      expect(call[1]).toMatchObject({ automation: { result: null, error: { message: 'boom' } } });
     });
   });
 });

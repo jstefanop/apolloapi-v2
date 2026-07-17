@@ -1,75 +1,58 @@
-// Validates that the Apollo III stat fixture covers every field the UI
-// selector (apolloui-v2/src/redux/reselect/miner.js) consumes, after the
-// same int_<key> renaming that src/services/miner.js applies to live files.
+// Exercises the REAL Apollo III stat-file parser in src/services/miner.js against
+// the fixture: the sanitizing regexes, JSON.parse, the int_<key> renaming and the
+// moment date handling all run here (previously this file re-implemented the
+// rename and asserted on its own copy, testing no production code).
 //
 // TBD: John — replace the fixture with a real Apollo III stat sample when
-// available (the schema is supposed to stay the same, this test will tell
-// us if any required field is missing).
-
-const fs = require('fs');
+// available (the schema is meant to stay the same; this test flags a missing
+// field if it does not).
 const path = require('path');
-const _ = require('lodash');
+const { knex } = require('../src/db');
 
+// tests/setup.js globally mocks `fs`, so fs.promises.readFile returns canned
+// content for any apollo-miner path — it never reads a real file. Feed the parser
+// the actual fixture bytes (read with the real fs) so it runs on the true sample.
+const fs = require('fs'); // the mocked module
+const miner = require('../src/services/miner')(knex, {});
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'apollo-miner-3.json');
 
-// Mirrors the renaming performed in src/services/miner.js _getMinerStats.
-const renameIntervals = (received) => {
-  received.master.intervals = _.mapKeys(
-    received.master.intervals,
-    (value, name) => `int_${name}`
-  );
-  received.pool.intervals = _.mapKeys(
-    received.pool.intervals,
-    (value, name) => `int_${name}`
-  );
-  received.fans = _.mapKeys(
-    received.fans,
-    (value, name) => `int_${name}`
-  );
-  received.slots = _.mapKeys(
-    received.slots,
-    (value, name) => `int_${name}`
-  );
-  return received;
-};
-
-describe('Apollo III stat fixture', () => {
+describe('Apollo III stat fixture — real parser', () => {
   let parsed;
 
-  beforeAll(() => {
-    const raw = fs.readFileSync(FIXTURE_PATH, 'utf8');
-    parsed = renameIntervals(JSON.parse(raw));
+  beforeAll(async () => {
+    const bytes = jest.requireActual('fs').readFileSync(FIXTURE_PATH);
+    fs.promises.readFile.mockResolvedValueOnce(bytes); // real fixture → real parser
+    parsed = await miner._parseStatFileEntry(FIXTURE_PATH, { version: 'v3', id: '3' });
   });
 
-  it('contains the master intervals the UI reads', () => {
+  it('parses cleanly and tags the source (uuid/version/date)', () => {
+    expect(parsed).not.toBeNull();
+    expect(parsed.uuid).toBe('3');
+    expect(parsed.version).toBe('v3');
+    expect(typeof parsed.date).toBe('string'); // moment-formatted
+  });
+
+  it('renames master/pool interval keys to int_<n> (the UI selector shape)', () => {
     expect(parsed.master.intervals.int_30.bySol).toBeDefined();
     expect(parsed.master.intervals.int_3600.bySol).toBeDefined();
     expect(parsed.master.intervals.int_3600.byPool).toBeDefined();
     expect(parsed.master.intervals.int_3600.chipSpeed).toBeDefined();
+    expect(parsed.pool.intervals.int_0.sharesSent).toBeDefined();
+    expect(parsed.pool.intervals.int_0.sharesAccepted).toBeDefined();
   });
 
-  it('contains the master scalar fields (boardsI/W, wattPerGHs, upTime)', () => {
+  it('exposes the master scalars and pool identity the UI reads', () => {
     expect(parsed.master.boardsI).toBeDefined();
     expect(parsed.master.boardsW).toBeDefined();
     expect(parsed.master.wattPerGHs).toBeDefined();
     expect(parsed.master.upTime).toBeDefined();
-  });
-
-  it('contains the pool cumulative shares at int_0', () => {
-    const cum = parsed.pool.intervals.int_0;
-    expect(cum.sharesSent).toBeDefined();
-    expect(cum.sharesAccepted).toBeDefined();
-    expect(cum.sharesRejected).toBeDefined();
-  });
-
-  it('contains pool host/port/userName/diff', () => {
     expect(parsed.pool.host).toBeDefined();
     expect(parsed.pool.port).toBeDefined();
     expect(parsed.pool.userName).toBeDefined();
     expect(parsed.pool.diff).toBeDefined();
   });
 
-  it('contains 4 internal hashboards under slots (int_0..int_3)', () => {
+  it('has 4 internal hashboards under slots (int_0..int_3) with fan RPM', () => {
     ['int_0', 'int_1', 'int_2', 'int_3'].forEach((slotKey) => {
       const slot = parsed.slots[slotKey];
       expect(slot).toBeDefined();
@@ -77,20 +60,13 @@ describe('Apollo III stat fixture', () => {
       expect(slot.errorRate).toBeDefined();
       expect(slot.chips).toBeDefined();
     });
-  });
-
-  it('contains fan RPM array at int_0', () => {
     expect(Array.isArray(parsed.fans.int_0.rpm)).toBe(true);
     expect(parsed.fans.int_0.rpm.length).toBeGreaterThan(0);
   });
 
-  it('contains top-level metadata (date, comport, statVersion)', () => {
-    expect(parsed.date).toBeDefined();
+  it('carries top-level metadata and no slaves[] (Apollo III is internal-only)', () => {
     expect(parsed.comport).toBeDefined();
     expect(parsed.statVersion).toBeDefined();
-  });
-
-  it('has no slaves[] (Apollo III is internal-only)', () => {
     expect(parsed.slaves).toBeUndefined();
   });
 });

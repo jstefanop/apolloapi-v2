@@ -29,6 +29,20 @@ jest.mock('../src/app/scheduler', () => ({
   evaluateAutomation: jest.fn().mockResolvedValue(undefined),
 }));
 
+// jest.config's resetMocks wipes the resolved values above before every test, so
+// the lazy-required pushServicesStatus()/pushAllStats() would return undefined and
+// `pushServicesStatus().catch(...)` in the service layer would throw. Re-apply the
+// implementations each test. Guarded so files that jest.unmock the real scheduler
+// (scheduler.push.test.js) are left untouched.
+beforeEach(() => {
+  const scheduler = require('../src/app/scheduler');
+  if (typeof scheduler.pushServicesStatus.mockResolvedValue === 'function') {
+    scheduler.pushServicesStatus.mockResolvedValue(undefined);
+    scheduler.pushAllStats.mockResolvedValue([]);
+    scheduler.evaluateAutomation.mockResolvedValue(undefined);
+  }
+});
+
 // Never open a real MQTT connection in tests; a fake client is enough.
 jest.mock('mqtt', () => ({
   connect: () => ({ on: jest.fn(), subscribe: jest.fn(), end: jest.fn(), publish: jest.fn() }),
