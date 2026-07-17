@@ -174,10 +174,14 @@ class SettingsService {
         convertedInput.nodeSoftware = this._enumToBackendFormat(convertedInput.nodeSoftware);
       }
 
-      // Check if Bitcoin software is being changed
-      // Convert oldSettings.nodeSoftware to backend format for comparison
+      // Check if Bitcoin software is being changed. Only when the caller actually
+      // provided nodeSoftware: a partial update (e.g. the automation setting only
+      // minerMode) leaves convertedInput.nodeSoftware undefined, and comparing the
+      // stored 'core-31.0' against undefined read as a switch — needlessly running
+      // switchBitcoinSoftware, which stops and restarts bitcoind on every mode change.
       const oldSoftwareBackend = oldSettings.nodeSoftware ? this._enumToBackendFormat(oldSettings.nodeSoftware) : null;
-      const isBitcoinSoftwareChanging = oldSoftwareBackend !== convertedInput.nodeSoftware;
+      const isBitcoinSoftwareChanging =
+        convertedInput.nodeSoftware != null && oldSoftwareBackend !== convertedInput.nodeSoftware;
 
       // Update settings in database
       await this._updateSettings(convertedInput);
