@@ -198,3 +198,73 @@ describe('mqtt output — commands from home assistant', () => {
     expect(deps.miner.start).not.toHaveBeenCalled();
   });
 });
+
+describe('mqtt output — publishing to the broker', () => {
+  const client = require('../src/services/mqtt/client');
+  let publishSpy;
+
+  beforeEach(async () => {
+    publishSpy = jest.spyOn(client, 'publish').mockReturnValue(true);
+    jest.spyOn(client, 'isConnected').mockReturnValue(true);
+    await knex('service_status').where({ service_name: 'miner' }).update({ status: 'online' });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const calls = () => publishSpy.mock.calls.map(([topic, payload, opts]) => ({ topic, payload, opts }));
+
+  it('publishes availability online and HA discovery configs for enabled domains', async () => {
+    await output.syncDiscovery();
+
+    const c = calls();
+    expect(c).toContainEqual(
+      expect.objectContaining({ topic: output.availabilityTopic, payload: 'online' })
+    );
+    // Discovery configs are published, retained, on homeassistant/.../config topics.
+    const discovery = c.filter((x) => /^homeassistant\/.+\/config$/.test(x.topic));
+    expect(discovery.length).toBeGreaterThan(0);
+    expect(discovery.every((x) => x.opts && x.opts.retain)).toBe(true);
+    // …and the miner state topic gets a first value.
+    expect(c.some((x) => x.topic === output.topics.miner)).toBe(true);
+  });
+
+  it('clears the entities and marks the device offline when output is disabled', async () => {
+    deps.mqtt.getConfig.mockResolvedValue({ enabled: true, output: { enabled: false, control: true } });
+
+    await output.syncDiscovery();
+
+    const c = calls();
+    expect(c).toContainEqual(
+      expect.objectContaining({ topic: output.availabilityTopic, payload: 'offline' })
+    );
+    // _clearDomain removes each entity with an empty retained payload.
+    expect(c.some((x) => /^homeassistant\/.+\/config$/.test(x.topic) && x.payload === '')).toBe(true);
+  });
+
+  it('skips a domain the user did not export', async () => {
+    deps.mqtt.getConfig.mockResolvedValue({
+      enabled: true,
+      output: { enabled: true, control: true, exports: { miner: true, node: false, solo: false, mcu: false } },
+    });
+
+    await output.syncDiscovery();
+
+    // The node domain's state topic must not be published when node export is off.
+    expect(calls().some((x) => x.topic === output.topics.node)).toBe(false);
+  });
+
+  it('publishState publishes the retained miner state', async () => {
+    await output.publishState();
+
+    const miner = calls().find((x) => x.topic === output.topics.miner);
+    expect(miner).toBeTruthy();
+    expect(miner.opts).toMatchObject({ retain: true });
+  });
+
+  it('drops telemetry silently when the broker is down', async () => {
+    client.isConnected.mockReturnValue(false);
+
+    await output.syncDiscovery();
+
+    expect(publishSpy).not.toHaveBeenCalled();
+  });
+});

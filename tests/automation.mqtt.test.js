@@ -64,6 +64,42 @@ describe('MQTT client — reading topics into a cache', () => {
   });
 });
 
+describe('MQTT client — reconnect signature & command routing', () => {
+  const base = { enabled: true, host: 'b', inputs: [{ name: 'a', topic: 't1' }] };
+
+  it('keeps the cache on a unit-only change (no reconnect)', () => {
+    client.configure(base);
+    client._ingest('t1', Buffer.from('5'));
+    client.configure({ ...base, inputs: [{ name: 'a', topic: 't1', unit: 'W' }] });
+    expect(client.getValue('a')).toMatchObject({ value: 5 });
+  });
+
+  it('clears the cache when the topic set changes (reconnect)', () => {
+    client.configure(base);
+    client._ingest('t1', Buffer.from('5'));
+    client.configure({ ...base, inputs: [{ name: 'a', topic: 't2' }] });
+    expect(client.getValue('a')).toBeNull();
+  });
+
+  it('clears the cache when the broker host changes (reconnect)', () => {
+    client.configure(base);
+    client._ingest('t1', Buffer.from('5'));
+    client.configure({ ...base, host: 'other' });
+    expect(client.getValue('a')).toBeNull();
+  });
+
+  it('routes a command topic to the output handler, not the input cache', () => {
+    const onCommand = jest.fn();
+    client.setOutput({ commandTopics: ['apollo/x/miner/set'], onCommand });
+    client.configure({ enabled: true, host: 'b', inputs: [{ name: 'a', topic: 'apollo/x/miner/set' }] });
+
+    client._ingest('apollo/x/miner/set', Buffer.from('OFF'));
+
+    expect(onCommand).toHaveBeenCalledWith('apollo/x/miner/set', 'OFF');
+    expect(client.getValue('a')).toBeNull(); // not cached as an input
+  });
+});
+
 describe('MQTT input signals', () => {
   const config = { mqtt: { inputs: [{ name: 'surplus', topic: 'sun2000/surplus', unit: 'W' }] } };
 
