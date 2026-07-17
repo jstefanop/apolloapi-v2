@@ -319,10 +319,15 @@ class AutomationService {
   async getState(config) {
     const cfg = config || (await this.getConfig());
 
-    const [status, settings, lastApplied, lastStart, lastStop, cycles] = await Promise.all([
+    const [status, settings, lastApplied, lastRuleEvent, lastStart, lastStop, cycles] = await Promise.all([
       this.knex('service_status').select('status', 'requested_at').where({ service_name: 'miner' }).first(),
       this.deps.settings.read(),
       this.knex('automation_events').where({ applied: true }).orderBy('id', 'desc').first(),
+      // activeRuleId (hysteresis) tracks the rule currently in charge, so it must
+      // follow the last rule-driven *decision*, not the last applied action —
+      // otherwise it stays null in dry-run (nothing is ever applied) and the
+      // sticky release threshold never engages, making the dry-run journal flap.
+      this.knex('automation_events').whereNotNull('rule_id').orderBy('id', 'desc').first(),
       this.knex('automation_events').where({ applied: true, change_type: 'start' }).orderBy('id', 'desc').first(),
       this.knex('automation_events').where({ applied: true, change_type: 'stop' }).orderBy('id', 'desc').first(),
       this.knex('automation_events')
@@ -340,7 +345,7 @@ class AutomationService {
     return {
       running: status?.status === 'online',
       mode: settings?.minerMode ?? null,
-      activeRuleId: lastApplied?.rule_id ?? null,
+      activeRuleId: lastRuleEvent?.rule_id ?? null,
       lastChangeAt: times.length ? new Date(Math.max(...times)) : null,
       lastStartAt: parseDbTime(lastStart?.created_at),
       lastStopAt: parseDbTime(lastStop?.created_at),
@@ -384,7 +389,7 @@ class AutomationService {
     ]);
 
     if (!config.enabled) {
-      return { enabled: false, skipped: 'disabled', decision: null, guard: null, state, signals: currentSignals };
+      return { enabled: false, skipped: 'disabled', decision: null, guard: null, state, signals: currentSignals, dryRun: !!config.dryRun };
     }
 
     const rules = await this.listRules();
@@ -402,7 +407,7 @@ class AutomationService {
     const dryRun = !!config.dryRun;
 
     if (preview) {
-      return { enabled: true, preview: true, decision, guard, state, signals: currentSignals };
+      return { enabled: true, preview: true, decision, guard, state, signals: currentSignals, dryRun };
     }
 
     let applied = false;
@@ -430,7 +435,7 @@ class AutomationService {
 
     let loggedEvent = null;
     try {
-      if (await this._shouldLog({ decision, guard })) {
+      if (await this._shouldLog({ decision, guard, applied })) {
         loggedEvent = await this._recordEvent({
           ruleId: decision.ruleId,
           ruleName: decision.ruleName,
@@ -498,7 +503,14 @@ class AutomationService {
    * apply" on every single tick. Keying off that logged a row a minute and
    * flushed the ring buffer overnight, burying the two events that mattered.
    */
-  async _shouldLog({ decision, guard }) {
+  async _shouldLog({ decision, guard, applied }) {
+    // A real hardware action is always recorded: getState() derives the guard
+    // rails (lastStartAt/lastStopAt/cyclesLastHour) and the active rule from
+    // applied rows, so deduping an applied event against a prior dry-run or
+    // failed row with the same (target, rule, block) would leave the action —
+    // and the state it implies — permanently invisible.
+    if (applied) return true;
+
     const last = await this.knex('automation_events').orderBy('id', 'desc').first();
     if (!last) return true;
 

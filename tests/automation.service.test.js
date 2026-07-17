@@ -447,6 +447,77 @@ describe('automation service — evaluate (dry run)', () => {
     expect(released.decision.target).toBeNull();
   });
 
+  it('records the real stop when dry-run is switched off after a standing dry-run decision', async () => {
+    // The dedupe used to key only on (target, rule, block), so the first real
+    // action after a matching dry-run row was suppressed — leaving getState()
+    // (and the guard rails) blind to the fact the miner was ever stopped.
+    await overheating({ dryRun: true });
+    await automation.evaluate(); // dry-run: {off, stop, applied:false}
+    expect(await automation.listEvents()).toHaveLength(1);
+
+    await automation.updateConfig({ dryRun: false });
+    const { applied } = await automation.evaluate(); // must record the applied stop
+
+    expect(applied).toBe(true);
+    expect(deps.miner.stop).toHaveBeenCalledTimes(1);
+
+    const events = await automation.listEvents();
+    expect(events.some((e) => e.applied === true && e.changeType === 'stop')).toBe(true);
+
+    // The guard rails and hysteresis read this from getState — it must not be blind.
+    const state = await automation.getState();
+    expect(state.lastStopAt).toBeTruthy();
+    expect(state.activeRuleId).toBeTruthy();
+  });
+
+  it('records the retry that finally succeeds after a failed command', async () => {
+    await overheating({ dryRun: false });
+    deps.miner.stop.mockRejectedValueOnce(new Error('systemd: unit not found'));
+
+    await automation.evaluate(); // fails: {off, stop, applied:false}
+    expect((await automation.listEvents())[0]).toMatchObject({ applied: false });
+
+    const { applied } = await automation.evaluate(); // retry succeeds
+    expect(applied).toBe(true);
+
+    // The success must be recorded, not deduped against the failure row.
+    const events = await automation.listEvents();
+    expect(events.some((e) => e.applied === true)).toBe(true);
+    const state = await automation.getState();
+    expect(state.lastStopAt).toBeTruthy();
+  });
+
+  it('engages hysteresis in dry-run: activeRuleId follows the deciding rule, so it holds', async () => {
+    // In dry-run nothing is ever applied, so deriving activeRuleId from applied
+    // rows left it null and the sticky release threshold never engaged — the
+    // dry-run journal flapped off/none/off where live mode would hold steady.
+    await overheating({ dryRun: true }); // 88°C → thermal safety wants off
+    await automation.evaluate();
+
+    const state = await automation.getState();
+    expect(state.activeRuleId).toBeTruthy();
+
+    // 77°C: below the 80 trip point but above the 75 release point — must hold off.
+    deps.miner.getStats.mockResolvedValue({ stats: [{ slots: { int_0: { temperature: 77 } } }] });
+    const holding = await automation.evaluate();
+    expect(holding.decision.target).toEqual({ type: 'off' });
+  });
+
+  it('reports dryRun on the preview and disabled results', async () => {
+    const { serializeState } = require('../src/graphql/serialize/automation');
+
+    await automation.updateConfig({ enabled: true, dryRun: true });
+    const preview = await automation.evaluate({ preview: true });
+    expect(preview.dryRun).toBe(true);
+    expect(serializeState(preview).dryRun).toBe(true); // non-null schema field
+
+    await automation.updateConfig({ enabled: false });
+    const disabled = await automation.evaluate();
+    expect(disabled.enabled).toBe(false);
+    expect(disabled.dryRun).toBe(true);
+    expect(serializeState(disabled).dryRun).toBe(true);
+  });
+
   it('keeps the event log bounded', async () => {
     const rows = Array.from({ length: 520 }, (_, i) => ({
       decision: `mode:eco`,
@@ -463,6 +534,7 @@ describe('automation service — evaluate (dry run)', () => {
     await automation.evaluate();
 
     const { count } = await knex('automation_events').count('* as count').first();
-    expect(count).toBeLessThanOrEqual(500);
+    // 520 seeded + 1 recorded this tick, trimmed to EVENTS_CAP — a deterministic 500.
+    expect(count).toBe(500);
   });
 });
