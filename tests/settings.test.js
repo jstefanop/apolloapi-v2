@@ -300,4 +300,36 @@ describe('Settings API', () => {
       expect(result.btcsig).toBe('mined by Solo Apollo');
     });
   });
+
+  describe('partial update must not touch the node (automation mode-change regression)', () => {
+    const buildSettings = require('../src/services/settings');
+    let utils;
+    let settings;
+
+    beforeEach(() => {
+      utils = {
+        auth: {
+          manageBitcoinConf: jest.fn().mockResolvedValue(undefined),
+          switchBitcoinSoftware: jest.fn().mockResolvedValue({ success: true }),
+        },
+      };
+      settings = buildSettings(knex, utils);
+    });
+
+    it('a minerMode-only update does not switch bitcoin software or rewrite bitcoin.conf', async () => {
+      // The automation sets only minerMode; nodeSoftware is absent. Comparing the
+      // stored software against an undefined input used to read as a switch and
+      // restarted bitcoind on every mode change.
+      await settings.update({ minerMode: 'turbo' });
+
+      expect(utils.auth.switchBitcoinSoftware).not.toHaveBeenCalled();
+      expect(utils.auth.manageBitcoinConf).not.toHaveBeenCalled();
+    });
+
+    it('still switches bitcoin software when nodeSoftware actually changes', async () => {
+      await settings.update({ nodeSoftware: 'core_29_2' }); // seed default is core-28.1
+
+      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('core-29.2');
+    });
+  });
 });
