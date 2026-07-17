@@ -43,6 +43,25 @@ describe('MQTT client — reading topics into a cache', () => {
     client._ingest('sun2000/surplus', Buffer.from('n/a'));
     expect(client.getValue('surplus')).toBeNull();
   });
+
+  it('ignores a blank payload (retained-clear) instead of caching a phantom 0', () => {
+    client.configure(cfg);
+    client._ingest('sun2000/surplus', Buffer.from('850'));
+    client._ingest('sun2000/surplus', Buffer.from('')); // clear the retained topic
+    // Number('') is 0 and finite — without the guard this would cache a phantom 0.
+    expect(client.getValue('surplus')).toMatchObject({ value: 850 });
+  });
+
+  it('drops the cached value when only the jsonPath changes (no reconnect)', () => {
+    client.configure({ enabled: true, host: 'b', inputs: [{ name: 'solar', topic: 'inv', jsonPath: 'total_yield' }] });
+    client._ingest('inv', Buffer.from(JSON.stringify({ total_yield: 15234, active_power: 3200 })));
+    expect(client.getValue('solar')).toMatchObject({ value: 15234 });
+
+    // Same topic → no reconnect, but the cached value was pulled with the old
+    // path and must not be served until the source republishes.
+    client.configure({ enabled: true, host: 'b', inputs: [{ name: 'solar', topic: 'inv', jsonPath: 'active_power' }] });
+    expect(client.getValue('solar')).toBeNull();
+  });
 });
 
 describe('MQTT input signals', () => {
@@ -110,6 +129,17 @@ describe('MQTT config (system service)', () => {
 
     expect(result).toEqual({ ok: true, error: null });
     expect(spy.mock.calls[0][0].password).toBe('stored'); // merged from the stored config
+    spy.mockRestore();
+  });
+
+  it('does not leak the stored password to a probe aimed at a different broker', async () => {
+    const spy = jest.spyOn(client, 'testConnection').mockResolvedValue({ ok: true, error: null });
+
+    await mqttService.updateConfig({ enabled: true, host: 'home.broker', port: 1883, password: 'stored', inputs: [] });
+    await mqttService.testConnection({ host: 'attacker.example.com', port: 1883, password: '' });
+
+    // Blank password + a different host must NOT merge the saved credential.
+    expect(spy.mock.calls[0][0].password).not.toBe('stored');
     spy.mockRestore();
   });
 

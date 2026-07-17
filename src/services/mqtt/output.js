@@ -334,8 +334,21 @@ class MqttOutput {
    * Reconcile Home Assistant with the current output config: publish the discovery
    * for each enabled domain (and a first value), clear the discovery for disabled
    * domains, and set availability. Called on every connect and on config change.
+   *
+   * Runs are serialized: this fires from both the client's onConnect hook (every
+   * reconnect) and reconfigure() (every save), and each run holds its config
+   * across long awaits (_build does DB + miner/node RPC). Interleaving lets a
+   * reconnect run re-publish retained discovery for domains a concurrent save
+   * just cleared. Chaining makes the newest run reconcile last — the true final
+   * state — instead of racing.
    */
   async syncDiscovery() {
+    const next = (this._syncChain || Promise.resolve()).then(() => this._runSyncDiscovery());
+    this._syncChain = next.catch(() => {});
+    return next;
+  }
+
+  async _runSyncDiscovery() {
     if (!client.isConnected()) return;
     const cfg = await this._outputConfig();
 

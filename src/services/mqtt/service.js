@@ -102,11 +102,19 @@ class MqttService {
 
   // Fill in the stored password when the form left it blank (test/discovery probes).
   async _withPassword(input) {
-    let cfg = input || {};
-    if (!cfg.password) {
-      const existing = await this.getConfig();
-      if (existing.password) cfg = { ...cfg, password: existing.password };
-    }
+    const cfg = input || {};
+    if (cfg.password) return cfg;
+
+    const existing = await this.getConfig();
+    // Only merge the saved password when the probe targets the SAME broker. The
+    // password is write-only from the UI (never serialized back), so a blank one
+    // means "unchanged" — but merging it into a request aimed at a different host
+    // would exfiltrate the owner's Home Assistant credential to that host.
+    const sameBroker =
+      (cfg.host || null) === (existing.host || null) &&
+      Number(cfg.port || 1883) === Number(existing.port || 1883) &&
+      !!cfg.tls === !!existing.tls;
+    if (existing.password && sameBroker) return { ...cfg, password: existing.password };
     return cfg;
   }
 

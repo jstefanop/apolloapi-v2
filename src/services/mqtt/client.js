@@ -31,6 +31,10 @@ const getByPath = (obj, path) =>
 
 // A message payload → a number, via an optional JSON path (else the raw payload).
 function extractValue(input, payloadStr) {
+  // A blank payload is the standard "clear a retained topic" idiom (output.js
+  // does it too). Number('') is 0, which is finite, so without this guard an
+  // empty message would be cached as a real 0 reading and could fire a rule.
+  if (payloadStr == null || String(payloadStr).trim() === '') return NaN;
   if (input.jsonPath) {
     try {
       return Number(getByPath(JSON.parse(payloadStr), input.jsonPath));
@@ -60,12 +64,31 @@ function onMessage(topic, payload) {
 
 function disconnect() {
   if (client) {
-    try {
-      client.end(true);
-    } catch (e) {
-      /* ignore */
-    }
+    const c = client;
     client = null;
+    // Graceful end sends a DISCONNECT so the broker drops the retained last-will.
+    // end(true) destroys the socket, which the broker reads as an abnormal close
+    // and answers by publishing 'offline' — greying out every Home Assistant
+    // entity on every routine reconfigure (a topic add/remove reconnects). Force
+    // the close only if the graceful end stalls.
+    const force = setTimeout(() => {
+      try {
+        c.end(true);
+      } catch (e) {
+        /* ignore */
+      }
+    }, 2000);
+    if (force.unref) force.unref();
+    try {
+      c.end(false, {}, () => clearTimeout(force));
+    } catch (e) {
+      clearTimeout(force);
+      try {
+        c.end(true);
+      } catch (e2) {
+        /* ignore */
+      }
+    }
   }
   status = { connected: false, error: null };
 }
@@ -90,8 +113,21 @@ function configure(mqttConfig) {
     topics,
   });
 
+  const prevInputs = inputs;
   inputs = nextInputs; // always refresh the mappings (jsonPath/unit)
-  if (sig === signature) return; // same connection + topics — nothing to redo
+  if (sig === signature) {
+    // Same broker + topics, so no reconnect — but if an input's extraction
+    // definition (jsonPath) changed, its cached value was pulled with the old
+    // path and is now wrong. Drop those entries so a stale/mis-extracted reading
+    // isn't served as fresh until the source republishes.
+    for (const input of nextInputs) {
+      const prev = prevInputs.find((p) => p.name === input.name);
+      if (prev && (prev.jsonPath || null) !== (input.jsonPath || null)) {
+        cache.delete(input.name);
+      }
+    }
+    return;
+  }
   signature = sig;
 
   disconnect();
