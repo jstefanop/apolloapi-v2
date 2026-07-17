@@ -221,6 +221,21 @@ describe('signal: weather (Open-Meteo)', () => {
     expect(signals['weather.temperature'].stale).toBe(true);
   });
 
+  it('goes stale when a warm cache ages out during a long outage', async () => {
+    axios.get.mockResolvedValue({
+      data: { current: { temperature_2m: 25, cloud_cover: 5, shortwave_radiation: 800 } },
+    });
+    await weather._refresh(41.9, 12.5); // sunny-morning value
+
+    const config = { latitude: 41.9, longitude: 12.5 };
+    expect((await weather.read({ config }))['weather.solarRadiation'].value).toBe(800);
+
+    // ~2h later, network down, no fresh value: the day-old reading must not pass.
+    axios.get.mockRejectedValue(new Error('network down'));
+    const aged = await weather.read({ config, now: new Date(Date.now() + 2 * 60 * 60 * 1000) });
+    expect(aged['weather.solarRadiation']).toMatchObject({ value: null, stale: true });
+  });
+
   it('reports outdoor temperature in °C so the UI can convert to the user unit', () => {
     expect(weather.descriptors.find((d) => d.id === 'weather.temperature').unit).toBe('°C');
   });

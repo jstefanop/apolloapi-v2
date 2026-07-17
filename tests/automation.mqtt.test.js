@@ -89,6 +89,19 @@ describe('MQTT input signals', () => {
     expect(s['input.surplus']).toMatchObject({ value: 900 });
   });
 
+  it('goes stale when the cached value ages out even though the broker stays up', async () => {
+    client.configure({ enabled: true, host: 'x', inputs: config.mqtt.inputs });
+    client._setStatus({ connected: true });
+    client._ingest('sun2000/surplus', Buffer.from('900'));
+
+    expect((await mqttInput.read({ config }))['input.surplus']).toMatchObject({ value: 900 });
+
+    // 20 min later with no new publish (default max-age 15m): a dead bridge must
+    // not keep serving its last reading as current.
+    const aged = await mqttInput.read({ config, now: new Date(Date.now() + 20 * 60 * 1000) });
+    expect(aged['input.surplus']).toMatchObject({ value: null, stale: true });
+  });
+
   it('appears in the registry descriptors when configured', () => {
     const ids = signals.descriptors(config).map((d) => d.id);
     expect(ids).toContain('input.surplus');

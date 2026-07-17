@@ -13,6 +13,11 @@ const axios = require('axios');
 
 const STALE = { value: null, stale: true };
 const TTL_MS = 10 * 60 * 1000; // weather moves slowly; ~144 calls/day per device
+// Past this the cached reading is served as stale, not fresh: TTL only decides
+// when to *kick off* a refresh, so if the network is down the same value would
+// otherwise be returned for days with no stale flag, and a PV rule would keep
+// the miner running on data from another day.
+const MAX_AGE_MS = 6 * TTL_MS; // ~1h of failed refreshes → stale
 const TIMEOUT_MS = 8000;
 
 let cache = { at: 0, key: null, data: null };
@@ -70,18 +75,21 @@ module.exports = {
     { id: 'weather.solarRadiation', type: 'number', widget: 'number', unit: 'W/m²', ops: ['<', '<=', '>', '>='], supportsHysteresis: true },
   ],
 
-  async read({ config }) {
+  async read({ config, now }) {
     const { latitude, longitude } = config;
     if (latitude == null || longitude == null) return staleAll(false);
 
+    const nowMs = now ? now.getTime() : Date.now();
     const key = `${latitude},${longitude}`;
     // Refresh in the background when the cache is old or the location changed.
-    if (cache.key !== key || Date.now() - cache.at > TTL_MS) {
+    if (cache.key !== key || nowMs - cache.at > TTL_MS) {
       refresh(latitude, longitude);
     }
 
-    // No value yet (cold start or a new location): it is being fetched → pending.
-    if (!cache.data || cache.key !== key) return staleAll(true);
+    // No value yet (cold start / new location), or the value has aged out because
+    // refreshes keep failing (network outage): serve stale, not day-old data. A
+    // refresh was just kicked off, so it is pending → the UI shows a spinner.
+    if (!cache.data || cache.key !== key || nowMs - cache.at > MAX_AGE_MS) return staleAll(true);
 
     return {
       'weather.temperature': { value: cache.data.temperature },

@@ -12,6 +12,13 @@
  */
 const client = require('../mqtt/client');
 
+// A cached value older than this is treated as stale: if the publishing bridge
+// dies while the broker stays up, `connected` alone would serve the last reading
+// forever and a rule could keep actuating the miner on data that stopped
+// arriving. Generous enough that interval sources (e.g. a ~40s solar bridge) stay
+// fresh; per-input `maxAgeSeconds` overrides it.
+const DEFAULT_MAX_AGE_MS = 15 * 60 * 1000;
+
 const inputsOf = (config) => ((config && config.mqtt && config.mqtt.inputs) || []).filter((i) => i && i.name);
 
 module.exports = {
@@ -31,15 +38,21 @@ module.exports = {
     }));
   },
 
-  async read({ config }) {
+  async read({ config, now }) {
     const connected = client.getStatus().connected;
+    const nowMs = now ? now.getTime() : Date.now();
     const out = {};
     for (const input of inputsOf(config)) {
       const entry = client.getValue(input.name);
-      // Connected but nothing received yet → pending (a value may still arrive, and
-      // non-retained topics only publish on an interval); disconnected → plain stale.
-      out[`input.${input.name}`] =
-        entry && connected ? { value: entry.value } : { value: null, stale: true, pending: connected };
+      const maxAgeMs = input.maxAgeSeconds > 0 ? input.maxAgeSeconds * 1000 : DEFAULT_MAX_AGE_MS;
+      // Fresh only if connected AND the value has not aged out. Otherwise take the
+      // same branch as disconnected — never a stale reading pretending to be
+      // current. `pending` (UI spinner) only when connected and nothing yet, not
+      // when a once-good value went stale.
+      const fresh = entry && connected && nowMs - entry.at <= maxAgeMs;
+      out[`input.${input.name}`] = fresh
+        ? { value: entry.value }
+        : { value: null, stale: true, pending: connected && !entry };
     }
     return out;
   },
