@@ -42,7 +42,6 @@ const generate = async function (pools = null, settings = null ) {
 
 	const orderedPools = _.sortBy(pools, 'index');
 	const mainPool = orderedPools[0];
-	const backupPool = orderedPools[1];
 
 	// If no pool configured, skip miner configuration
 	if (!mainPool || !mainPool.url) {
@@ -65,16 +64,11 @@ const generate = async function (pools = null, settings = null ) {
 	// Parse miner configuration
 	let minerConfig = `-host ${poolHost} -port ${poolPort} -user ${mainPool.username} -pswd ${mainPool.password}`;
 
-	// Backup pool — appended only if enabled and reachable.
-	// TBD: John — confirm exact CLI flag names on apollo-miner (BTC/II) and the Apollo III binary.
-	// Placeholder syntax: -host2 / -port2 / -user2 / -pswd2.
-	if (backupPool && backupPool.url) {
-		const backupUrl = backupPool.url.replace(/^.*\/\//, '');
-		const [backupHost, backupPort] = backupUrl.split(':');
-		if (backupHost && backupPort) {
-			minerConfig += ` -host2 ${backupHost} -port2 ${backupPort} -user2 ${backupPool.username} -pswd2 ${backupPool.password}`;
-		}
-	}
+	// Backup/failover pool is intentionally NOT emitted into miner_config: the legacy
+	// apollo-miner (BTC/II) binary rejects unknown flags and exits, killing hashing, and
+	// the -host2/-port2/-user2/-pswd2 CLI syntax is still unconfirmed. Extra enabled pools
+	// stay in the DB; wire them into the command line only once the real flag names are
+	// confirmed (Apollo III → miner_config3, behind a device gate).
 
 	// Add custom configuration if needed
 	if (settings.minerMode === 'custom') {

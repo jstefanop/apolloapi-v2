@@ -72,6 +72,18 @@ describe('configurator — miner CLI args', () => {
     expect(writtenFiles().config).toContain('-host main.example -port 2222 -user main');
   });
 
+  it('never emits backup-pool flags into miner_config (legacy binary rejects them)', async () => {
+    const pools = [
+      pool({ index: 0, url: 'stratum+tcp://main.example:2222', username: 'main' }),
+      pool({ index: 1, url: 'stratum+tcp://backup.example:1111', username: 'backup' }),
+    ];
+    await generate(pools, baseSettings());
+    const { config } = writtenFiles();
+    expect(config).toBe('-host main.example -port 2222 -user main -pswd x');
+    expect(config).not.toMatch(/-host2|-port2|-user2|-pswd2/);
+    expect(config).not.toContain('backup.example');
+  });
+
   it('skips configuration when no pool has a url', async () => {
     await generate([pool({ url: '' })], baseSettings());
     expect(writtenFiles().config).toBeUndefined();
