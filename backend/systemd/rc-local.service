@@ -1,15 +1,15 @@
 [Unit]
- Description=/etc/rc.local Compatibility
- ConditionPathExists=/etc/rc.local
+Description=/etc/rc.local compatibility
+ConditionPathExists=/etc/rc.local
+After=systemd-udev-settle.service
+Before=apollo-bootstrap.service node.service
 
 [Service]
- Type=forking
- ExecStartPre=/usr/bin/udevadm settle --timeout=30
- ExecStart=/etc/rc.local start
- TimeoutSec=0
- StandardOutput=tty
- RemainAfterExit=yes
- SysVStartPriority=99
+Type=oneshot
+ExecStartPre=/usr/bin/udevadm settle --timeout=30
+ExecStart=/etc/rc.local
+TimeoutStartSec=15min
+RemainAfterExit=yes
 
 [Install]
- WantedBy=multi-user.target
+WantedBy=multi-user.target

@@ -40,6 +40,15 @@ module.exports = {
       }
     },
 
+    connectionInfo: async (_, __, { services }) => {
+      try {
+        const result = await services.node.getConnectionInfo();
+        return { result, error: null };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
     formatProgress: async (_, __, { services }) => {
       try {
         const result = await services.node.getFormatProgress();

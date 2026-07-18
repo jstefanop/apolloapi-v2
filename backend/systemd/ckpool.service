@@ -1,21 +1,24 @@
 [Unit]
-Description=ckpool
-After=multi-user.target
-After=node.service
+Description=Apollo solo mining pool
+Requires=apollo-bootstrap.service node.service
+After=apollo-bootstrap.service node.service
+PartOf=node.service
 
 [Service]
-Type=forking
+Type=simple
 User=futurebit
+Group=futurebit
 LimitNOFILE=10000
-#Start:
+WorkingDirectory=/opt/apolloapi/backend/ckpool
+EnvironmentFile=-/opt/apolloapi/.env
+ExecCondition=/opt/apolloapi/backend/node/node_storage_ready.sh
+ExecCondition=/opt/apolloapi/backend/ckpool/ckpool_enabled.sh
 ExecStart=/opt/apolloapi/backend/ckpool/ckpool_start.sh
-#Stop:
-TimeoutStopSec=300
 ExecStop=/opt/apolloapi/backend/ckpool/ckpool_stop.sh
-#Restart
+KillSignal=SIGTERM
+TimeoutStopSec=300
 Restart=always
 RestartSec=30s
-
 
 [Install]
 WantedBy=multi-user.target

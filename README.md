@@ -79,30 +79,35 @@ sudo bash backend/install-v2 dev <branch>
 
 Use the `backend/utils/` installers for current image/device setup unless you specifically need the older `install-v2` path.
 
-## Production Updates
+## Updates
 
-For image/device installs that were originally set up with `image_install`, use:
-
-```sh
-sudo bash backend/utils/image_update
-```
-
-For repo-managed updates, use:
+For a deployed device, use the live updater:
 
 ```sh
 sudo bash backend/update
 ```
 
+The scripts below are only for building production SD card images:
+
+```sh
+sudo bash backend/utils/image_update
+sudo bash backend/utils/image_update_solo-node
+```
+
 Notes:
 
-- These update scripts assume the production install lives at `/opt/apolloapi`.
-- They stop production services, refresh code, reinstall dependencies, rebuild the UI on-device, refresh bundled binaries, and reload `systemd`.
-- They are not safe for preserving local uncommitted changes inside `/opt/apolloapi`; some paths use `git reset --hard`.
+- `backend/update` preserves device settings and runtime credentials, then reboots.
+- The `image_update*` scripts are intentionally destructive factory tools. They
+  erase the database and runtime credentials, leave services stopped, and must
+  never be run on a deployed customer device.
+- All update paths assume the install lives at `/opt/apolloapi` and may use
+  `git reset --hard`.
 
 ## Production Services
 
 The production install copies the following units into `/etc/systemd/system`:
 
+- `apollo-bootstrap.service`
 - `apollo-api.service`
 - `apollo-ui-v2.service`
 - `apollo-miner.service`
@@ -145,17 +150,31 @@ Reload unit files after changing service definitions:
 sudo systemctl daemon-reload
 ```
 
+Inspect the live Bitcoin or CKPool console:
+
+```sh
+screen -r node
+screen -r ckpool
+```
+
+Detach without stopping the process with `Ctrl-A`, then `D`. These attachable
+Screen sessions are a supported operational feature; systemd tracks their
+non-forking foreground Screen processes.
+
 ### Service startup order
 
 The shipped units currently start in this order:
 
 - `rc-local.service`
-- `apollo-api.service`
-- `apollo-ui-v2.service`
-- `node.service`
+- `apollo-bootstrap.service`
+- `apollo-api.service` and `node.service`
+- `apollo-ui-v2.service` after the API
 - `ckpool.service`
 
 `apollo-miner.service` also starts after the network and `rc-local.service`.
+The root-filesystem resize is attempted only once, independently of NVMe
+availability. When no node NVMe is installed, the node, CKPool, and NVMe swap
+units are skipped without entering their restart loops.
 
 ### Logs
 
@@ -177,8 +196,8 @@ Production installs expect these paths:
 - UI repo: `/opt/apolloapi/apolloui-v2`
 - SQLite DB: `/opt/apolloapi/futurebit.sqlite`
 - API env file: `/opt/apolloapi/.env`
-- Node config: `/opt/apolloapi/backend/node/`
-- ckpool config/logs: `/opt/apolloapi/backend/ckpool/`
+- Managed node and CKPool runtime state: `/var/lib/apollo/`
+- CKPool logs: `/opt/apolloapi/backend/ckpool/logs/`
 
 ## Networking / System Utilities
 

@@ -302,7 +302,11 @@ class ServiceMonitor {
       // This ensures the UI reflects reality instead of fighting user actions
       let isWithinGracePeriod = false;
       
-      if (existing) {
+      // The updater intentionally stops services while /tmp/update_progress
+      // exists. Preserve the user's requested state instead of classifying
+      // those stops as manual actions.
+      const updateInProgress = fs.existsSync('/tmp/update_progress');
+      if (existing && !updateInProgress) {
         // Get time since last request (if any)
         const currentTime = Date.now();
         const requestedAtTime = existing.requested_at 

@@ -1,15 +1,19 @@
 [Unit]
 Description=Apollo API & UI app
-After=network.target
-After=rc-local.service
+Requires=apollo-bootstrap.service
+After=network.target apollo-bootstrap.service
 
 [Service]
 Environment=NODE_ENV=production
+Environment=APOLLO_BOOTSTRAPPED=1
+EnvironmentFile=-/opt/apolloapi/.env
 Type=simple
 User=futurebit
+Group=futurebit
 ExecStart=/usr/local/nvm/versions/node/v21.6.2/bin/node /opt/apolloapi/src/init.js
 WorkingDirectory=/opt/apolloapi
 Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target

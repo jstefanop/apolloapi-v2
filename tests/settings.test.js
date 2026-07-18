@@ -300,4 +300,105 @@ describe('Settings API', () => {
       expect(result.btcsig).toBe('mined by Solo Apollo');
     });
   });
+
+  describe('node service lifecycle', () => {
+    const settingsService = require('../src/services').settings;
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('applies Tor before restarting the node and starting ckpool', async () => {
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockImplementation(async (service) => service === 'node.service');
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
+
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: true, nodeEnableSoloMining: true },
+        true,
+        true
+      );
+
+      expect(systemctl.mock.calls).toEqual([
+        ['enable', '--now', 'tor.service'],
+        ['restart', 'node.service'],
+        ['start', 'ckpool.service'],
+      ]);
+    });
+
+    it('does not start or restart an offline node', async () => {
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockResolvedValue(false);
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
+
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        true,
+        false
+      );
+
+      expect(systemctl).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the settings row when service application fails', async () => {
+      const before = await knex('settings')
+        .select('node_max_connections')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+      const lifecycle = jest
+        .spyOn(settingsService, '_applyServiceLifecycle')
+        .mockRejectedValueOnce(new Error('systemctl failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        settingsService.update({
+          nodeMaxConnections: before.node_max_connections + 1,
+        })
+      ).rejects.toThrow('systemctl failed');
+
+      const rows = await knex('settings')
+        .select(['id', 'node_max_connections'])
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc');
+      expect(lifecycle).toHaveBeenCalledTimes(2);
+      expect(rows).toHaveLength(1);
+      const [current] = rows;
+      expect(current.node_max_connections).toBe(before.node_max_connections);
+    });
+
+    it('reapplies an explicitly submitted node setting even when unchanged', async () => {
+      const current = await knex('settings')
+        .select('node_max_connections')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+      const lifecycle = jest
+        .spyOn(settingsService, '_applyServiceLifecycle')
+        .mockResolvedValue(undefined);
+
+      await settingsService.update({
+        nodeMaxConnections: current.node_max_connections,
+      });
+      lifecycle.mockClear();
+      await settingsService.update({
+        nodeMaxConnections: current.node_max_connections,
+      });
+
+      expect(lifecycle).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        true,
+        false
+      );
+    });
+  });
 });

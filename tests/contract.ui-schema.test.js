@@ -14,7 +14,15 @@ const schema = require('../src/graphql/schema');
 //  - Apollo Client local-only fields/directives (@client) which are NOT part of
 //    the server schema by design (stripped before validation).
 
-const GQL_DIR = path.join(__dirname, '..', 'apolloui-v2', 'src', 'graphql');
+const UI_DIR_CANDIDATES = [
+  path.join(__dirname, '..', 'apolloui-v2'),
+  path.join(__dirname, '..', '..', 'apolloui-v2'),
+];
+const UI_DIR = UI_DIR_CANDIDATES.find((candidate) =>
+  fs.existsSync(path.join(candidate, 'src', 'graphql'))
+);
+if (!UI_DIR) throw new Error('Could not locate the apolloui-v2 repository');
+const GQL_DIR = path.join(UI_DIR, 'src', 'graphql');
 const FRAG_DIR = path.join(GQL_DIR, 'fragments');
 
 const extractGqlBlocks = (src) => {

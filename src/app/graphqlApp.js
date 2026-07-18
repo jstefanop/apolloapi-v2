@@ -50,11 +50,21 @@ async function setupApolloServer(app, httpServer) {
           // Trigger an immediate data push ~1s after connection so the client
           // gets data right away without waiting for the next scheduler tick.
           // The delay lets all 6 subscription async iterators register before the first publish.
-          setTimeout(() => {
-            // Import lazily to avoid circular dependency at module load time
-            const { pushAllStats } = require('./scheduler');
-            pushAllStats();
+          const initialPushTimer = setTimeout(() => {
+            try {
+              // Import lazily to avoid circular dependency at module load time
+              const { pushAllStats } = require('./scheduler');
+              if (typeof pushAllStats !== 'function') return;
+              Promise.resolve(pushAllStats()).catch((error) => {
+                console.error('[WS] Initial stats push failed:', error);
+              });
+            } catch (error) {
+              console.error('[WS] Could not start initial stats push:', error);
+            }
           }, 1000);
+          if (ctx.extra) {
+            ctx.extra.apolloInitialPushTimer = initialPushTimer;
+          }
 
           return { user };
         } catch (err) {
@@ -63,6 +73,10 @@ async function setupApolloServer(app, httpServer) {
         }
       },
       onDisconnect: (ctx) => {
+        if (ctx.extra?.apolloInitialPushTimer) {
+          clearTimeout(ctx.extra.apolloInitialPushTimer);
+          ctx.extra.apolloInitialPushTimer = null;
+        }
         console.log('[WS] Client disconnected');
       },
       // Build the GraphQL execution context for each subscription operation

@@ -33,7 +33,6 @@
     "diskusage": "^1.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "generate-password": "^1.7.1",
     "graphql": "^16.10.0",
     "graphql-subscriptions": "^2.0.0",
     "graphql-tag": "^2.12.6",

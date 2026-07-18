@@ -1,0 +1,21 @@
+[Unit]
+Description=Prepare Apollo database and runtime configuration
+Wants=network-online.target rc-local.service
+After=local-fs.target network-online.target rc-local.service
+Before=apollo-api.service node.service
+
+[Service]
+Type=oneshot
+User=futurebit
+Group=futurebit
+WorkingDirectory=/opt/apolloapi
+Environment=NODE_ENV=production
+EnvironmentFile=-/opt/apolloapi/.env
+StateDirectory=apollo
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/local/nvm/versions/node/v21.6.2/bin/node /opt/apolloapi/src/bootstrap.js
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

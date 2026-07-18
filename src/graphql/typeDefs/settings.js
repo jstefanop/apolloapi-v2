@@ -49,7 +49,6 @@ module.exports = gql`
     rightSidebarVisibility: Boolean
     temperatureUnit: TemperatureUnit
     powerLedOff: Boolean
-    nodeRpcPassword: String
     nodeEnableTor: Boolean
     nodeUserConf: String
     nodeEnableSoloMining: Boolean
@@ -79,7 +78,6 @@ module.exports = gql`
     rightSidebarVisibility: Boolean!
     temperatureUnit: TemperatureUnit!
     powerLedOff: Boolean
-    nodeRpcPassword: String
     nodeEnableTor: Boolean
     nodeUserConf: String
     nodeEnableSoloMining: Boolean

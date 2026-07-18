@@ -177,7 +177,8 @@ describe('Node API', () => {
       // Mock node service
       const mockNodeService = {
         getConf: jest.fn().mockResolvedValue({
-          bitcoinConf: 'server=1\nrpcuser=futurebit\nrpcpassword=testpassword'
+          bitcoinConf:
+            'server=1\nincludeconf=/var/lib/apollo/bitcoin-auth.conf'
         })
       };
 
@@ -189,8 +190,51 @@ describe('Node API', () => {
       );
 
       expect(result.result.bitcoinConf).toBeTruthy();
-      expect(result.result.bitcoinConf).toContain('rpcuser=futurebit');
+      expect(result.result.bitcoinConf).toContain(
+        'includeconf=/var/lib/apollo/bitcoin-auth.conf'
+      );
+      expect(result.result.bitcoinConf).not.toContain('rpcpassword');
       expect(result.error).toBeNull();
+    });
+  });
+
+  describe('Node.connectionInfo resolver', () => {
+    it('returns the dedicated LAN credential', async () => {
+      const mockNodeService = {
+        getConnectionInfo: jest.fn().mockResolvedValue({
+          username: 'futurebit',
+          password: 'stable-lan-secret'
+        })
+      };
+
+      const result = await nodeResolver.NodeActions.connectionInfo(
+        null,
+        {},
+        { services: { node: mockNodeService } }
+      );
+
+      expect(result.result).toEqual({
+        username: 'futurebit',
+        password: 'stable-lan-secret'
+      });
+      expect(result.error).toBeNull();
+    });
+
+    it('returns a structured error when LAN access is disabled', async () => {
+      const mockNodeService = {
+        getConnectionInfo: jest.fn().mockRejectedValue(
+          new Error('LAN RPC access is disabled.')
+        )
+      };
+
+      const result = await nodeResolver.NodeActions.connectionInfo(
+        null,
+        {},
+        { services: { node: mockNodeService } }
+      );
+
+      expect(result.result).toBeNull();
+      expect(result.error.message).toBe('LAN RPC access is disabled.');
     });
   });
 

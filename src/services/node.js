@@ -5,9 +5,30 @@ const axios = require('axios');
 const config = require('config');
 const { GraphQLError } = require('graphql');
 const util = require('util');
+const {
+  getStateDir,
+  loadRpcCredentials,
+} = require('../node/credentials');
 
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
+
+function parseRpcCookie(contents) {
+  const value = String(contents).trim();
+  const separator = value.indexOf(':');
+  if (separator <= 0 || separator === value.length - 1) {
+    throw new Error('Bitcoin RPC cookie is malformed');
+  }
+  return {
+    username: value.slice(0, separator),
+    password: value.slice(separator + 1),
+  };
+}
+
+function isLocalRpcHost(host) {
+  const normalizedHost = String(host || '').replace(/^\[|\]$/g, '');
+  return !normalizedHost || ['127.0.0.1', 'localhost', '::1'].includes(normalizedHost);
+}
 
 // Dev fake node RPC (mirrors devMinerService/devSoloService) — active in NODE_ENV=development
 const devNodeService =
@@ -117,11 +138,33 @@ class NodeService {
   async getConf() {
     try {
       // Read Bitcoin configuration file
-      const bitcoinConf = await fs.readFile('/opt/apolloapi/backend/node/bitcoin.conf', 'utf8');
+      const bitcoinConf = await fs.readFile(
+        path.join(getStateDir(), 'bitcoin.conf'),
+        'utf8'
+      );
       return { bitcoinConf: bitcoinConf || '' };
     } catch (error) {
       throw new GraphQLError(`Failed to read Bitcoin configuration: ${error.message}`);
     }
+  }
+
+  // Return the stable LAN credential only for the authenticated connection UI.
+  async getConnectionInfo() {
+    const settings = await this.knex('settings')
+      .select(['node_allow_lan as nodeAllowLan'])
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .first();
+
+    if (!settings?.nodeAllowLan) {
+      throw new GraphQLError('LAN RPC access is disabled.');
+    }
+
+    const credentials = await loadRpcCredentials();
+    return {
+      username: credentials.lan.username,
+      password: credentials.lan.password,
+    };
   }
 
   // Get format progress
@@ -203,20 +246,41 @@ class NodeService {
     // without a real bitcoind (mirrors devMinerService/devSoloService).
     if (devNodeService) return devNodeService.createFakeRpcClient();
 
-    // Get RPC password from settings
-    const settings = await this.knex('settings')
-      .select(['node_rpc_password as nodeRpcPassword'])
-      .orderBy('created_at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(1);
+    const host = process.env.BITCOIN_NODE_HOST || '127.0.0.1';
+    let auth;
+
+    if (isLocalRpcHost(host)) {
+      const cookiePath =
+        process.env.BITCOIN_COOKIE_PATH ||
+        path.join(
+          process.env.BITCOIN_NODE_DATADIR || '/media/nvme/Bitcoin',
+          '.cookie'
+        );
+      try {
+        auth = parseRpcCookie(await fs.readFile(cookiePath, 'utf8'));
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          throw new Error('Bitcoin RPC cookie is not available; the node may still be starting');
+        }
+        throw error;
+      }
+    } else if (process.env.BITCOIN_NODE_USER && process.env.BITCOIN_NODE_PASS) {
+      auth = {
+        username: process.env.BITCOIN_NODE_USER,
+        password: process.env.BITCOIN_NODE_PASS,
+      };
+    } else {
+      throw new Error(
+        'BITCOIN_NODE_USER and BITCOIN_NODE_PASS are required for a remote node'
+      );
+    }
 
     // Create axios client with authentication
+    const urlHost =
+      host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
     return axios.create({
-      baseURL: `http://${process.env.BITCOIN_NODE_HOST || '127.0.0.1'}:${process.env.BITCOIN_NODE_PORT || 8332}`,
-      auth: {
-        username: process.env.BITCOIN_NODE_USER || 'futurebit',
-        password: process.env.BITCOIN_NODE_PASS || settings[0]?.nodeRpcPassword,
-      },
+      baseURL: `http://${urlHost}:${process.env.BITCOIN_NODE_PORT || 8332}`,
+      auth,
       timeout: 60000,
     });
   }
@@ -768,3 +832,5 @@ class NodeService {
 }
 
 module.exports = (knex, utils) => new NodeService(knex, utils);
+module.exports.isLocalRpcHost = isLocalRpcHost;
+module.exports.parseRpcCookie = parseRpcCookie;
