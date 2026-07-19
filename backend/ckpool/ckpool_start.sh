@@ -1,7 +1,13 @@
 #!/bin/bash
+set -Eeuo pipefail
 
-#clear old log files
-rm /opt/apolloapi/backend/ckpool/logs/ckpool.log
+APOLLO_DIR="${APOLLO_DIR:-/opt/apolloapi}"
+STATE_DIR="${APOLLO_STATE_DIR:-/var/lib/apollo}"
+LOG_DIR="${APOLLO_DIR}/backend/ckpool/logs"
 
-screen -dmS ckpool /opt/apolloapi/backend/ckpool/ckpool -B -c /opt/apolloapi/backend/ckpool/ckpool.conf
+mkdir -p "$LOG_DIR"
+rm -f "${LOG_DIR}/ckpool.log"
 
+exec screen -D -m -S ckpool "${APOLLO_DIR}/backend/ckpool/ckpool" \
+    -B \
+    -c "${STATE_DIR}/ckpool.conf"

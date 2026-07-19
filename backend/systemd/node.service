@@ -1,20 +1,22 @@
 [Unit]
-Description=node
-After=multi-user.target
-After=apollo-ui-v2.service
-After=dev-nvme0n1.device
+Description=Bitcoin node
+Requires=apollo-bootstrap.service
+Wants=ckpool.service
+After=network.target rc-local.service dev-nvme0n1.device tor.service apollo-bootstrap.service
+Before=ckpool.service
 
 [Service]
-Type=forking
+Type=simple
 User=futurebit
-#Start:
+Group=futurebit
+WorkingDirectory=/opt/apolloapi
+EnvironmentFile=-/opt/apolloapi/.env
+ExecCondition=/opt/apolloapi/backend/node/node_storage_ready.sh
 ExecStart=/opt/apolloapi/backend/node/node_start.sh
-#WorkingDirectory=/opt/apolloapi/backend/node
-#Stop:
-TimeoutStartSec=300
-TimeoutStopSec=600
 ExecStop=/opt/apolloapi/backend/node/node_stop.sh
-#Restart
+KillSignal=SIGTERM
+# node_stop waits up to 600s for dbcache flushes; keep systemd outside that window.
+TimeoutStopSec=700
 Restart=always
 RestartSec=30s
 

@@ -1,8 +1,8 @@
-const { run, services, utils, knex } = require('./harness');
+const { run, services, knex } = require('./harness');
 
 // T1 integration tests for the release-critical UI↔backend flows.
 
-describe('T1 — node software switch (Settings.update nodeSoftware)', () => {
+describe('T1 — node software selection (Settings.update nodeSoftware)', () => {
   const UPDATE = `query($in: SettingsUpdateInput!) {
     Settings { update(input: $in) {
       result { settings { nodeSoftware mindiff startdiff } }
@@ -10,35 +10,27 @@ describe('T1 — node software switch (Settings.update nodeSoftware)', () => {
     } }
   }`;
 
-  it('switches to Core 31.0: enum→backend conversion, triggers switch, persists', async () => {
-    const spy = jest.spyOn(utils.auth, 'switchBitcoinSoftware').mockResolvedValue({ success: true });
+  it('selects Core 31.0 and persists the enum/backend conversion', async () => {
     const res = await run(UPDATE, { variables: { in: { nodeSoftware: 'core_31_0' } } });
 
     expect(res.errors).toBeUndefined();
     expect(res.data.Settings.update.error).toBeNull();
     // persisted + round-trips back in enum format
     expect(res.data.Settings.update.result.settings.nodeSoftware).toBe('core_31_0');
-    // switch invoked with the backend format (core_31_0 -> core-31.0)
-    expect(spy).toHaveBeenCalledWith('core-31.0');
   });
 
   it('switches to Knots 29.3', async () => {
-    const spy = jest.spyOn(utils.auth, 'switchBitcoinSoftware').mockResolvedValue({ success: true });
     const res = await run(UPDATE, { variables: { in: { nodeSoftware: 'knots_29_3' } } });
     expect(res.data.Settings.update.result.settings.nodeSoftware).toBe('knots_29_3');
-    expect(spy).toHaveBeenCalledWith('knots-29.3');
   });
 
   it('rejects an unknown node software version at the schema (enum guard)', async () => {
-    const spy = jest.spyOn(utils.auth, 'switchBitcoinSoftware').mockResolvedValue({ success: true });
     const res = await run(UPDATE, { variables: { in: { nodeSoftware: 'core_99_9' } } });
     expect(res.errors).toBeDefined();
     expect(res.errors[0].message).toMatch(/core_99_9|NodeSoftware|not.*valid/i);
-    expect(spy).not.toHaveBeenCalled();
   });
 
   it('persists mindiff via Settings.update', async () => {
-    jest.spyOn(utils.auth, 'switchBitcoinSoftware').mockResolvedValue({ success: true });
     const res = await run(UPDATE, { variables: { in: { mindiff: 42 } } });
     expect(res.data.Settings.update.error).toBeNull();
     expect(res.data.Settings.update.result.settings.mindiff).toBe(42);
@@ -65,6 +57,39 @@ describe('T1 — node start/stop (Node.start / Node.stop)', () => {
     const row = await knex('service_status').where({ service_name: 'node' }).first();
     expect(row.requested_status).toBe('offline');
     expect(spy).toHaveBeenCalledWith('sudo systemctl stop node');
+  });
+});
+
+describe('T1 — node connection credentials', () => {
+  it('returns LAN credentials only through the authenticated node action', async () => {
+    await run(
+      `query($in: SettingsUpdateInput!) { Settings { update(input: $in) {
+        error { message } } } }`,
+      { variables: { in: { nodeAllowLan: true } } }
+    );
+
+    const res = await run(`query {
+      Node { connectionInfo {
+        result { username password }
+        error { message }
+      } }
+    }`);
+
+    expect(res.errors).toBeUndefined();
+    expect(res.data.Node.connectionInfo.error).toBeNull();
+    expect(res.data.Node.connectionInfo.result.username).toBe('futurebit');
+    expect(res.data.Node.connectionInfo.result.password).toEqual(
+      expect.any(String)
+    );
+  });
+
+  it('does not expose credentials on the general Settings type', async () => {
+    const res = await run(`query {
+      Settings { read { result { settings { nodeRpcPassword } } } }
+    }`);
+
+    expect(res.errors).toBeDefined();
+    expect(res.errors[0].message).toMatch(/nodeRpcPassword/);
   });
 });
 
@@ -121,9 +146,8 @@ describe('T1 — solo start/stop (Solo.*)', () => {
   });
 });
 
-describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () => {
-  it('changing nodeMaxConnections persists and triggers manageBitcoinConf', async () => {
-    const spy = jest.spyOn(utils.auth, 'manageBitcoinConf').mockResolvedValue(undefined);
+describe('T1 — node parameters (Settings.update)', () => {
+  it('persists nodeMaxConnections and LAN access together', async () => {
     const res = await run(
       `query($in: SettingsUpdateInput!) { Settings { update(input: $in) {
         result { settings { nodeMaxConnections nodeAllowLan } } error { message } } } }`,
@@ -132,11 +156,9 @@ describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () 
     expect(res.data.Settings.update.error).toBeNull();
     expect(res.data.Settings.update.result.settings.nodeMaxConnections).toBe(128);
     expect(res.data.Settings.update.result.settings.nodeAllowLan).toBe(true);
-    expect(spy).toHaveBeenCalled();
   });
 
-  it('changing nodeEnableTor and nodeUserConf persists and triggers manageBitcoinConf', async () => {
-    const spy = jest.spyOn(utils.auth, 'manageBitcoinConf').mockResolvedValue(undefined);
+  it('persists Tor and user options together', async () => {
     const res = await run(
       `query($in: SettingsUpdateInput!) { Settings { update(input: $in) {
         result { settings { nodeEnableTor nodeUserConf } } error { message } } } }`,
@@ -145,7 +167,6 @@ describe('T1 — node parameters (Settings.update) regenerate bitcoin.conf', () 
     expect(res.data.Settings.update.error).toBeNull();
     expect(res.data.Settings.update.result.settings.nodeEnableTor).toBe(true);
     expect(res.data.Settings.update.result.settings.nodeUserConf).toBe('maxmempool=300');
-    expect(spy).toHaveBeenCalled();
   });
 });
 

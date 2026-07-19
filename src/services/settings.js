@@ -1,10 +1,16 @@
 const { GraphQLError } = require('graphql');
+const { execFile } = require('child_process');
+const util = require('util');
 const generateConf = require('../configurator');
+const { applyNodeConfiguration } = require('../node/configManager');
+
+const execFilePromise = util.promisify(execFile);
 
 class SettingsService {
   constructor(knex, utils) {
     this.knex = knex;
     this.utils = utils;
+    this.updateQueue = Promise.resolve();
   }
 
   // Convert GraphQL enum format (core_25_1) to backend format (core-25.1)
@@ -139,7 +145,25 @@ class SettingsService {
   }
 
   // Update settings
-  async update(settingsInput) {
+  update(settingsInput) {
+    const operation = this.updateQueue.then(() =>
+      this._update({ ...settingsInput })
+    );
+    this.updateQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async _update(settingsInput) {
+    let insertedSettingsId = null;
+    let oldSettings = null;
+    let newSettings = null;
+    let nodeConfigChanged = false;
+    let ckpoolConfigChanged = false;
+    let nodeConfigRequested = false;
+    let ckpoolConfigRequested = false;
+    let nodeLifecycleRequired = false;
+    let ckpoolLifecycleRequired = false;
+
     try {
       // Handle btcsig: if null/empty, use default value
       // Default btcsig will become "/FutureBit-mined by Solo Apollo/" when composed
@@ -166,67 +190,76 @@ class SettingsService {
       }
 
       // Get existing settings before update
-      const oldSettings = await this._readSettings();
+      oldSettings = await this._readSettings();
 
       // Convert nodeSoftware from GraphQL enum format to backend format if present
       const convertedInput = { ...settingsInput };
       if (convertedInput.nodeSoftware) {
         convertedInput.nodeSoftware = this._enumToBackendFormat(convertedInput.nodeSoftware);
       }
-
-      // Check if Bitcoin software is being changed. Only when the caller actually
-      // provided nodeSoftware: a partial update (e.g. the automation setting only
-      // minerMode) leaves convertedInput.nodeSoftware undefined, and comparing the
-      // stored 'core-31.0' against undefined read as a switch — needlessly running
-      // switchBitcoinSoftware, which stops and restarts bitcoind on every mode change.
-      const oldSoftwareBackend = oldSettings.nodeSoftware ? this._enumToBackendFormat(oldSettings.nodeSoftware) : null;
-      const isBitcoinSoftwareChanging =
-        convertedInput.nodeSoftware != null && oldSoftwareBackend !== convertedInput.nodeSoftware;
+      nodeConfigRequested = [
+        'nodeEnableTor',
+        'nodeUserConf',
+        'nodeAllowLan',
+        'nodeMaxConnections',
+        'nodeSoftware',
+        'nodeEnableSoloMining',
+      ].some((field) => Object.hasOwn(convertedInput, field));
+      ckpoolConfigRequested = [
+        'nodeEnableSoloMining',
+        'btcsig',
+        'startdiff',
+        'mindiff',
+      ].some((field) => Object.hasOwn(convertedInput, field));
 
       // Update settings in database
-      await this._updateSettings(convertedInput);
+      insertedSettingsId = await this._updateSettings(convertedInput);
 
       // Read updated settings
-      const newSettings = await this._readSettings();
-
-      // If Bitcoin software is changing, handle it separately
-      if (isBitcoinSoftwareChanging && newSettings.nodeSoftware) {
-        try {
-          // Convert to backend format for the switch function
-          const backendFormat = this._enumToBackendFormat(newSettings.nodeSoftware);
-          console.log(`Bitcoin software changing from ${oldSettings.nodeSoftware} to ${backendFormat}`);
-          const switchResult = await this.utils.auth.switchBitcoinSoftware(backendFormat);
-          
-          if (!switchResult.success) {
-            console.log('Warning: Bitcoin software switch failed:', switchResult.message);
-            // Continue with normal configuration management
-          }
-        } catch (switchErr) {
-          console.log('Error during Bitcoin software switch:', switchErr.message);
-          // Continue with normal configuration management
-        }
-      }
-
-      // If specific settings have changed, manage Bitcoin configuration
-      // Convert settings to backend format for manageBitcoinConf
+      newSettings = await this._readSettings();
       const backendSettings = { ...newSettings };
       if (backendSettings.nodeSoftware) {
         backendSettings.nodeSoftware = this._enumToBackendFormat(backendSettings.nodeSoftware);
       }
-      
-      if (
-        oldSettings.nodeEnableTor !== newSettings.nodeEnableTor ||
-        oldSettings.nodeUserConf !== newSettings.nodeUserConf ||
-        oldSettings.nodeEnableSoloMining !== newSettings.nodeEnableSoloMining ||
-        oldSettings.nodeRpcPassword !== newSettings.nodeRpcPassword ||
-        oldSettings.nodeAllowLan !== newSettings.nodeAllowLan ||
-        oldSettings.nodeMaxConnections !== newSettings.nodeMaxConnections ||
-        oldSettings.btcsig !== newSettings.btcsig ||
-        oldSettings.startdiff !== newSettings.startdiff ||
-        oldSettings.mindiff !== newSettings.mindiff ||
-        (!isBitcoinSoftwareChanging && oldSettings.nodeSoftware !== newSettings.nodeSoftware)
-      ) {
-        await this.utils.auth.manageBitcoinConf(backendSettings);
+
+      nodeConfigChanged = [
+        'nodeEnableTor',
+        'nodeUserConf',
+        'nodeAllowLan',
+        'nodeMaxConnections',
+        'nodeSoftware',
+        'nodeEnableSoloMining',
+      ].some((field) => oldSettings[field] !== newSettings[field]);
+      ckpoolConfigChanged = [
+        'nodeEnableSoloMining',
+        'btcsig',
+        'startdiff',
+        'mindiff',
+      ].some((field) => oldSettings[field] !== newSettings[field]);
+
+      // Reconcile files on every write. This also repairs an interrupted prior
+      // application when the submitted database values are unchanged.
+      const configuration = await applyNodeConfiguration({
+        knex: this.knex,
+        settings: backendSettings,
+      });
+      const bitcoinConfigChanged = configuration.changed.some(
+        (filePath) => filePath !== configuration.paths.ckpool
+      );
+      const ckpoolFileChanged = configuration.changed.includes(
+        configuration.paths.ckpool
+      );
+      nodeLifecycleRequired =
+        nodeConfigRequested || nodeConfigChanged || bitcoinConfigChanged;
+      ckpoolLifecycleRequired =
+        ckpoolConfigRequested || ckpoolConfigChanged || ckpoolFileChanged;
+      if (nodeLifecycleRequired || ckpoolLifecycleRequired) {
+        await this._applyServiceLifecycle(
+          oldSettings,
+          newSettings,
+          nodeLifecycleRequired,
+          ckpoolLifecycleRequired
+        );
       }
 
       // Generate miner configuration
@@ -234,7 +267,134 @@ class SettingsService {
 
       return newSettings;
     } catch (error) {
+      if (insertedSettingsId && oldSettings) {
+        try {
+          await this._rollbackFailedUpdate({
+            insertedSettingsId,
+            oldSettings,
+            newSettings,
+            nodeLifecycleRequired,
+            ckpoolLifecycleRequired,
+          });
+        } catch (rollbackError) {
+          console.error(
+            `[settings] Failed to roll back settings application: ${rollbackError.message}`
+          );
+        }
+      }
       throw new GraphQLError(`Failed to update settings: ${error.message}`);
+    }
+  }
+
+  async _rollbackFailedUpdate({
+    insertedSettingsId,
+    oldSettings,
+    newSettings,
+    nodeLifecycleRequired,
+    ckpoolLifecycleRequired,
+  }) {
+    await this.knex('settings').where({ id: insertedSettingsId }).delete();
+
+    const backendSettings = { ...oldSettings };
+    if (backendSettings.nodeSoftware) {
+      backendSettings.nodeSoftware = this._enumToBackendFormat(
+        backendSettings.nodeSoftware
+      );
+    }
+    await applyNodeConfiguration({
+      knex: this.knex,
+      settings: backendSettings,
+    });
+
+    if (newSettings) {
+      await this._applyServiceLifecycle(
+        newSettings,
+        oldSettings,
+        nodeLifecycleRequired,
+        ckpoolLifecycleRequired
+      );
+    }
+    await generateConf(null, oldSettings);
+  }
+
+  async _runSystemctl(...args) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[settings] Skipping systemctl ${args.join(' ')} outside production`);
+      return;
+    }
+    await execFilePromise('sudo', ['systemctl', ...args]);
+  }
+
+  async _isServiceActive(service) {
+    if (process.env.NODE_ENV !== 'production') return false;
+    try {
+      await execFilePromise('systemctl', ['is-active', '--quiet', service]);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async _applyServiceLifecycle(
+    oldSettings,
+    newSettings,
+    nodeConfigChanged,
+    ckpoolConfigChanged
+  ) {
+    const torChanged =
+      oldSettings.nodeEnableTor !== newSettings.nodeEnableTor;
+    if (torChanged) {
+      if (newSettings.nodeEnableTor) {
+        await this._runSystemctl('enable', '--now', 'tor.service');
+      } else {
+        await this._runSystemctl('disable', '--now', 'tor.service');
+      }
+    }
+
+    let nodeIsActive = await this._isServiceActive('node.service');
+    let nodeRestarted = false;
+    if (nodeConfigChanged && nodeIsActive) {
+      await this._runSystemctl('restart', 'node.service');
+      nodeRestarted = true;
+      nodeIsActive = true;
+    }
+
+    const soloChanged =
+      oldSettings.nodeEnableSoloMining !==
+      newSettings.nodeEnableSoloMining;
+    if (soloChanged) {
+      await this._setSoloRequestedStatus(
+        newSettings.nodeEnableSoloMining ? 'online' : 'offline'
+      );
+      if (newSettings.nodeEnableSoloMining && nodeIsActive) {
+        await this._runSystemctl('start', 'ckpool.service');
+      } else if (!newSettings.nodeEnableSoloMining) {
+        await this._runSystemctl('stop', 'ckpool.service');
+      }
+    } else if (
+      ckpoolConfigChanged &&
+      newSettings.nodeEnableSoloMining &&
+      !nodeRestarted &&
+      (await this._isServiceActive('ckpool.service'))
+    ) {
+      await this._runSystemctl('restart', 'ckpool.service');
+    }
+  }
+
+  async _setSoloRequestedStatus(requestedStatus) {
+    const update = {
+      status: 'pending',
+      requested_status: requestedStatus,
+      requested_at: new Date(),
+    };
+    const updated = await this.knex('service_status')
+      .where({ service_name: 'solo' })
+      .update(update);
+    if (!updated) {
+      await this.knex('service_status').insert({
+        service_name: 'solo',
+        ...update,
+      });
     }
   }
 
@@ -258,7 +418,6 @@ class SettingsService {
         'right_sidebar_visibility as rightSidebarVisibility',
         'temperature_unit as temperatureUnit',
         'power_led_off as powerLedOff',
-        'node_rpc_password as nodeRpcPassword',
         'node_enable_tor as nodeEnableTor',
         'node_user_conf as nodeUserConf',
         'node_enable_solo_mining as nodeEnableSoloMining',
@@ -306,7 +465,6 @@ class SettingsService {
       'right_sidebar_visibility as rightSidebarVisibility',
       'temperature_unit as temperatureUnit',
       'power_led_off as powerLedOff',
-      'node_rpc_password as nodeRpcPassword',
       'node_enable_tor as nodeEnableTor',
       'node_user_conf as nodeUserConf',
       'node_enable_solo_mining as nodeEnableSoloMining',
@@ -359,7 +517,7 @@ class SettingsService {
       rightSidebarVisibility: 'right_sidebar_visibility',
       temperatureUnit: 'temperature_unit',
       powerLedOff: 'power_led_off',
-      nodeRpcPassword: 'node_rpc_password',
+      legacyNodeRpcPassword: 'node_rpc_password',
       nodeEnableTor: 'node_enable_tor',
       nodeUserConf: 'node_user_conf',
       nodeEnableSoloMining: 'node_enable_solo_mining',
@@ -422,7 +580,7 @@ class SettingsService {
       rightSidebarVisibility: currentSettings?.right_sidebar_visibility,
       temperatureUnit: currentSettings?.temperature_unit,
       powerLedOff: currentSettings?.power_led_off,
-      nodeRpcPassword: currentSettings?.node_rpc_password,
+      legacyNodeRpcPassword: currentSettings?.node_rpc_password,
       nodeEnableTor: currentSettings?.node_enable_tor,
       nodeUserConf: currentSettings?.node_user_conf,
       nodeEnableSoloMining: currentSettings?.node_enable_solo_mining,
@@ -445,19 +603,24 @@ class SettingsService {
       }
     });
 
-    // Insert as new record
-    await this.knex('settings').insert(insertData);
+    return this.knex.transaction(async (trx) => {
+      await trx('settings').insert(insertData);
+      const insertedSettings = await trx('settings')
+        .select('id')
+        .orderBy('id', 'desc')
+        .first();
+      const insertedSettingsId = insertedSettings.id;
 
-    // Delete old records keeping only last 100
-    const last100 = this.knex('settings')
-      .select('id')
-      .orderBy('created_at', 'desc')
-      .orderBy('id', 'desc')
-      .limit(100);
+      // Delete old records keeping only last 100.
+      const last100 = trx('settings')
+        .select('id')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .limit(100);
 
-    await this.knex('settings')
-      .whereNotIn('id', last100)
-      .delete();
+      await trx('settings').whereNotIn('id', last100).delete();
+      return insertedSettingsId;
+    });
   }
 }
 

@@ -1,13 +1,15 @@
 [Unit]
-Description=swap
-After=multi-user.target rc-local.service
+Description=Apollo NVMe swap
+Requires=rc-local.service
+After=rc-local.service
 
 [Service]
-Type=simple
+Type=oneshot
 User=root
-#Start:
+ExecCondition=/opt/apolloapi/backend/node/node_storage_ready.sh
 ExecStart=/opt/apolloapi/backend/start_swap.sh
-WorkingDirectory=/media/nvme
+ExecStop=/sbin/swapoff /media/nvme/swapfile
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

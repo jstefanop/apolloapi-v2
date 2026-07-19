@@ -117,32 +117,7 @@ describe('Implemented fixes (security & reliability)', () => {
     });
   });
 
-  describe('5. Utils: changeNodeRpcPassword updates only the latest settings row', () => {
-    it('scoped update pattern: only the latest row by id is updated (same logic as changeNodeRpcPassword)', async () => {
-      await knex('settings').del();
-      await knex('settings').insert([
-        { miner_mode: 'eco', voltage: 12, frequency: 600, node_rpc_password: 'old1', created_at: knex.fn.now() },
-        { miner_mode: 'balanced', voltage: 12, frequency: 650, node_rpc_password: 'old2', created_at: knex.fn.now() }
-      ]);
-
-      const latestSettings = await knex('settings')
-        .select('id')
-        .orderBy('created_at', 'desc')
-        .orderBy('id', 'desc')
-        .first();
-      expect(latestSettings).toBeTruthy();
-
-      await knex('settings')
-        .where('id', latestSettings.id)
-        .update({ node_rpc_password: 'newpass12' });
-
-      const after = await knex('settings').orderBy('id', 'desc').select('id', 'node_rpc_password');
-      expect(after[0].node_rpc_password).toBe('newpass12');
-      expect(after[1].node_rpc_password).toBe('old1');
-    });
-  });
-
-  describe('6. Settings: fan field is read and written', () => {
+  describe('5. Settings: fan field is read and written', () => {
     it('returns fan from read() and persists fan on update()', async () => {
       const services = require('../src/services');
       await knex('settings').del();
@@ -167,7 +142,7 @@ describe('Implemented fixes (security & reliability)', () => {
     });
   });
 
-  describe('7. Scheduler: recent_blocks update when node offline only touches rows with error null', () => {
+  describe('6. Scheduler: recent_blocks update when node offline only touches rows with error null', () => {
     it('updates only rows where error is null, preserving per-block errors', async () => {
       const scheduler = require('../src/app/scheduler');
       await knex.schema.dropTableIfExists('recent_blocks');

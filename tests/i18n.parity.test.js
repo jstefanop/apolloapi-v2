@@ -1,9 +1,17 @@
 const path = require('path');
-const { readFileSync } = require('fs');
+const { existsSync, readFileSync } = require('fs');
 
 // Locale files live in the UI submodule; the backend test just reads them so we
 // don't need a separate UI test runner to guard translation key parity.
-const LOCALES_DIR = path.join(__dirname, '..', 'apolloui-v2', 'src', 'locales');
+const UI_DIR_CANDIDATES = [
+  path.join(__dirname, '..', 'apolloui-v2'),
+  path.join(__dirname, '..', '..', 'apolloui-v2'),
+];
+const UI_DIR = UI_DIR_CANDIDATES.find((candidate) =>
+  existsSync(path.join(candidate, 'src', 'locales'))
+);
+if (!UI_DIR) throw new Error('Could not locate the apolloui-v2 repository');
+const LOCALES_DIR = path.join(UI_DIR, 'src', 'locales');
 const LANGS = ['en', 'it', 'de', 'es'];
 
 const flatten = (obj, prefix = '') =>
