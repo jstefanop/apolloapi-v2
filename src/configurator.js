@@ -1,6 +1,7 @@
 const fsPromises = require('fs').promises;
 const _ = require('lodash');
 const { knex } = require('./db')
+const { getMinerRuntimeDir } = require('./paths');
 
 const generate = async function (pools = null, settings = null ) {
   	if (!settings) {
@@ -82,7 +83,7 @@ const generate = async function (pools = null, settings = null ) {
 
 	if (settings.powerLedOff) minerConfig += ` -pwrled off`;
 
-	const confDir = `${__dirname}/../backend/apollo-miner`;
+	const confDir = getMinerRuntimeDir();
 
 	try {
 		// Write all configuration file

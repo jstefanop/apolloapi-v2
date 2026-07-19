@@ -127,3 +127,63 @@ describe('ensureDbLocation', () => {
     expect(fs.readFileSync(desired, 'utf8')).toBe('DB');
   });
 });
+
+describe('ensureMinerRuntimeDir', () => {
+  function managedMiner() {
+    const stateDir = path.join(tmpRoot, 'state');
+    process.env.APOLLO_STATE_DIR = stateDir;
+    const legacyDir = path.join(tmpRoot, 'checkout', 'backend', 'apollo-miner');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    return { minerDir: path.join(stateDir, 'miner'), legacyDir };
+  }
+
+  it('is a no-op in development', () => {
+    delete process.env.APOLLO_STATE_DIR;
+    process.env.NODE_ENV = 'development';
+    const legacyDir = path.join(tmpRoot, 'checkout');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'miner_config'), 'CFG');
+
+    paths.ensureMinerRuntimeDir({ legacyDir });
+
+    // Nothing created under a state dir, legacy file untouched.
+    expect(fs.readFileSync(path.join(legacyDir, 'miner_config'), 'utf8')).toBe(
+      'CFG'
+    );
+  });
+
+  it('creates the runtime dir and moves regenerated config out of the checkout', () => {
+    const { minerDir, legacyDir } = managedMiner();
+    fs.writeFileSync(path.join(legacyDir, 'miner_config'), 'CFG');
+    fs.writeFileSync(path.join(legacyDir, 'mode'), 'eco');
+    fs.writeFileSync(path.join(legacyDir, 'miner_config3'), 'turbo');
+    // A binary must stay in the checkout, not be moved.
+    fs.writeFileSync(path.join(legacyDir, 'futurebit-miner'), 'ELF');
+
+    paths.ensureMinerRuntimeDir({ legacyDir });
+
+    expect(fs.readFileSync(path.join(minerDir, 'miner_config'), 'utf8')).toBe(
+      'CFG'
+    );
+    expect(fs.readFileSync(path.join(minerDir, 'mode'), 'utf8')).toBe('eco');
+    expect(fs.readFileSync(path.join(minerDir, 'miner_config3'), 'utf8')).toBe(
+      'turbo'
+    );
+    expect(fs.existsSync(path.join(legacyDir, 'miner_config'))).toBe(false);
+    expect(fs.existsSync(path.join(legacyDir, 'futurebit-miner'))).toBe(true);
+  });
+
+  it('creates the dir even with no legacy files, and does not clobber existing runtime config', () => {
+    const { minerDir, legacyDir } = managedMiner();
+    fs.mkdirSync(minerDir, { recursive: true });
+    fs.writeFileSync(path.join(minerDir, 'miner_config'), 'CURRENT');
+    fs.writeFileSync(path.join(legacyDir, 'miner_config'), 'STALE');
+
+    paths.ensureMinerRuntimeDir({ legacyDir });
+
+    // Existing runtime config wins; the stale checkout copy is left in place.
+    expect(fs.readFileSync(path.join(minerDir, 'miner_config'), 'utf8')).toBe(
+      'CURRENT'
+    );
+  });
+});

@@ -1,10 +1,14 @@
 [Unit]
 Description=apollo-miner
-After=network.target rc-local.service
+# Requires apollo-bootstrap so the futurebit-owned miner runtime dir exists
+# before this (root) unit writes stat files into it.
+Requires=apollo-bootstrap.service
+After=network.target rc-local.service apollo-bootstrap.service
 
 [Service]
 Type=forking
 User=root
+EnvironmentFile=-/opt/apolloapi/.env
 #Start:
 ExecStart=/opt/apolloapi/backend/apollo-miner/miner_start.sh
 WorkingDirectory=/opt/apolloapi/backend/apollo-miner

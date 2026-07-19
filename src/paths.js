@@ -94,13 +94,39 @@ function ensureDbLocation({ envPath = defaultEnvPath() } = {}) {
   rewriteEnvDatabaseUrl(envPath, desired);
 }
 
+// The in-checkout miner dir that also holds the binaries (which stay put).
+function getLegacyMinerDir() {
+  return path.join(__dirname, '..', 'backend', 'apollo-miner');
+}
+
+// Files the miner regenerates at runtime — moved out of the checkout. Binaries
+// (futurebit-miner*, apollo-helper) and the launch scripts stay in the checkout.
+const MINER_RUNTIME_FILES = ['miner_config', 'mode', 'miner_config3'];
+
+// Create the miner runtime dir (futurebit-owned) and, on first boot after an
+// upgrade, move the regenerated config files out of the checkout. The bootstrap
+// runs before the miner, so the dir exists (owned by futurebit) before the
+// root-owned miner writes its stat files into it. Idempotent; no-op in dev.
+function ensureMinerRuntimeDir({ legacyDir = getLegacyMinerDir() } = {}) {
+  if (!isManagedStateDir()) return;
+  const dir = getMinerRuntimeDir();
+  fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+  for (const name of MINER_RUNTIME_FILES) {
+    const from = path.join(legacyDir, name);
+    const to = path.join(dir, name);
+    if (fs.existsSync(from) && !fs.existsSync(to)) moveFile(from, to);
+  }
+}
+
 module.exports = {
   getStateDir,
   getDbPath,
   getMinerRuntimeDir,
   getLegacyDbPath,
+  getLegacyMinerDir,
   isManagedStateDir,
   defaultEnvPath,
   defaultDatabaseUrl,
   ensureDbLocation,
+  ensureMinerRuntimeDir,
 };
