@@ -1,14 +1,12 @@
 #!/bin/bash
-DEVICE=/dev/nvme0n1p1
-SWAPFILE=/media/nvme/swapfile
+set -Eeuo pipefail
 
-if [ -b "$DEVICE"  ]; then
-	if [ ! -f "$SWAPFILE" ]; then
-		fallocate -l 3G $SWAPFILE
-		chmod 600 $SWAPFILE
-		mkswap $SWAPFILE
-	fi
-	swapon /media/nvme/swapfile
-else
-	exit 0
+MOUNTPOINT="${APOLLO_NODE_MOUNTPOINT:-/media/nvme}"
+SWAPFILE="${MOUNTPOINT}/swapfile"
+
+findmnt -rn --mountpoint "$MOUNTPOINT" >/dev/null
+[ -f "$SWAPFILE" ]
+
+if ! swapon --show=NAME --noheadings | awk '{$1=$1};1' | grep -Fxq "$SWAPFILE"; then
+    swapon "$SWAPFILE"
 fi

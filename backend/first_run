@@ -1,36 +1,125 @@
 #!/bin/bash
-DEVICE=/dev/nvme0n1p1
+set -Eeuo pipefail
 
-#expand SD card
-/usr/lib/armbian/armbian-resize-filesystem start
+DISK="${APOLLO_NODE_DISK:-/dev/nvme0n1}"
+DEVICE="${APOLLO_NODE_DEVICE:-${DISK}p1}"
+MOUNTPOINT="${APOLLO_NODE_MOUNTPOINT:-/media/nvme}"
+BITCOIN_DIR="${MOUNTPOINT}/Bitcoin"
+SWAPFILE="${MOUNTPOINT}/swapfile"
+STATE_DIR="${APOLLO_STATE_DIR:-/var/lib/apollo}"
+ROOT_RESIZE_MARKER="${STATE_DIR}/root-resize-attempted"
+STORAGE_MARKER="${STATE_DIR}/storage-initialized"
 
+log() { echo "[first-run] $*" >&2; }
 
-if [ ! -b "$DEVICE"  ]; then
-        #format nvme drive if it has not been formatted yet
-	parted /dev/nvme0n1 mklabel gpt -s
-	parted -a opt /dev/nvme0n1 mkpart primary ext4 0% 100% -s
-	mkfs.ext4 /dev/nvme0n1p1
+write_marker() {
+    local marker="$1"
+    touch "$marker"
+    chown futurebit:futurebit "$marker"
+    chmod 600 "$marker"
+}
 
-	#configure node
-	mkdir /media/nvme
-	mount /dev/nvme0n1p1 /media/nvme
-	tune2fs -m .1 /dev/nvme0n1p1
-	mkdir /media/nvme/Bitcoin
-	
-else
-        mkdir /media/nvme
-	mount /dev/nvme0n1p1 /media/nvme
+if [ "$(id -u)" -ne 0 ]; then
+    log "ERROR: this script must run as root"
+    exit 1
 fi
 
-chown -R futurebit /media/nvme/Bitcoin/
-ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
+install -d -o futurebit -g futurebit -m 700 "$STATE_DIR"
 
+if [ ! -e "$ROOT_RESIZE_MARKER" ]; then
+    # Mark the attempt before invoking the utility so a reboot or interrupted
+    # resize cannot cause it to run a second time.
+    write_marker "$ROOT_RESIZE_MARKER"
+    if [ -x /usr/lib/armbian/armbian-resize-filesystem ]; then
+        /usr/lib/armbian/armbian-resize-filesystem start || \
+            log "WARN: root filesystem resize did not complete"
+    else
+        log "WARN: Armbian root filesystem resize utility is unavailable"
+    fi
+fi
 
+rm -f "$STORAGE_MARKER"
 
-#configure swap
-fallocate -l 3G /media/nvme/swapfile
-chmod 600 /media/nvme/swapfile
-mkswap /media/nvme/swapfile
+if [ ! -b "$DISK" ]; then
+    log "No NVMe disk installed at $DISK; skipping node storage setup"
+    exit 0
+fi
 
-sed -i '$ d' /etc/rc.local
-sed -i "\$i mount \/dev\/nvme0n1p1 \/media\/nvme" /etc/rc.local
+if [ ! -b "$DEVICE" ]; then
+    existing_partitions=$(lsblk -nr -o TYPE "$DISK" | awk '$1 == "part" { count++ } END { print count + 0 }')
+    existing_filesystem=$(blkid -s TYPE -o value "$DISK" 2>/dev/null || true)
+    if [ "$existing_partitions" -gt 0 ] || [ -n "$existing_filesystem" ]; then
+        log "ERROR: $DISK contains existing storage but $DEVICE is missing; refusing to overwrite it"
+        exit 1
+    fi
+    log "Creating the NVMe data partition"
+    parted "$DISK" mklabel gpt -s
+    parted -a opt "$DISK" mkpart primary ext4 0% 100% -s
+    partprobe "$DISK"
+    udevadm settle --timeout=30 || true
+    for _ in $(seq 1 30); do
+        [ -b "$DEVICE" ] && break
+        sleep 1
+    done
+    if [ ! -b "$DEVICE" ]; then
+        log "ERROR: partition did not appear at $DEVICE"
+        exit 1
+    fi
+    mkfs.ext4 -F "$DEVICE"
+fi
+
+filesystem_type=$(blkid -s TYPE -o value "$DEVICE" 2>/dev/null || true)
+if [ -z "$filesystem_type" ]; then
+    log "ERROR: $DEVICE has no recognizable filesystem; refusing to overwrite it"
+    exit 1
+fi
+
+install -d -m 755 "$MOUNTPOINT"
+if ! findmnt -rn --mountpoint "$MOUNTPOINT" >/dev/null 2>&1; then
+    mount "$DEVICE" "$MOUNTPOINT"
+fi
+
+mounted_source=$(findmnt -rn -o SOURCE --mountpoint "$MOUNTPOINT")
+if [ "$(readlink -f "$mounted_source")" != "$(readlink -f "$DEVICE")" ]; then
+    log "ERROR: $MOUNTPOINT is mounted from $mounted_source instead of $DEVICE"
+    exit 1
+fi
+
+if [ "$filesystem_type" = "ext4" ]; then
+    tune2fs -m 0.1 "$DEVICE" >/dev/null
+fi
+
+install -d -o futurebit -g futurebit -m 700 "$BITCOIN_DIR"
+
+FUTUREBIT_HOME=$(getent passwd futurebit | cut -d: -f6)
+FUTUREBIT_HOME="${FUTUREBIT_HOME:-/home/futurebit}"
+install -d -o futurebit -g futurebit -m 755 "$FUTUREBIT_HOME"
+if [ -L "${FUTUREBIT_HOME}/.bitcoin" ]; then
+    ln -sfn "$BITCOIN_DIR" "${FUTUREBIT_HOME}/.bitcoin"
+elif [ ! -e "${FUTUREBIT_HOME}/.bitcoin" ]; then
+    ln -s "$BITCOIN_DIR" "${FUTUREBIT_HOME}/.bitcoin"
+elif [ -d "${FUTUREBIT_HOME}/.bitcoin" ] &&
+     [ -z "$(find "${FUTUREBIT_HOME}/.bitcoin" -mindepth 1 -print -quit)" ]; then
+    rmdir "${FUTUREBIT_HOME}/.bitcoin"
+    ln -s "$BITCOIN_DIR" "${FUTUREBIT_HOME}/.bitcoin"
+else
+    log "WARN: ${FUTUREBIT_HOME}/.bitcoin already exists and was left unchanged"
+fi
+if [ -e "${FUTUREBIT_HOME}/.bitcoin" ] || [ -L "${FUTUREBIT_HOME}/.bitcoin" ]; then
+    chown -h futurebit:futurebit "${FUTUREBIT_HOME}/.bitcoin"
+fi
+
+if [ ! -e "$SWAPFILE" ]; then
+    log "Creating NVMe swapfile"
+    fallocate -l 3G "$SWAPFILE"
+    chmod 600 "$SWAPFILE"
+    mkswap "$SWAPFILE" >/dev/null
+else
+    chmod 600 "$SWAPFILE"
+    if ! file -b "$SWAPFILE" | grep -q 'swap file'; then
+        mkswap "$SWAPFILE" >/dev/null
+    fi
+fi
+
+write_marker "$STORAGE_MARKER"
+log "NVMe storage is ready"

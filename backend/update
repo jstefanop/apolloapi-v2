@@ -1,41 +1,100 @@
 #!/bin/bash
+set -Eeuo pipefail
 
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 TMPFILE='/tmp/update_progress'
-APOLLO_DIR=/opt/apolloapi
+SOLO_REQUEST_FILE='/run/apollo-update-solo-requested-status'
+APOLLO_DIR='/opt/apolloapi'
+UI_DIR="${APOLLO_DIR}/apolloui-v2"
+DATABASE_URL="${APOLLO_DIR}/futurebit.sqlite"
 
-rm $TMPFILE
-touch $TMPFILE
-
-if [ "$EUID" -ne 0 ]
-  then echo -e "${RED}Update script must be run by root or with sudo${NC}"
-  exit
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Update script must be run by root or with sudo${NC}"
+    exit 1
 fi
 
-echo "10" > $TMPFILE
+restore_solo_intent() {
+    [ -f "$SOLO_REQUEST_FILE" ] || return 0
 
+    if [ -f "$DATABASE_URL" ]; then
+        local requested_status
+        requested_status=$(<"$SOLO_REQUEST_FILE")
+        case "$requested_status" in
+            online|offline)
+                sqlite3 "$DATABASE_URL" \
+                    "UPDATE service_status
+                        SET status = 'pending',
+                            requested_status = '${requested_status}',
+                            requested_at = CURRENT_TIMESTAMP
+                      WHERE service_name = 'solo';"
+                ;;
+            '')
+                sqlite3 "$DATABASE_URL" \
+                    "UPDATE service_status
+                        SET requested_status = NULL,
+                            requested_at = NULL
+                      WHERE service_name = 'solo';"
+                ;;
+        esac
+    fi
 
-git config --global --add safe.directory $APOLLO_DIR
-git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
+    rm -f "$SOLO_REQUEST_FILE"
+}
 
-chown -R futurebit $APOLLO_DIR
+on_error() {
+    local status=$?
+    trap - ERR
+    restore_solo_intent || true
+    rm -f "$TMPFILE"
+    echo -e "${RED}Update failed; the system was not rebooted${NC}" >&2
+    exit "$status"
+}
+trap on_error ERR
 
-cd $APOLLO_DIR
+rm -f "$TMPFILE"
+echo "10" > "$TMPFILE"
 
-git reset --hard
-git pull
+# Preserve solo intent across the first update to a monitor version that
+# understands the update marker. /run is root-owned and cleared on reboot.
+if [ ! -e "$SOLO_REQUEST_FILE" ] && [ -f "$DATABASE_URL" ]; then
+    requested_status=$(sqlite3 "$DATABASE_URL" \
+        "SELECT COALESCE(requested_status, '')
+           FROM service_status
+          WHERE service_name = 'solo'
+          ORDER BY id DESC
+          LIMIT 1;" 2>/dev/null || true)
+    (umask 077; printf '%s\n' "$requested_status" > "$SOLO_REQUEST_FILE")
+fi
 
-cd $APOLLO_DIR/apolloui-v2
+# The node executes binaries and configuration selected from this checkout.
+# Stop it before replacing either repository; systemd will start it after reboot.
+systemctl stop ckpool.service
+systemctl stop node.service
 
-git reset --hard
-git pull
+if systemctl is-active --quiet ckpool.service ||
+   pgrep -u futurebit -x ckpool >/dev/null 2>&1; then
+    echo -e "${RED}CKPool did not stop cleanly; aborting update${NC}" >&2
+    false
+fi
+if systemctl is-active --quiet node.service ||
+   pgrep -u futurebit -x bitcoind >/dev/null 2>&1; then
+    echo -e "${RED}Bitcoin node did not stop cleanly; aborting update${NC}" >&2
+    false
+fi
 
-chown -R futurebit $APOLLO_DIR
+git config --global --add safe.directory "$APOLLO_DIR"
+git config --global --add safe.directory "$UI_DIR"
+chown -R futurebit:futurebit "$APOLLO_DIR"
 
-echo "20" > $TMPFILE
+git -C "$APOLLO_DIR" reset --hard
+git -C "$APOLLO_DIR" pull --ff-only
+git -C "$UI_DIR" reset --hard
+git -C "$UI_DIR" pull --ff-only
+
+chown -R futurebit:futurebit "$APOLLO_DIR"
+echo "20" > "$TMPFILE"
 
 echo -e "${YELLOW} ---> Running update_system script${NC}"
-
-bash $APOLLO_DIR/backend/update_system
+bash "${APOLLO_DIR}/backend/update_system"

@@ -10,6 +10,7 @@ module.exports = gql`
     stop: EmptyOutput! @auth
     stats: NodeStatsOutput!
     conf: NodeConfOutput! @auth
+    connectionInfo: NodeConnectionInfoOutput! @auth
     formatProgress: NodeFormatProgressOutput! @auth
     format: EmptyOutput! @auth
     online: NodeOnlineOutput!
@@ -79,6 +80,16 @@ module.exports = gql`
 
   type NodeConfResult {
     bitcoinConf: String!
+  }
+
+  type NodeConnectionInfoOutput {
+    result: NodeConnectionInfo
+    error: Error
+  }
+
+  type NodeConnectionInfo {
+    username: String!
+    password: String!
   }
 
   type NodeFormatProgressOutput {

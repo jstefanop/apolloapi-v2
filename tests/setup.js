@@ -66,6 +66,11 @@ jest.mock('fs', () => {
         return Promise.resolve([]);
       }),
       readFile: jest.fn().mockImplementation((path) => {
+        if (path.includes('rpc-credentials.json')) {
+          const error = new Error('File not found');
+          error.code = 'ENOENT';
+          return Promise.reject(error);
+        }
         if (path.includes('apollo-miner')) {
           return Promise.resolve(JSON.stringify({
             date: '2025-03-22 10:00:00',
@@ -89,11 +94,21 @@ jest.mock('fs', () => {
           return Promise.resolve('75');
         }
         else if (path.includes('bitcoin.conf')) {
-          return Promise.resolve('server=1\nrpcuser=futurebit\nrpcpassword=testpassword');
+          return Promise.resolve(
+            'server=1\nincludeconf=/var/lib/apollo/bitcoin-auth.conf'
+          );
         }
         return Promise.resolve('Mock file content');
       }),
       writeFile: jest.fn().mockResolvedValue(undefined),
+      open: jest.fn().mockResolvedValue({
+        writeFile: jest.fn().mockResolvedValue(undefined),
+        sync: jest.fn().mockResolvedValue(undefined),
+        close: jest.fn().mockResolvedValue(undefined),
+      }),
+      rename: jest.fn().mockResolvedValue(undefined),
+      chmod: jest.fn().mockResolvedValue(undefined),
+      unlink: jest.fn().mockResolvedValue(undefined),
       stat: jest.fn().mockImplementation(() => {
         return Promise.resolve({
           isFile: () => true,
@@ -116,6 +131,11 @@ jest.mock('child_process', () => ({
       // Node exec callback is (err, stdout, stderr) with stdout/stderr as strings
       cb(null, 'Mock command output', '');
     }
+    return { stdout: 'Mock command output' };
+  }),
+  execFile: jest.fn((file, args, options, callback) => {
+    const done = typeof options === 'function' ? options : callback;
+    if (done) done(null, 'Mock command output', '');
     return { stdout: 'Mock command output' };
   }),
   execSync: jest.fn(() => 'Mock command output'),
@@ -148,6 +168,95 @@ jest.mock('@apollo/server/express4', () => {
       }
     })
   };
+});
+
+const mockFiles = new Map();
+
+// resetMocks is enabled in Jest config, so restore the filesystem boundary
+// behavior before every test after Jest clears each mock implementation.
+beforeEach(() => {
+  mockFiles.clear();
+  fs.promises.access.mockResolvedValue(undefined);
+  fs.promises.mkdir.mockResolvedValue(undefined);
+  fs.promises.chmod.mockResolvedValue(undefined);
+  fs.promises.rename.mockImplementation(async (from, to) => {
+    mockFiles.set(String(to), mockFiles.get(String(from)));
+    mockFiles.delete(String(from));
+  });
+  fs.promises.unlink.mockImplementation(async (filePath) => {
+    mockFiles.delete(String(filePath));
+  });
+  fs.promises.writeFile.mockImplementation(async (filePath, contents) => {
+    mockFiles.set(String(filePath), String(contents));
+  });
+  fs.promises.open.mockImplementation(async (filePath) => ({
+    writeFile: jest.fn().mockImplementation(async (contents) => {
+      mockFiles.set(String(filePath), String(contents));
+    }),
+    sync: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+  }));
+  fs.promises.readdir.mockImplementation((filePath) =>
+    Promise.resolve(
+      String(filePath).includes('apollo-miner')
+        ? ['apollo-miner-v2.123456']
+        : []
+    )
+  );
+  fs.promises.stat.mockResolvedValue({
+    isFile: () => true,
+    mtimeMs: Date.now() - 5000,
+  });
+  fs.promises.readFile.mockImplementation((filePath) => {
+    const value = String(filePath);
+    if (mockFiles.has(value)) return Promise.resolve(mockFiles.get(value));
+    if (value.includes('rpc-credentials.json')) {
+      const error = new Error('File not found');
+      error.code = 'ENOENT';
+      return Promise.reject(error);
+    }
+    if (value.includes('apollo-miner')) {
+      return Promise.resolve(
+        JSON.stringify({
+          date: '2025-03-22 10:00:00',
+          master: {
+            boardsI: 36.5,
+            boardsW: 250,
+            intervals: {
+              '30': { bySol: 7500, byPool: 7450 },
+              '300': { bySol: 7400, byPool: 7350 },
+              '900': { bySol: 7300, byPool: 7250 },
+              '3600': { bySol: 7200, byPool: 7150 },
+              '0': { bySol: 7100, byPool: 7050 },
+            },
+          },
+          pool: {
+            intervals: {
+              '0': {
+                sharesAccepted: 100,
+                sharesRejected: 2,
+                sharesSent: 102,
+              },
+            },
+          },
+          slots: { '0': { temperature: 65, errorRate: 0.5 } },
+          fans: { '0': { rpm: [4000] } },
+        })
+      );
+    }
+    if (
+      value.includes('format_node_disk_c_done') ||
+      value.includes('update_progress')
+    ) {
+      return Promise.resolve('75');
+    }
+    if (value.includes('bitcoin.conf')) {
+      return Promise.resolve(
+        'server=1\nincludeconf=/var/lib/apollo/bitcoin-auth.conf'
+      );
+    }
+    return Promise.resolve('Mock file content');
+  });
 });
 
 // Setup e teardown per ogni test

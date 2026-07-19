@@ -60,15 +60,14 @@ class AuthService {
     // Hash the new password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Update the password in the database
-    await this.knex('setup').update({
-      password: hashedPassword
-    });
-
-    // Also update the system password (only in production; uses stdin-based chpasswd, no shell)
+    // Change the system password before committing the application password.
     if (isProduction()) {
       await this.utils.auth.changeSystemPassword(password);
     }
+
+    await this.knex('setup').update({
+      password: hashedPassword
+    });
   }
 
   // Initial setup
@@ -84,15 +83,15 @@ class AuthService {
       // Hash the password
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Insert the setup record
-      await this.knex('setup').insert({
-        password: hashedPassword
-      });
-
-      // Set the system password (only in production; uses stdin-based chpasswd, no shell)
+      // Set the system password before committing setup. A chpasswd failure
+      // must leave the setup wizard retryable.
       if (isProduction()) {
         await this.utils.auth.changeSystemPassword(password);
       }
+
+      await this.knex('setup').insert({
+        password: hashedPassword
+      });
     } catch (err) {
       console.log('ERROR', err);
       throw err;

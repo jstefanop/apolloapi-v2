@@ -301,35 +301,129 @@ describe('Settings API', () => {
     });
   });
 
-  describe('partial update must not touch the node (automation mode-change regression)', () => {
-    const buildSettings = require('../src/services/settings');
-    let utils;
-    let settings;
+  describe('node service lifecycle', () => {
+    const settingsService = require('../src/services').settings;
 
-    beforeEach(() => {
-      utils = {
-        auth: {
-          manageBitcoinConf: jest.fn().mockResolvedValue(undefined),
-          switchBitcoinSoftware: jest.fn().mockResolvedValue({ success: true }),
-        },
-      };
-      settings = buildSettings(knex, utils);
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
-    it('a minerMode-only update does not switch bitcoin software or rewrite bitcoin.conf', async () => {
-      // The automation sets only minerMode; nodeSoftware is absent. Comparing the
-      // stored software against an undefined input used to read as a switch and
-      // restarted bitcoind on every mode change.
-      await settings.update({ minerMode: 'turbo' });
+    it('applies Tor before restarting the node and starting ckpool', async () => {
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockImplementation(async (service) => service === 'node.service');
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
 
-      expect(utils.auth.switchBitcoinSoftware).not.toHaveBeenCalled();
-      expect(utils.auth.manageBitcoinConf).not.toHaveBeenCalled();
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: true, nodeEnableSoloMining: true },
+        true,
+        true
+      );
+
+      expect(systemctl.mock.calls).toEqual([
+        ['enable', '--now', 'tor.service'],
+        ['restart', 'node.service'],
+        ['start', 'ckpool.service'],
+      ]);
     });
 
-    it('still switches bitcoin software when nodeSoftware actually changes', async () => {
-      await settings.update({ nodeSoftware: 'core_29_2' }); // seed default is core-28.1
+    it('starts ckpool when enabling solo even if the node is stopped', async () => {
+      // node.service is not active
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockResolvedValue(false);
+      const soloReq = jest
+        .spyOn(settingsService, '_setSoloRequestedStatus')
+        .mockResolvedValue(undefined);
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
 
-      expect(utils.auth.switchBitcoinSoftware).toHaveBeenCalledWith('core-29.2');
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: false, nodeEnableSoloMining: true },
+        false,
+        false
+      );
+
+      // solo is marked online and ckpool is started unconditionally;
+      // ckpool's Requires=node.service brings the stopped node up.
+      expect(soloReq).toHaveBeenCalledWith('online');
+      expect(systemctl.mock.calls).toEqual([['start', 'ckpool.service']]);
+    });
+
+    it('does not start or restart an offline node', async () => {
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockResolvedValue(false);
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
+
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        true,
+        false
+      );
+
+      expect(systemctl).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the settings row when service application fails', async () => {
+      const before = await knex('settings')
+        .select('node_max_connections')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+      const lifecycle = jest
+        .spyOn(settingsService, '_applyServiceLifecycle')
+        .mockRejectedValueOnce(new Error('systemctl failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        settingsService.update({
+          nodeMaxConnections: before.node_max_connections + 1,
+        })
+      ).rejects.toThrow('systemctl failed');
+
+      const rows = await knex('settings')
+        .select(['id', 'node_max_connections'])
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc');
+      expect(lifecycle).toHaveBeenCalledTimes(2);
+      expect(rows).toHaveLength(1);
+      const [current] = rows;
+      expect(current.node_max_connections).toBe(before.node_max_connections);
+    });
+
+    it('reapplies an explicitly submitted node setting even when unchanged', async () => {
+      const current = await knex('settings')
+        .select('node_max_connections')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+      const lifecycle = jest
+        .spyOn(settingsService, '_applyServiceLifecycle')
+        .mockResolvedValue(undefined);
+
+      await settingsService.update({
+        nodeMaxConnections: current.node_max_connections,
+      });
+      lifecycle.mockClear();
+      await settingsService.update({
+        nodeMaxConnections: current.node_max_connections,
+      });
+
+      expect(lifecycle).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Object),
+        true,
+        false
+      );
     });
   });
 });

@@ -198,28 +198,9 @@ cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/a
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
 cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
 
-### Bitcoind ###
-#########################
-echo -e "${YELLOW} ---> Installing Bitcoin node${NC}"
-
-# Current Default Core
-NODE_SOFTWARE="core-28.1"
-
-
-# Copy the correct bitcoind binary based on node_software
-cp $APOLLO_DIR/backend/node/bin/$NODE_SOFTWARE/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
-echo -e "${GREEN} ---> Copied $NODE_SOFTWARE bitcoind binary${NC}"
-
-cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
-
-#Create new api/user config files
-touch $APOLLO_DIR/backend/node/api.conf
-touch $APOLLO_DIR/backend/node/user.conf
-
 ### ckpool ###
 #########################
 cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/
-cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
 
 ### TOR ###
 #########################
@@ -236,6 +217,7 @@ echo -e "${YELLOW} ---> Setting up systemd services${NC}"
 
 # Copy the apollo-api.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/apollo-bootstrap.service /etc/systemd/system/
 
 # Copy the apollo-ui.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
@@ -249,6 +231,11 @@ cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 # Copy the apollo-miner.service file to /etc/systemd/system
 cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
 
+cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
+cp $APOLLO_DIR/backend/rc.local /etc/rc.local
+chmod +x /etc/rc.local
+install -d -o futurebit -g futurebit -m 700 /var/lib/apollo
 
 echo -e "${GREEN} ---> Copied apollo-api.service, apollo-ui-v2.service and ckpool.service to /etc/systemd/system${NC}"
 
@@ -262,13 +249,16 @@ systemctl stop tor.service
 systemctl disable tor.service
 
 # Enable and start the services
+systemctl enable apollo-bootstrap.service
+systemctl enable rc-local.service
+systemctl enable swap.service
 systemctl enable apollo-api.service
 systemctl start apollo-api.service
 systemctl enable apollo-ui-v2.service
 systemctl start apollo-ui-v2.service
 systemctl enable apollo-miner.service
 systemctl enable node.service
-systemctl enable ckpool.service
+systemctl disable ckpool.service
 
 
 echo -e "${GREEN} --->  Enabled and started apollo services${NC}"
