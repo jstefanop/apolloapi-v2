@@ -1,12 +1,13 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { defaultDatabaseUrl } = require('./paths');
 
 function ensureEnvFile() {
   const envPath = path.join(__dirname, '..', '.env');
   if (!fs.existsSync(envPath)) {
     const contents = [
-      `DATABASE_URL=${path.join(__dirname, '..', 'futurebit.sqlite')}`,
+      `DATABASE_URL=${defaultDatabaseUrl()}`,
       `APP_SECRET=${crypto.randomBytes(64).toString('hex')}`,
       '',
     ].join('\n');

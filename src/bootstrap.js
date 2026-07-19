@@ -1,5 +1,6 @@
 const path = require('path');
 const { ensureEnvFile } = require('./env');
+const { ensureDbLocation } = require('./paths');
 const { applyNodeConfiguration } = require('./node/configManager');
 const { ensureRpcCredentials } = require('./node/credentials');
 
@@ -54,6 +55,7 @@ async function runCli() {
   try {
     process.chdir(APP_ROOT);
     ensureEnvFile();
+    ensureDbLocation(); // relocate the DB out of the checkout before ./db is required
     knex = require('./db').knex;
     await bootstrap({ knex });
   } catch (error) {
