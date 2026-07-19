@@ -366,9 +366,13 @@ class SettingsService {
       await this._setSoloRequestedStatus(
         newSettings.nodeEnableSoloMining ? 'online' : 'offline'
       );
-      if (newSettings.nodeEnableSoloMining && nodeIsActive) {
+      if (newSettings.nodeEnableSoloMining) {
+        // ckpool has Requires=node.service, so starting it also brings the
+        // node up if it was stopped. Start it unconditionally: gating on the
+        // node being active left solo "enabled" with ckpool never started,
+        // and serviceMonitor then flipped the stale online request to offline.
         await this._runSystemctl('start', 'ckpool.service');
-      } else if (!newSettings.nodeEnableSoloMining) {
+      } else {
         await this._runSystemctl('stop', 'ckpool.service');
       }
     } else if (

@@ -330,6 +330,31 @@ describe('Settings API', () => {
       ]);
     });
 
+    it('starts ckpool when enabling solo even if the node is stopped', async () => {
+      // node.service is not active
+      jest
+        .spyOn(settingsService, '_isServiceActive')
+        .mockResolvedValue(false);
+      const soloReq = jest
+        .spyOn(settingsService, '_setSoloRequestedStatus')
+        .mockResolvedValue(undefined);
+      const systemctl = jest
+        .spyOn(settingsService, '_runSystemctl')
+        .mockResolvedValue(undefined);
+
+      await settingsService._applyServiceLifecycle(
+        { nodeEnableTor: false, nodeEnableSoloMining: false },
+        { nodeEnableTor: false, nodeEnableSoloMining: true },
+        false,
+        false
+      );
+
+      // solo is marked online and ckpool is started unconditionally;
+      // ckpool's Requires=node.service brings the stopped node up.
+      expect(soloReq).toHaveBeenCalledWith('online');
+      expect(systemctl.mock.calls).toEqual([['start', 'ckpool.service']]);
+    });
+
     it('does not start or restart an offline node', async () => {
       jest
         .spyOn(settingsService, '_isServiceActive')

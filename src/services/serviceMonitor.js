@@ -143,6 +143,23 @@ class ServiceMonitor {
     return process.env.NODE_ENV === 'development';
   }
 
+  // Read a unit's systemd activation state, normalizing is-active exit codes.
+  async _systemctlStatus(serviceName) {
+    try {
+      const { stdout } = await execAsync(`systemctl is-active ${serviceName}`);
+      return stdout.trim();
+    } catch (error) {
+      // is-active exits 0=active, 3=inactive, 4=failed
+      if (error.code === 3) return 'inactive';
+      if (error.code === 4) return 'failed';
+      return error.stdout ? error.stdout.trim() : 'unknown';
+    }
+  }
+
+  async _isSystemdActive(serviceName) {
+    return (await this._systemctlStatus(serviceName)) === 'active';
+  }
+
   // Check if Bitcoin node is remote (not localhost)
   async isRemoteNode() {
     const nodeHost = process.env.BITCOIN_NODE_HOST;
@@ -245,22 +262,7 @@ class ServiceMonitor {
       }
 
       // Standard systemctl check for local services
-      let status;
-      try {
-        const { stdout, stderr } = await execAsync(`systemctl is-active ${serviceName}`);
-        status = stdout.trim();
-      } catch (error) {
-        // systemctl is-active returns different exit codes for different states
-        // Exit code 0: active, Exit code 3: inactive, Exit code 4: failed
-        if (error.code === 3) {
-          status = 'inactive';
-        } else if (error.code === 4) {
-          status = 'failed';
-        } else {
-          // For other exit codes, try to get status from stdout if available
-          status = error.stdout ? error.stdout.trim() : 'unknown';
-        }
-      }
+      const status = await this._systemctlStatus(serviceName);
 
       // Get current requested status from database (needed for both status mapping and auto-start)
       const existing = await this.knex('service_status')
@@ -354,12 +356,23 @@ class ServiceMonitor {
           // Check if service was recently requested to start (within grace period)
           const isWithinStartGracePeriod = timeSinceRequest <= startGracePeriod;
           const wasStarting = existing.status === 'pending';
-          
-          if (isWithinStartGracePeriod && wasStarting) {
-            // Still within grace period and was starting - don't interfere
-            // Keep status as pending and don't change requested_status
+
+          // ckpool is PartOf/Requires node.service: while the node is not
+          // active it cannot run, so ckpool being inactive is expected (it
+          // will start once the node is up), not a manual stop. Don't flip
+          // its requested_status to offline — that would poison the ExecCondition
+          // and keep ckpool from ever starting again. Node startup can exceed
+          // the start grace period, so this is checked independently of it.
+          const blockedOnNode =
+            dbServiceName === 'solo' && !(await this._isSystemdActive('node'));
+
+          if ((isWithinStartGracePeriod && wasStarting) || blockedOnNode) {
+            // Still starting, or waiting on the node - don't interfere.
+            // Keep status as pending and don't change requested_status.
             console.log(
-              `⏳ Service ${serviceName} (${dbServiceName}) still starting (${Math.round(timeSinceRequest/1000)}s since request)`
+              `⏳ Service ${serviceName} (${dbServiceName}) ${
+                blockedOnNode ? 'waiting for node.service' : 'still starting'
+              } (${Math.round(timeSinceRequest / 1000)}s since request)`
             );
             isWithinGracePeriod = true;
             mappedStatus = 'pending'; // Override to keep it pending
