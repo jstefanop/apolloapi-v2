@@ -62,7 +62,9 @@ function rewriteEnvDatabaseUrl(envPath, dbUrl) {
   }
   const line = `DATABASE_URL=${dbUrl}`;
   if (/^DATABASE_URL=.*$/m.test(contents)) {
-    contents = contents.replace(/^DATABASE_URL=.*$/m, line);
+    // Replacer callback, so a '$' sequence in the path is not treated as a
+    // replacement pattern ($&, $1, ...) and corrupt the written line.
+    contents = contents.replace(/^DATABASE_URL=.*$/m, () => line);
   } else {
     contents = contents.replace(/\n*$/, '\n') + line + '\n';
   }
@@ -107,10 +109,15 @@ const MINER_RUNTIME_FILES = ['miner_config', 'mode', 'miner_config3'];
 // upgrade, move the regenerated config files out of the checkout. The bootstrap
 // runs before the miner, so the dir exists (owned by futurebit) before the
 // root-owned miner writes its stat files into it. Idempotent; no-op in dev.
+//
+// 0700 is what this actually gets: apollo-bootstrap.service runs with
+// UMask=0077, and the parent state dir is 0700 anyway. Access is covered by
+// ownership — futurebit owns the dir, and the root-owned miner bypasses the
+// mode bits.
 function ensureMinerRuntimeDir({ legacyDir = getLegacyMinerDir() } = {}) {
   if (!isManagedStateDir()) return;
   const dir = getMinerRuntimeDir();
-  fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   for (const name of MINER_RUNTIME_FILES) {
     const from = path.join(legacyDir, name);
     const to = path.join(dir, name);

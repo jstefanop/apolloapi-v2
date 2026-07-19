@@ -112,6 +112,23 @@ describe('ensureDbLocation', () => {
     expect(fs.readFileSync(desired, 'utf8')).toBe('CROSSFS');
   });
 
+  it('writes the path verbatim when it contains a $ replacement sequence', () => {
+    // '$&' etc. must not be interpreted as a String.replace pattern.
+    const stateDir = path.join(tmpRoot, 'st$&ate');
+    process.env.APOLLO_STATE_DIR = stateDir;
+    const desired = path.join(stateDir, 'db', 'futurebit.sqlite');
+    const envPath = path.join(tmpRoot, '.env');
+    fs.writeFileSync(envPath, 'DATABASE_URL=/old/futurebit.sqlite\n');
+    process.env.DATABASE_URL = '/old/futurebit.sqlite';
+
+    paths.ensureDbLocation({ envPath });
+
+    expect(fs.readFileSync(envPath, 'utf8')).toContain(
+      `DATABASE_URL=${desired}`
+    );
+    expect(process.env.DATABASE_URL).toBe(desired);
+  });
+
   it('is idempotent once the DB already lives in the managed path', () => {
     const { desired, envPath } = managed();
     fs.mkdirSync(path.dirname(desired), { recursive: true });
