@@ -8,37 +8,61 @@ TMPFILE='/tmp/update_progress'
 SOLO_REQUEST_FILE='/run/apollo-update-solo-requested-status'
 APOLLO_DIR='/opt/apolloapi'
 UI_DIR="${APOLLO_DIR}/apolloui-v2"
-DATABASE_URL="${APOLLO_DIR}/futurebit.sqlite"
+STATE_DIR="${APOLLO_STATE_DIR:-/var/lib/apollo}"
 
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}Update script must be run by root or with sudo${NC}"
     exit 1
 fi
 
+# The API relocates the DB out of the checkout into the state dir (src/paths.js),
+# and that can happen while this script runs, so resolve the path at each use
+# instead of once at startup. .env is the source of truth, with the managed and
+# legacy locations as fallbacks.
+resolve_database_url() {
+    local from_env='' candidate
+    if [ -r "${APOLLO_DIR}/.env" ]; then
+        from_env=$(sed -n 's/^DATABASE_URL=//p' "${APOLLO_DIR}/.env" | tail -n 1)
+    fi
+    for candidate in "$from_env" "${STATE_DIR}/db/futurebit.sqlite" "${APOLLO_DIR}/futurebit.sqlite"; do
+        if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 restore_solo_intent() {
     [ -f "$SOLO_REQUEST_FILE" ] || return 0
 
-    if [ -f "$DATABASE_URL" ]; then
-        local requested_status
-        requested_status=$(<"$SOLO_REQUEST_FILE")
-        case "$requested_status" in
-            online|offline)
-                sqlite3 "$DATABASE_URL" \
-                    "UPDATE service_status
-                        SET status = 'pending',
-                            requested_status = '${requested_status}',
-                            requested_at = CURRENT_TIMESTAMP
-                      WHERE service_name = 'solo';"
-                ;;
-            '')
-                sqlite3 "$DATABASE_URL" \
-                    "UPDATE service_status
-                        SET requested_status = NULL,
-                            requested_at = NULL
-                      WHERE service_name = 'solo';"
-                ;;
-        esac
+    local database_url
+    if ! database_url=$(resolve_database_url); then
+        # Keep the marker so a later run can still restore the user's intent
+        # instead of silently dropping their solo-mining setting.
+        echo -e "${YELLOW}Could not locate the database; keeping preserved solo intent${NC}" >&2
+        return 0
     fi
+
+    local requested_status
+    requested_status=$(<"$SOLO_REQUEST_FILE")
+    case "$requested_status" in
+        online|offline)
+            sqlite3 "$database_url" \
+                "UPDATE service_status
+                    SET status = 'pending',
+                        requested_status = '${requested_status}',
+                        requested_at = CURRENT_TIMESTAMP
+                  WHERE service_name = 'solo';"
+            ;;
+        '')
+            sqlite3 "$database_url" \
+                "UPDATE service_status
+                    SET requested_status = NULL,
+                        requested_at = NULL
+                  WHERE service_name = 'solo';"
+            ;;
+    esac
 
     rm -f "$SOLO_REQUEST_FILE"
 }
@@ -58,8 +82,8 @@ echo "10" > "$TMPFILE"
 
 # Preserve solo intent across the first update to a monitor version that
 # understands the update marker. /run is root-owned and cleared on reboot.
-if [ ! -e "$SOLO_REQUEST_FILE" ] && [ -f "$DATABASE_URL" ]; then
-    requested_status=$(sqlite3 "$DATABASE_URL" \
+if [ ! -e "$SOLO_REQUEST_FILE" ] && preserve_db=$(resolve_database_url); then
+    requested_status=$(sqlite3 "$preserve_db" \
         "SELECT COALESCE(requested_status, '')
            FROM service_status
           WHERE service_name = 'solo'

@@ -4,6 +4,7 @@ const { exec } = require('child_process');
 const _ = require('lodash');
 const moment = require('moment');
 const { GraphQLError } = require('graphql');
+const { getMinerRuntimeDir } = require('../paths');
 
 // Import the dev miner service for development mode
 const devMinerService =
@@ -271,7 +272,7 @@ class MinerService {
   // Helper method to check if miner is online
   async _isMinerOnline(dbStatus) {
     try {
-      const statsDir = path.resolve(__dirname, '../../backend/apollo-miner/');
+      const statsDir = getMinerRuntimeDir();
       const statsFilePattern = /^apollo-miner.*$/;
 
       // Define thresholds
@@ -443,7 +444,7 @@ class MinerService {
 
     // --- USB boards (apollo-miner) ---
     try {
-      const statsDir = path.resolve(__dirname, '../../backend/apollo-miner/');
+      const statsDir = getMinerRuntimeDir();
       const statsFilePattern = /^apollo-miner.*$/;
       let statsFiles = await fs.readdir(statsDir);
       // The Apollo III stat file lives in the same dir but is read separately.
@@ -486,8 +487,7 @@ class MinerService {
     // the III binary; there is no separate systemd unit.
     try {
       const iiiStatsDir =
-        process.env.APOLLO_III_STATS_DIR ||
-        path.resolve(__dirname, '../../backend/apollo-miner/');
+        process.env.APOLLO_III_STATS_DIR || getMinerRuntimeDir();
       const iiiPath = `${iiiStatsDir}/apollo-miner-3.json`;
       await fs.access(iiiPath);
       const parsed = await this._parseStatFileEntry(iiiPath, {

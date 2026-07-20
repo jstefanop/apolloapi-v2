@@ -1,17 +1,11 @@
 const crypto = require('crypto');
 const fs = require('fs').promises;
-const os = require('os');
 const path = require('path');
+const { getStateDir } = require('../paths');
 
 const CREDENTIALS_VERSION = 1;
 const LAN_USERNAME = 'futurebit';
 const CKPOOL_USERNAME = 'apollo-ckpool';
-
-function getStateDir() {
-  if (process.env.APOLLO_STATE_DIR) return process.env.APOLLO_STATE_DIR;
-  if (process.env.NODE_ENV === 'production') return '/var/lib/apollo';
-  return path.join(os.tmpdir(), 'apollo-runtime');
-}
 
 function getCredentialsPath(stateDir = getStateDir()) {
   return path.join(stateDir, 'rpc-credentials.json');

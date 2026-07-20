@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { getMinerRuntimeDir } = require('./paths');
 
 let devMinerInterval = null;
-const statsDir = path.resolve(__dirname, '../backend/apollo-miner/');
+const statsDir = getMinerRuntimeDir();
 const ckpoolDir = path.resolve(__dirname, '../backend/ckpool/logs');
 let statsFilePath = null;
 

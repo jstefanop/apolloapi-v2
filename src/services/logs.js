@@ -3,6 +3,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const { GraphQLError } = require('graphql');
+const { getMinerRuntimeDir } = require('../paths');
 
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
@@ -107,10 +108,7 @@ class LogsService {
             }
           } else {
             // Fallback to the log file path for development
-            logPath = path.resolve(
-              __dirname,
-              '../../backend/apollo-miner/miner.log'
-            );
+            logPath = path.join(getMinerRuntimeDir(), 'miner.log');
           }
           break;
         case 'APOLLO_API':
