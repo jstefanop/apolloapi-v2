@@ -196,23 +196,30 @@ async function fetchStatistics() {
 
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
-      // Delete old data (older than 30 days)
-      const rowsBefore = await trx('time_series_data').count('* as count');
-      console.log('Rows before deletion:', rowsBefore[0].count);
+      // Delete old data (older than 30 days). The row-count bookkeeping around it
+      // is dev-only: in production it ran every 60s — two extra COUNT queries and
+      // four log lines per cycle, ~11.5k lines/day onto the device's eMMC, for
+      // numbers nobody reads there.
+      if (process.env.NODE_ENV === 'development') {
+        const rowsBefore = await trx('time_series_data').count('* as count');
+        console.log('Rows before deletion:', rowsBefore[0].count);
+      }
 
       const deletedRows = await trx('time_series_data')
         .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
-      console.log('Deleted rows:', deletedRows);
 
-      const rowsAfter = await trx('time_series_data').count('* as count');
-      console.log('Rows after deletion:', rowsAfter[0].count);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Deleted rows:', deletedRows);
+        const rowsAfter = await trx('time_series_data').count('* as count');
+        console.log('Rows after deletion:', rowsAfter[0].count);
+      }
 
       // Insert new data
       await trx('time_series_data').insert(boards);
     });
 
-    console.log('Time series data inserted');
+    if (process.env.NODE_ENV === 'development') console.log('Time series data inserted');
   } catch (error) {
     console.error('Error while fetching statistics from the miner:', error);
   }
@@ -252,23 +259,27 @@ async function fetchSoloStatistics() {
 
     // Insert data into DB in a transaction
     await knex.transaction(async (trx) => {
-      // Delete old data (older than 30 days)
-      const rowsBefore = await trx('time_series_solo_data').count('* as count');
-      console.log('Solo rows before deletion:', rowsBefore[0].count);
+      // Dev-only bookkeeping, same as the miner time-series above.
+      if (process.env.NODE_ENV === 'development') {
+        const rowsBefore = await trx('time_series_solo_data').count('* as count');
+        console.log('Solo rows before deletion:', rowsBefore[0].count);
+      }
 
       const deletedRows = await trx('time_series_solo_data')
         .where('createdAt', '<', knex.raw("datetime('now', '-30 days')"))
         .del();
-      console.log('Solo deleted rows:', deletedRows);
 
-      const rowsAfter = await trx('time_series_solo_data').count('* as count');
-      console.log('Solo rows after deletion:', rowsAfter[0].count);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Solo deleted rows:', deletedRows);
+        const rowsAfter = await trx('time_series_solo_data').count('* as count');
+        console.log('Solo rows after deletion:', rowsAfter[0].count);
+      }
 
       // Insert new data
       await trx('time_series_solo_data').insert(soloData);
     });
 
-    console.log('Time series solo data inserted');
+    if (process.env.NODE_ENV === 'development') console.log('Time series solo data inserted');
   } catch (error) {
     console.error('Error while fetching statistics from solo pool:', error);
   }

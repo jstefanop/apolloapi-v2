@@ -247,6 +247,11 @@ cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
 
 echo -e "${GREEN} ---> Copied apollo-api.service, apollo-ui-v2.service and ckpool.service to /etc/systemd/system${NC}"
 
+# Persistent journald on the eMMC, so an abrupt hang leaves evidence (see
+# backend/systemd/journald-apollo.conf). Without it a hard crash is undiagnosable.
+bash $APOLLO_DIR/backend/utils/install-journald.sh
+systemctl restart systemd-journald
+
 # Reload systemd daemon to recognize the new service
 systemctl daemon-reload
 

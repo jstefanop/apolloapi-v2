@@ -558,34 +558,37 @@ class ServiceMonitor {
       );
       const results = await Promise.all(promises);
 
-      // Always log service status summary for monitoring
-      console.log('Service Status:');
-      for (const result of results) {
-        console.log(`  - ${result.serviceName}: ${result.status} (systemd: ${result.systemdStatus})`);
-      }
+      // Service-status summary and discrepancy report — dev-only. In production
+      // it ran every 10s: the summary alone is ~8 lines a cycle (~69k lines/day
+      // onto the device's eMMC), and the discrepancy check does one DB query per
+      // service each time, all just to print. The monitor reconciles state in
+      // checkServiceStatus; this block only reported it, so silencing it costs
+      // nothing operationally.
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Service Status:');
+        for (const result of results) {
+          console.log(`  - ${result.serviceName}: ${result.status} (systemd: ${result.systemdStatus})`);
+        }
 
-      // Check for discrepancies with requested status
-      const discrepancies = [];
-      for (const result of results) {
-        const dbRecord = await this.knex('service_status')
-          .where({ service_name: result.serviceName })
-          .first();
-        
-        if (dbRecord && dbRecord.requested_status) {
-          if (dbRecord.requested_status !== result.status) {
+        const discrepancies = [];
+        for (const result of results) {
+          const dbRecord = await this.knex('service_status')
+            .where({ service_name: result.serviceName })
+            .first();
+          if (dbRecord && dbRecord.requested_status && dbRecord.requested_status !== result.status) {
             discrepancies.push({
               service: result.serviceName,
               requested: dbRecord.requested_status,
-              actual: result.status
+              actual: result.status,
             });
           }
         }
-      }
 
-      if (discrepancies.length > 0) {
-        console.log('⚠️  Discrepancies:');
-        for (const d of discrepancies) {
-          console.log(`  - ${d.service}: requested=${d.requested}, actual=${d.actual}`);
+        if (discrepancies.length > 0) {
+          console.log('⚠️  Discrepancies:');
+          for (const d of discrepancies) {
+            console.log(`  - ${d.service}: requested=${d.requested}, actual=${d.actual}`);
+          }
         }
       }
 

@@ -135,6 +135,13 @@ cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
 
+# journald: persistent journal on the eMMC so an abrupt hang leaves evidence
+# instead of nothing (the default journal in RAM + zram /var/log lose it). The
+# reboot below applies the config — no restart under the live services this
+# update is running beneath.
+echo -e "${YELLOW} ---> Configuring persistent journald${NC}"
+bash $APOLLO_DIR/backend/utils/install-journald.sh
+
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
 

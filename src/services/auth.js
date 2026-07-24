@@ -94,7 +94,11 @@ class AuthService {
         await this.utils.auth.changeSystemPassword(password);
       }
     } catch (err) {
-      console.log('ERROR', err);
+      // Message only: this is a Knex error carrying `sql` and `bindings`, and the
+      // bindings on the insert above include the password hash — logging the whole
+      // object leaks it into the journal. The error is propagated to the caller
+      // regardless.
+      console.error('Failed to set password:', err.message);
       throw err;
     }
   }
