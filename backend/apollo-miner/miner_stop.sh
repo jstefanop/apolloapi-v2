@@ -1,32 +1,50 @@
 #!/bin/bash
-cd /opt/apolloapi/backend/apollo-miner
 
+cd /opt/apolloapi/backend/apollo-miner || exit 1
+
+ARMBIAN_RELEASE="/etc/armbian-release"
+if [[ -r "$ARMBIAN_RELEASE" ]]; then
+    . "$ARMBIAN_RELEASE"
+fi
 
 reset_hashboards()
 {
-    while [ $1 ];
-            do
-            ./apollo-helper -s $1 -r
-            sleep .5
-            shift
+    while [[ -n "${1:-}" ]]; do
+        ./apollo-helper -s "$1" -r
+        sleep .5
+        shift
     done
 }
 
-#quit all mining proccesses
+reset_external_hashboards()
+{
+    local ports=(/dev/ttyACM*)
+    if [[ -e ${ports[0]} ]]; then
+        reset_hashboards "${ports[@]}"
+    fi
+}
+
+# Quit all mining processes.
 screen -ls | grep '\.miner' | awk -F '\t|[.]' '{print $2}' | while read -r session
 do
-  echo "Killing session: $session"
-  screen -S "${session}" -X quit
+    echo "Killing session: $session"
+    screen -S "$session" -X quit
 done
 
-#reset internal hashboard
-gpio write 0 0
-sleep .5
-gpio write 0 1
+case "${BOARD_NAME:-}" in
+    "Apollo 3")
+        ;;
+    "Solo Node")
+        reset_external_hashboards
+        ;;
+    *)
+        # Reset the internal hashboard.
+        gpio write 0 0
+        sleep .5
+        gpio write 0 1
 
-#find and reset external hashboards
-
-ports=$(ls /dev/ttyACM*)
-reset_hashboards $ports
+        reset_external_hashboards
+        ;;
+esac
 
 echo "Stopped"

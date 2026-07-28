@@ -17,17 +17,17 @@ if [ -f /etc/armbian-release ]; then
     . /etc/armbian-release
 fi
 
-if [ "$BOARD_NAME" = "Solo Node" ]; then
-    # Run Solo Node UI mode detector
+if [ "$BOARD_NAME" = "Solo Node" ] || [ "$BOARD_NAME" = "Apollo 3" ]; then
+    # Set the UI mode for Solo Node and Apollo III boards
     /opt/apolloapi/backend/utils/set_UI_mode.sh
 else
-    # Configure GPIOs for non–Solo Node boards
+    # Configure GPIOs for other boards
     gpio mode 1 out
     gpio write 1 0
     gpio mode 0 out
     gpio write 0 1
 
-    # Configure CPU for non–Solo Node boards
+    # Configure CPU for other boards
     cpufreq-set -c0 -u 1.2GHz -g CONSERVATIVE
 fi
 #mount nvme drive

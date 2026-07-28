@@ -1,54 +1,75 @@
 #!/bin/bash
 
-cd /opt/apolloapi/backend/apollo-miner
-settings=$(cat miner_config)
-mode=$(cat mode)
+cd /opt/apolloapi/backend/apollo-miner || exit 1
+
+ARMBIAN_RELEASE="/etc/armbian-release"
+if [[ -r "$ARMBIAN_RELEASE" ]]; then
+    . "$ARMBIAN_RELEASE"
+fi
 
 start_hashboards()
 {
-    while [ $1 ];
-            do
-            
-            local boardType=$(./apollo-helper -s $1)
-            
-            if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
-  				screen -dmS miner ./futurebit-miner -comport $1 -ao_mode 1 $settings -powermode $mode
-			elif [[ "$boardType" == *"Apollo-2"* ]]; then
-  				screen -dmS miner ./futurebit-miner-v2 -comport $1 -ao_mode 1 $settings -powermode $mode
-  			else
-  			    echo "unknown USB board"
-  			fi
-            
-            sleep 1
-            shift
+    while [[ -n "${1:-}" ]]; do
+        local port="$1"
+        local boardType
+        boardType=$(./apollo-helper -s "$port")
+
+        if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
+            screen -dmS miner ./futurebit-miner -comport "$port" -ao_mode 1 $settings
+        elif [[ "$boardType" == *"Apollo-2"* ]]; then
+            screen -dmS miner ./futurebit-miner-v2 -comport "$port" -ao_mode 1 $settings
+        else
+            echo "unknown USB board"
+        fi
+
+        sleep 1
+        shift
     done
 }
 
-#clear old log files
-rm apollo-miner*
+start_external_hashboards()
+{
+    local ports=(/dev/ttyACM*)
+    if [[ -e ${ports[0]} ]]; then
+        start_hashboards "${ports[@]}"
+    fi
+}
 
-#reset internal hashboard
-gpio write 0 0
-sleep .5
-gpio write 0 1
+case "${BOARD_NAME:-}" in
+    "Apollo 3")
+        settings3=$(<miner_config3)
+        screen -dmS miner ./futurebit-miner-v3 $settings3
+        ;;
+    "Solo Node")
+        settings=$(<miner_config)
+        start_external_hashboards
+        ;;
+    *)
+        settings=$(<miner_config)
 
-sleep 35
-#start internal hashboard
+        # Clear old log files.
+        rm apollo-miner*
 
-boardType=$(./apollo-helper -s /dev/ttyS1)
-            
-if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
-  	screen -dmS miner ./futurebit-miner -comport /dev/ttyS1 -ao_mode 1 $settings -powermode $mode
-elif [[ "$boardType" == *"Apollo-2"* ]]; then
-  	screen -dmS miner ./futurebit-miner-v2 -comport /dev/ttyS1 -ao_mode 1 $settings -powermode $mode
-else
-  	echo "internal board error"
-fi
+        # Reset the internal hashboard.
+        gpio write 0 0
+        sleep .5
+        gpio write 0 1
 
+        sleep 35
 
-#find and start external hashboards
+        # Start the internal hashboard.
+        boardType=$(./apollo-helper -s /dev/ttyS1)
 
-ports=$(ls /dev/ttyACM*)
-start_hashboards $ports
+        if [[ "$boardType" == *"Apollo-BTC"* || "$boardType" == *"RD6"* ]]; then
+            screen -dmS miner ./futurebit-miner -comport /dev/ttyS1 -ao_mode 1 $settings
+        elif [[ "$boardType" == *"Apollo-2"* ]]; then
+            screen -dmS miner ./futurebit-miner-v2 -comport /dev/ttyS1 -ao_mode 1 $settings
+        else
+            echo "internal board error"
+        fi
+
+        start_external_hashboards
+        ;;
+esac
 
 echo "Started"
