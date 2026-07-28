@@ -45,22 +45,34 @@ grep -qxF 'futurebit  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers || echo 'futurebit  A
 
 #### APP SETUP ####
 #########################
+# Where this device pulls its code from. Defaults to the official repos; a test
+# device can point elsewhere for a single run by exporting the variables:
+#   sudo APOLLO_GIT_BASE=https://github.com/someone bash image_install dev <branch>
+# Nothing is written to disk, so a device cannot be left silently pinned to a
+# fork by a config file somebody forgot about.
+APOLLO_GIT_BASE="${APOLLO_GIT_BASE:-https://github.com/jstefanop}"
+APOLLO_API_REPO="${APOLLO_API_REPO:-apolloapi-v2}"
+APOLLO_UI_REPO="${APOLLO_UI_REPO:-apolloui-v2}"
+APOLLO_API_URL="${APOLLO_GIT_BASE}/${APOLLO_API_REPO}.git"
+APOLLO_UI_URL="${APOLLO_GIT_BASE}/${APOLLO_UI_REPO}.git"
+
 # Clone the Apollo app
 echo -e "${YELLOW} ---> Cloning Apollo app${NC}"
 
 mkdir -p $APOLLO_DIR
 
 if [ "$1" = "dev" ]; then
-	echo -e "${YELLOW} ---> Using DEV branch${NC}"
-	git clone --single-branch --branch dev https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
-	rm -rf $APOLLO_DIR/apolloui
-	git clone --single-branch --branch dev https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+	# A second argument names the branch, matching install-v2's "dev <branch>".
+	BRANCH="${2:-dev}"
+	echo -e "${YELLOW} ---> Using branch ${BRANCH} from ${APOLLO_GIT_BASE}${NC}"
 else
+	BRANCH="main"
 	echo -e "${YELLOW} ---> Using PRODUCTION branch${NC}"
-	git clone --single-branch --branch main https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
-	rm -rf $APOLLO_DIR/apolloui
-	git clone --single-branch --branch main https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
 fi
+
+git clone --single-branch --branch "$BRANCH" "$APOLLO_API_URL" $APOLLO_DIR
+rm -rf $APOLLO_DIR/apolloui
+git clone --single-branch --branch "$BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR
 
 
 # Navigate to the /opt/apolloapi directory
