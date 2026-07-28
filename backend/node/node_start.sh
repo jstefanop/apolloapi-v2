@@ -25,12 +25,20 @@ log() { echo "[node-start] $*" >&2; }
 set_conf_by_ram_for_ibd() {
     local mem_kb mem_gb
 
-    #Set zram to 1GB during IBD 
-	
-	sudo swapoff /dev/zram0
-	sudo zramctl --size=1G /dev/zram0
-	sudo mkswap /dev/zram0
-	sudo swapon /dev/zram0
+    # Shrink zram to 1GB during IBD, to leave more RAM for bitcoind's cache.
+    #
+    # Best effort, and deliberately so: newer Armbian manages zram through
+    # armbian-zram-config, which holds the device and refuses the resize. Under
+    # `set -e` that failure used to abort this script entirely, so a memory
+    # optimisation stopped the node from starting at all.
+    if ! (sudo swapoff /dev/zram0 &&
+          sudo zramctl --size=1G /dev/zram0 &&
+          sudo mkswap /dev/zram0 &&
+          sudo swapon /dev/zram0) 2>/dev/null; then
+        log "WARN: could not resize zram for IBD (managed elsewhere?); continuing"
+        # Put it back into service if we got as far as switching it off.
+        sudo swapon /dev/zram0 2>/dev/null || true
+    fi
 	
 	#Get system RAM total
     # Suppress low-level awk noise; we log our own warning if it fails

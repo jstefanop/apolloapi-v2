@@ -12,13 +12,13 @@ if [ ! -b "$DEVICE"  ]; then
 	mkfs.ext4 /dev/nvme0n1p1
 
 	#configure node
-	mkdir /media/nvme
+	mkdir -p /media/nvme
 	mount /dev/nvme0n1p1 /media/nvme
 	tune2fs -m .1 /dev/nvme0n1p1
-	mkdir /media/nvme/Bitcoin
+	mkdir -p /media/nvme/Bitcoin
 	
 else
-        mkdir /media/nvme
+        mkdir -p /media/nvme
 	mount /dev/nvme0n1p1 /media/nvme
 fi
 
