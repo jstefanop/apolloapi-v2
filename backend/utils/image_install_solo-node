@@ -50,6 +50,15 @@ install_system_packages() {
         echo -e "${YELLOW} ---> Not available on this distro, skipping: ${missing[*]}${NC}" >&2
     fi
 
+    # An empty list means apt could not resolve a single name — an `apt-get
+    # update` that failed, or unusable package lists — not that this distro
+    # ships none of them. Installing nothing and exiting 0 there is the silent
+    # success this function exists to prevent.
+    if [ ${#available[@]} -eq 0 ]; then
+        echo -e "${RED} ---> No packages could be resolved; apt package lists look unusable${NC}" >&2
+        return 1
+    fi
+
     DEBIAN_FRONTEND=noninteractive apt-get -y -q install "${available[@]}"
 }
 
@@ -78,7 +87,7 @@ if [ -n "$BOARD_NAME_BEFORE" ] && [ -r /etc/armbian-release ]; then
     fi
 fi
 
-install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp
+install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp gnome-tweaks avahi-daemon
 
 #### SYSTEM SETUP ####
 #########################

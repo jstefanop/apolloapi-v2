@@ -50,6 +50,15 @@ install_system_packages() {
         echo -e "${YELLOW} ---> Not available on this distro, skipping: ${missing[*]}${NC}" >&2
     fi
 
+    # An empty list means apt could not resolve a single name — an `apt-get
+    # update` that failed, or unusable package lists — not that this distro
+    # ships none of them. Installing nothing and exiting 0 there is the silent
+    # success this function exists to prevent.
+    if [ ${#available[@]} -eq 0 ]; then
+        echo -e "${RED} ---> No packages could be resolved; apt package lists look unusable${NC}" >&2
+        return 1
+    fi
+
     DEBIAN_FRONTEND=noninteractive apt-get -y -q install "${available[@]}"
 }
 

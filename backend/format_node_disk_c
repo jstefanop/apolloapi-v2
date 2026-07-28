@@ -28,15 +28,35 @@ is_mounted() {
 
 # The units are stopped up front, so every exit has to put them back. Otherwise a
 # format that gave up halfway leaves bitcoind and swap down until someone reboots.
+#
+# Only with the disk actually mounted, though: the swap unit creates its 3G
+# swapfile at /media/nvme/swapfile, and with nothing mounted there that lands on
+# the eMMC root — filling it, and becoming unreclaimable the moment the disk is
+# mounted over it. bitcoind's datadir is on the same path.
 restore_services() {
-    systemctl start swap 2>/dev/null
-    systemctl start node 2>/dev/null
+    if is_mounted "$MOUNTPOINT"; then
+        systemctl start swap 2>/dev/null
+        systemctl start node 2>/dev/null
+    else
+        echo "format_node_disk: $MOUNTPOINT not mounted; leaving node and swap stopped" >&2
+    fi
 }
+
+# Two different failures, because they need two different reactions: -1 means
+# nothing was touched and a retry is safe, -2 means the disk has already been
+# wiped and the node will not come back until it is formatted successfully.
+FAILED_UNTOUCHED=-1
+FAILED_MODIFIED=-2
+DISK_MODIFIED=0
 
 fail() {
     echo "format_node_disk: $1" >&2
     restore_services
-    progress -1
+    if [ "$DISK_MODIFIED" -eq 1 ]; then
+        progress "$FAILED_MODIFIED"
+    else
+        progress "$FAILED_UNTOUCHED"
+    fi
     # Leave the failure visible long enough for the UI to poll it, then clear.
     sleep 8
     rm -f "$PROGRESS"
@@ -55,6 +75,7 @@ if is_mounted "$MOUNTPOINT"; then
     umount "$MOUNTPOINT" || fail "could not unmount $MOUNTPOINT; refusing to wipe a mounted disk"
 fi
 
+DISK_MODIFIED=1
 wipefs -af "$DEVICE" || fail "could not wipe $DEVICE"
 
 progress 30

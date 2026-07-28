@@ -333,3 +333,35 @@ describe('Settings API', () => {
     });
   });
 });
+// The tuning fields are settled when they are written, not when the miner
+// command line is rendered: a value only clamped later is stored and read back
+// at its original figure, so the UI reports one configuration while the miner
+// runs another, permanently and with nothing to reveal the disagreement.
+describe('Apollo III tuning is settled on write', () => {
+  const utils = require('../src/utils');
+  const settingsService = require('../src/services/settings')(knex, utils);
+
+  it('rejects a target hashrate outside the range the binary accepts', async () => {
+    await expect(settingsService.update({ minerHashrate: 99 })).rejects.toThrow(/5 and 22/);
+    await expect(settingsService.update({ minerHashrate: 1 })).rejects.toThrow(/5 and 22/);
+  });
+
+  it('rejects fan values outside their ranges', async () => {
+    await expect(settingsService.update({ fanTemp: 200 })).rejects.toThrow(/40 and 80/);
+    await expect(settingsService.update({ fanPwm: 5 })).rejects.toThrow(/10 and 100/);
+  });
+
+  it('accepts null, which is how a setting is cleared', async () => {
+    await expect(
+      settingsService.update({ minerHashrate: null, fanTemp: null, fanPwm: null })
+    ).resolves.toBeDefined();
+  });
+
+  it('gives custom mode a target instead of letting it run as eco', async () => {
+    // Without a hashrate the generator falls back to eco while the stored mode
+    // still reads "custom": the user picks custom and gets the lowest preset.
+    const result = await settingsService.update({ minerMode: 'custom' });
+    expect(result.minerMode).toBe('custom');
+    expect(result.minerHashrate).toBe(12);
+  });
+});

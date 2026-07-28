@@ -150,6 +150,11 @@ echo -e "${YELLOW} ---> Rebooting${NC}"
 
 echo "100" > $TMPFILE
 
+# Long enough for the UI to poll the 100. Removing the file in the same breath
+# left the browser with no reading above zero to go on, so a successful update
+# was reported as one that gave up before finishing.
+sleep 8
+
 rm $TMPFILE
 
 reboot

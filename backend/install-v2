@@ -50,6 +50,15 @@ install_system_packages() {
         echo -e "${YELLOW} ---> Not available on this distro, skipping: ${missing[*]}${NC}" >&2
     fi
 
+    # An empty list means apt could not resolve a single name — an `apt-get
+    # update` that failed, or unusable package lists — not that this distro
+    # ships none of them. Installing nothing and exiting 0 there is the silent
+    # success this function exists to prevent.
+    if [ ${#available[@]} -eq 0 ]; then
+        echo -e "${RED} ---> No packages could be resolved; apt package lists look unusable${NC}" >&2
+        return 1
+    fi
+
     DEBIAN_FRONTEND=noninteractive apt-get -y -q install "${available[@]}"
 }
 
@@ -96,6 +105,15 @@ grep -qxF 'futurebit  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers || echo 'futurebit  A
 
 #### APP SETUP ####
 #########################
+# Where this device pulls its code from. Defaults to the official repos; a test
+# device can point elsewhere for a single run by exporting the variables:
+#   sudo APOLLO_GIT_BASE=https://github.com/someone bash install-v2 dev <branch>
+APOLLO_GIT_BASE="${APOLLO_GIT_BASE:-https://github.com/jstefanop}"
+APOLLO_API_REPO="${APOLLO_API_REPO:-apolloapi-v2}"
+APOLLO_UI_REPO="${APOLLO_UI_REPO:-apolloui-v2}"
+APOLLO_API_URL="${APOLLO_GIT_BASE}/${APOLLO_API_REPO}.git"
+APOLLO_UI_URL="${APOLLO_GIT_BASE}/${APOLLO_UI_REPO}.git"
+
 # Clone the Apollo app
 echo -e "${YELLOW} ---> Cloning Apollo app${NC}"
 
@@ -103,21 +121,30 @@ mkdir -p $APOLLO_DIR
 
 if [ "$1" = "dev" ]; then
 	# If dev is specified, check if a custom branch is provided
-	if [ -n "$2" ]; then
-		BRANCH="$2"
-		echo -e "${YELLOW} ---> Using DEV mode with custom branch: $BRANCH${NC}"
-	else
-		BRANCH="dev"
-		echo -e "${YELLOW} ---> Using DEV mode with default branch: $BRANCH${NC}"
-	fi
-	git clone --single-branch --branch $BRANCH https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
-	rm -rf $APOLLO_DIR/apolloui
-	git clone --single-branch --branch $BRANCH https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+	BRANCH="${2:-dev}"
+	UI_FALLBACK_BRANCH="dev"
+	echo -e "${YELLOW} ---> Using DEV mode with branch: $BRANCH${NC}"
 else
+	BRANCH="main"
+	UI_FALLBACK_BRANCH="main"
 	echo -e "${YELLOW} ---> Using PRODUCTION branch${NC}"
-	git clone --single-branch --branch main https://github.com/jstefanop/apolloapi-v2.git $APOLLO_DIR
-	rm -rf $APOLLO_DIR/apolloui
-	git clone --single-branch --branch main https://github.com/jstefanop/apolloui-v2.git $APOLLO_UI_DIR
+fi
+
+if ! git clone --single-branch --branch "$BRANCH" "$APOLLO_API_URL" $APOLLO_DIR; then
+	echo -e "${RED} ---> Could not clone $APOLLO_API_URL branch $BRANCH${NC}" >&2
+	exit 1
+fi
+rm -rf $APOLLO_DIR/apolloui
+
+# The two repositories do not share a branch namespace: a backend feature branch
+# usually has no counterpart in the UI. Fall back rather than leaving the device
+# with no web interface, which is what an unchecked failure here produced.
+if ! git clone --single-branch --branch "$BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR 2>/dev/null; then
+	echo -e "${YELLOW} ---> No ${BRANCH} branch in the UI repo, using ${UI_FALLBACK_BRANCH}${NC}" >&2
+	if ! git clone --single-branch --branch "$UI_FALLBACK_BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR; then
+		echo -e "${RED} ---> Could not clone $APOLLO_UI_URL${NC}" >&2
+		exit 1
+	fi
 fi
 
 # Install firewall
