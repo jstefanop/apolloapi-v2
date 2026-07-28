@@ -20,6 +20,14 @@ const LEGACY_FAN_HIGH_DEFAULT = 60;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+// A tuning value counts as set only when it is a usable number. `0` in
+// particular reads like "no fixed speed" to anyone calling the API, but it used
+// to select the fixed-PWM branch and clamp up to 10 — pinning the fans at their
+// minimum with the PID loop switched off, which is the opposite of what it looks
+// like it asks for.
+const isSet = (value) =>
+  value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) > 0;
+
 // Super ECO is spelled three ways: `super_eco` in the GraphQL enum and the DB
 // (a hyphen is not a legal enum name), `supereco` on the Apollo III command line,
 // and `super-eco` in older UI builds. Normalise on the way in so the rest of this
@@ -93,7 +101,7 @@ function buildApollo3Config(common, settings, backupPool) {
   }
 
   const hashrate = settings.minerHashrate;
-  const hasHashrate = settings.minerMode === 'custom' && hashrate != null && hashrate !== '';
+  const hasHashrate = settings.minerMode === 'custom' && isSet(hashrate);
 
   if (hasHashrate) {
     args += ` -powermode custom -hashrate ${clamp(Number(hashrate), V3_HASHRATE_MIN, V3_HASHRATE_MAX)}`;
@@ -105,9 +113,9 @@ function buildApollo3Config(common, settings, backupPool) {
   }
 
   // A fixed PWM disables automatic control, so the two are mutually exclusive.
-  if (settings.fanPwm != null && settings.fanPwm !== '') {
+  if (isSet(settings.fanPwm)) {
     args += ` -fan_pwm ${clamp(Number(settings.fanPwm), V3_FAN_PWM_MIN, V3_FAN_PWM_MAX)}`;
-  } else if (settings.fanTemp != null && settings.fanTemp !== '') {
+  } else if (isSet(settings.fanTemp)) {
     args += ` -fan_temp ${clamp(Number(settings.fanTemp), V3_FAN_TEMP_MIN, V3_FAN_TEMP_MAX)}`;
   }
 

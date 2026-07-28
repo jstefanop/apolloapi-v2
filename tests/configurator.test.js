@@ -171,6 +171,23 @@ describe('configurator — Apollo III', () => {
     expect(config3).not.toContain('-fan_temp ');
   });
 
+  it('treats 0 as "no fixed speed", not as a request for the minimum', async () => {
+    // 0 is the natural way an API client says "no override", but it used to
+    // select the fixed-PWM branch and clamp up to 10 — pinning the fans at their
+    // slowest with the PID loop switched off, which is the opposite.
+    await generate([pool()], baseSettings({ fanPwm: 0, fanTemp: 55 }));
+    const { config3 } = writtenFiles();
+    expect(config3).not.toContain('-fan_pwm');
+    expect(config3).toContain('-fan_temp 55');
+  });
+
+  it('ignores a zero hashrate rather than emitting custom mode for it', async () => {
+    await generate([pool()], baseSettings({ minerMode: 'custom', minerHashrate: 0 }));
+    const { config3 } = writtenFiles();
+    expect(config3).not.toContain('-hashrate');
+    expect(config3).toContain('-powermode eco');
+  });
+
   it('clamps fan values to the ranges the binary accepts', async () => {
     await generate([pool()], baseSettings({ fanTemp: 200 }));
     expect(writtenFiles().config3).toContain('-fan_temp 80');

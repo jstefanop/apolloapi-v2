@@ -36,7 +36,10 @@ echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
 install_system_packages() {
     local available=() missing=() pkg
     for pkg in "$@"; do
-        if apt-cache policy "$pkg" 2>/dev/null | grep -q "Candidate: [^(]"; then
+        # LC_ALL=C: apt translates "Candidate:", so without it every package
+        # reads as unavailable under a non-English locale and we would install
+        # nothing at all — the very failure this function exists to prevent.
+        if LC_ALL=C apt-cache policy "$pkg" 2>/dev/null | grep -q "Candidate: [^(]"; then
             available+=("$pkg")
         else
             missing+=("$pkg")
@@ -52,7 +55,28 @@ install_system_packages() {
 
 # Install required system packages
 apt-get update
+# The Armbian packages own /etc/armbian-release, so this upgrade rewrites it and
+# resets BOARD_NAME to the stock board — which silently un-identifies an Apollo
+# III: set_UI_mode.sh stops writing the chassis (so the UI renders Apollo I/II
+# controls) and miner_start.sh falls through to the legacy branch (so it tries to
+# start a USB miner that is not there). Preserve it across the upgrade.
+BOARD_NAME_BEFORE=""
+if [ -r /etc/armbian-release ]; then
+    BOARD_NAME_BEFORE=$(grep -E "^BOARD_NAME=" /etc/armbian-release || true)
+fi
+
 apt-get -y upgrade
+
+if [ -n "$BOARD_NAME_BEFORE" ] && [ -r /etc/armbian-release ]; then
+    if ! grep -qxF "$BOARD_NAME_BEFORE" /etc/armbian-release; then
+        echo -e "${YELLOW} ---> Restoring ${BOARD_NAME_BEFORE} (reset by the upgrade)${NC}"
+        if grep -qE "^BOARD_NAME=" /etc/armbian-release; then
+            sed -i "s|^BOARD_NAME=.*|${BOARD_NAME_BEFORE}|" /etc/armbian-release
+        else
+            echo "$BOARD_NAME_BEFORE" >> /etc/armbian-release
+        fi
+    fi
+fi
 
 install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp
 
@@ -91,15 +115,30 @@ mkdir -p $APOLLO_DIR
 if [ "$1" = "dev" ]; then
 	# A second argument names the branch, matching install-v2's "dev <branch>".
 	BRANCH="${2:-dev}"
+	UI_FALLBACK_BRANCH="dev"
 	echo -e "${YELLOW} ---> Using branch ${BRANCH} from ${APOLLO_GIT_BASE}${NC}"
 else
 	BRANCH="main"
+	UI_FALLBACK_BRANCH="main"
 	echo -e "${YELLOW} ---> Using PRODUCTION branch${NC}"
 fi
 
-git clone --single-branch --branch "$BRANCH" "$APOLLO_API_URL" $APOLLO_DIR
+if ! git clone --single-branch --branch "$BRANCH" "$APOLLO_API_URL" $APOLLO_DIR; then
+    echo -e "${RED} ---> Could not clone $APOLLO_API_URL branch $BRANCH${NC}" >&2
+    exit 1
+fi
 rm -rf $APOLLO_DIR/apolloui
-git clone --single-branch --branch "$BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR
+
+# The two repositories do not share a branch namespace: a backend feature branch
+# usually has no counterpart in the UI. Fall back rather than leaving the device
+# with no web interface at all, which is what an unchecked failure here produced.
+if ! git clone --single-branch --branch "$BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR 2>/dev/null; then
+    echo -e "${YELLOW} ---> No ${BRANCH} branch in the UI repo, using ${UI_FALLBACK_BRANCH}${NC}" >&2
+    if ! git clone --single-branch --branch "$UI_FALLBACK_BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR; then
+        echo -e "${RED} ---> Could not clone $APOLLO_UI_URL${NC}" >&2
+        exit 1
+    fi
+fi
 
 
 # Navigate to the /opt/apolloapi directory

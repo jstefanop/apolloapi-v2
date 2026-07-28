@@ -35,9 +35,21 @@ set_conf_by_ram_for_ibd() {
           sudo zramctl --size=1G /dev/zram0 &&
           sudo mkswap /dev/zram0 &&
           sudo swapon /dev/zram0) 2>/dev/null; then
-        log "WARN: could not resize zram for IBD (managed elsewhere?); continuing"
-        # Put it back into service if we got as far as switching it off.
-        sudo swapon /dev/zram0 2>/dev/null || true
+        log "WARN: could not resize zram for IBD (managed elsewhere?)"
+
+        # Recovery matters more than the resize did. Failing halfway can leave the
+        # device with no swap at all, and bitcoind doing an IBD on a board with
+        # neither swap nor spare RAM is killed by the OOM reaper on repeat — a far
+        # worse outcome than simply not shrinking zram. Rebuild the signature if
+        # the resize destroyed it, then check we actually have swap back.
+        sudo swapon /dev/zram0 2>/dev/null ||
+            (sudo mkswap /dev/zram0 >/dev/null 2>&1 && sudo swapon /dev/zram0 2>/dev/null) ||
+            true
+
+        if ! grep -q "^/dev/zram0" /proc/swaps 2>/dev/null &&
+           ! grep -qE "^(/|[^ ]+swapfile)" /proc/swaps 2>/dev/null; then
+            log "ERROR: no swap is active; bitcoind may be OOM-killed during IBD"
+        fi
     fi
 	
 	#Get system RAM total

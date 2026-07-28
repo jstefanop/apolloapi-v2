@@ -2,10 +2,10 @@
 
 # Formats the node SSD and mounts it at /media/nvme.
 #
-# The progress file is what the UI polls: while it exists a format is running,
-# and removing it is what says "finished". It is therefore removed on every exit
-# path, including failures — otherwise a format that died halfway would leave the
-# dialog spinning forever.
+# The progress file is what the UI polls. It carries the outcome as well as the
+# position: 10..100 while running, and -1 if the format failed. Without that the
+# UI cannot tell a finished format from an aborted one — the file disappears
+# either way — and would report success over a disk that was never touched.
 
 PROGRESS=/tmp/format_node_disk_c_done
 DEVICE=/dev/nvme0n1
@@ -14,21 +14,44 @@ MOUNTPOINT=/media/nvme
 
 progress() { echo "$1" > "$PROGRESS"; }
 
+# `mountpoint`, not `findmnt --target`: the latter resolves to the *enclosing*
+# mount, so it answers "yes" for a directory that is not a mountpoint at all —
+# and a node drive that failed to mount is the main reason to format in the first
+# place. That made the guard abort exactly the case it was meant to serve.
+is_mounted() {
+    if command -v mountpoint >/dev/null 2>&1; then
+        mountpoint -q "$1"
+    else
+        findmnt -rn --mountpoint "$1" >/dev/null 2>&1
+    fi
+}
+
+# The units are stopped up front, so every exit has to put them back. Otherwise a
+# format that gave up halfway leaves bitcoind and swap down until someone reboots.
+restore_services() {
+    systemctl start swap 2>/dev/null
+    systemctl start node 2>/dev/null
+}
+
 fail() {
     echo "format_node_disk: $1" >&2
+    restore_services
+    progress -1
+    # Leave the failure visible long enough for the UI to poll it, then clear.
+    sleep 8
     rm -f "$PROGRESS"
     exit 1
 }
 
 progress 10
 
-# Stop node + swap. Neither is required to be running, so their failure is not
-# fatal — but the umount below is, since wiping a mounted disk corrupts it.
+# Neither unit has to be running, so their failure is not fatal — but the umount
+# below is, since wiping a mounted disk corrupts it.
 systemctl stop node
 swapoff "${MOUNTPOINT}/swapfile" 2>/dev/null
 sleep 10
 
-if findmnt -rn --target "$MOUNTPOINT" >/dev/null 2>&1; then
+if is_mounted "$MOUNTPOINT"; then
     umount "$MOUNTPOINT" || fail "could not unmount $MOUNTPOINT; refusing to wipe a mounted disk"
 fi
 
@@ -55,12 +78,12 @@ chown -R futurebit "${MOUNTPOINT}/Bitcoin/"
 
 progress 90
 
-#Start node + swap
-systemctl start swap
-systemctl start node
+restore_services
 
 progress 100
 
-sleep 5
+# Long enough for the UI to see the 100 that tells it this finished rather than
+# gave up.
+sleep 8
 
 rm -f "$PROGRESS"
