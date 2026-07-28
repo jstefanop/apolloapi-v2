@@ -50,18 +50,6 @@ describe('configurator — shared arguments', () => {
     expect(mode).toBeUndefined();
   });
 
-  it('appends the backup pool to both families when a second pool is set', async () => {
-    const pools = [
-      pool({ index: 0, url: 'stratum+tcp://main.example:1111', username: 'main' }),
-      pool({ index: 1, url: 'stratum+tcp://backup.example:2222', username: 'backup', password: 'y' }),
-    ];
-    await generate(pools, baseSettings());
-    const { config, config3 } = writtenFiles();
-    const backup = '-host2 backup.example -port2 2222 -user2 backup -pswd2 y';
-    expect(config).toContain(backup);
-    expect(config3).toContain(backup);
-  });
-
   it('adds -pwrled off when powerLedOff is set', async () => {
     await generate([pool()], baseSettings({ powerLedOff: true }));
     const { config, config3 } = writtenFiles();
@@ -121,6 +109,22 @@ describe('configurator — Apollo III', () => {
     expect(config3).not.toContain('-fan_temp_hi');
     // `config` is not a V3 power mode either.
     expect(config3).not.toContain('-powermode config');
+  });
+
+  it('takes the backup pool, which the USB binaries have no flags for', async () => {
+    const pools = [
+      pool({ index: 0, url: 'stratum+tcp://main.example:1111', username: 'main' }),
+      pool({ index: 1, url: 'stratum+tcp://backup.example:2222', username: 'backup', password: 'y' }),
+    ];
+    await generate(pools, baseSettings());
+    const { config, config3 } = writtenFiles();
+    const backup = '-host2 backup.example -port2 2222 -user2 backup -pswd2 y';
+
+    expect(config3).toContain(backup);
+    // Failover is Apollo III only: emitting it for Apollo I/II would hand the
+    // legacy binary flags it does not define.
+    expect(config).not.toContain('-host2');
+    expect(config).toContain('-host main.example');
   });
 
   it('spells Super ECO as supereco, the way the binary expects', async () => {

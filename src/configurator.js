@@ -32,19 +32,12 @@ const splitPoolUrl = (url) => {
 };
 
 /**
- * Pools and the power LED are spelled the same way by both binaries.
+ * The primary pool and the power LED are spelled the same way by both binaries.
+ * The backup pool is NOT shared: only Apollo III takes -host2 and friends.
  */
-function buildCommonArgs(mainPool, backupPool, settings) {
+function buildCommonArgs(mainPool, settings) {
   const { host, port } = splitPoolUrl(mainPool.url);
   let args = `-host ${host} -port ${port} -user ${mainPool.username} -pswd ${mainPool.password}`;
-
-  if (backupPool && backupPool.url) {
-    const backup = splitPoolUrl(backupPool.url);
-    if (backup.host && backup.port) {
-      args += ` -host2 ${backup.host} -port2 ${backup.port}` +
-        ` -user2 ${backupPool.username} -pswd2 ${backupPool.password}`;
-    }
-  }
 
   if (settings.powerLedOff) args += ' -pwrled off';
 
@@ -86,8 +79,18 @@ function buildLegacyConfig(common, settings) {
  * are orthogonal to the power mode, so someone can run eco and still tune the
  * fan — which matters, because the III is far more sensitive to fan settings.
  */
-function buildApollo3Config(common, settings) {
+function buildApollo3Config(common, settings, backupPool) {
   let args = common;
+
+  // Failover is an Apollo III capability — the USB binaries have no second-pool
+  // flags, so passing these to them would be a command line they reject.
+  if (backupPool && backupPool.url) {
+    const backup = splitPoolUrl(backupPool.url);
+    if (backup.host && backup.port) {
+      args += ` -host2 ${backup.host} -port2 ${backup.port}` +
+        ` -user2 ${backupPool.username} -pswd2 ${backupPool.password}`;
+    }
+  }
 
   const hashrate = settings.minerHashrate;
   const hasHashrate = settings.minerMode === 'custom' && hashrate != null && hashrate !== '';
@@ -162,9 +165,9 @@ const generate = async function (pools = null, settings = null ) {
 		return;
 	}
 
-	const common = buildCommonArgs(mainPool, backupPool, settings);
+	const common = buildCommonArgs(mainPool, settings);
 	const minerConfig = buildLegacyConfig(common, settings);
-	const minerConfig3 = buildApollo3Config(common, settings);
+	const minerConfig3 = buildApollo3Config(common, settings, backupPool);
 
 	const confDir = `${__dirname}/../backend/apollo-miner`;
 
