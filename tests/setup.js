@@ -162,6 +162,10 @@ beforeAll(async () => {
         table.integer('fan').defaultTo(null);
         table.integer('fan_low').defaultTo(40);
         table.integer('fan_high').defaultTo(60);
+        // Apollo III tuning (see migrations/20260728000000_apollo3_miner_settings.js)
+        table.integer('miner_hashrate').defaultTo(null);
+        table.integer('fan_temp').defaultTo(null);
+        table.integer('fan_pwm').defaultTo(null);
         table.boolean('api_allow').defaultTo(false);
         table.boolean('custom_approval').defaultTo(false);
         table.string('connected_wifi');

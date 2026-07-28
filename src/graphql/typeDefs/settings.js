@@ -5,7 +5,8 @@ module.exports = gql`
     Settings: SettingsActions
   }
 
-  enum MinerMode { eco, balanced, turbo, custom }
+  # super_eco is Apollo III only; the USB miners fall back to eco.
+  enum MinerMode { super_eco, eco, balanced, turbo, custom }
   enum TemperatureUnit { f, c }
   enum NodeSoftware { core_25_1, core_28_1, core_29_2, core_31_0, knots_29_2, knots_29_3 }
 
@@ -41,6 +42,12 @@ module.exports = gql`
     fan: Int
     fan_low: Int
     fan_high: Int
+    "Apollo III custom mode: target hashrate in TH/s (5-22). Replaces voltage/frequency, which the III tunes internally."
+    minerHashrate: Int
+    "Apollo III: automatic fan target temperature in C (40-80)."
+    fanTemp: Int
+    "Apollo III: fixed fan PWM percent (10-100). Overrides fanTemp."
+    fanPwm: Int
     apiAllow: Boolean
     customApproval: Boolean
     connectedWifi: String
@@ -71,6 +78,9 @@ module.exports = gql`
     fan: Int
     fan_low: Int!
     fan_high: Int!
+    minerHashrate: Int
+    fanTemp: Int
+    fanPwm: Int
     apiAllow: Boolean
     customApproval: Boolean
     connectedWifi: String
