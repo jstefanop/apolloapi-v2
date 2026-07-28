@@ -23,11 +23,38 @@ export DEBIAN_FRONTEND=noninteractive
 #########################
 echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
 
+# Install the system packages, skipping any the running distro no longer carries.
+#
+# The Apollo III image is built on a much newer Armbian than the Apollo I/II one,
+# and this list does not survive the jump: python2-dev is gone, and ntp is now a
+# virtual package with no candidate (systemd-timesyncd already keeps the clock in
+# sync). apt treats one unknown name as a fatal error and installs NOTHING, and
+# with no `set -e` the installer sailed on to report success — an Apollo III came
+# up without sqlite3, which update_system needs to read the settings, and without
+# tor. Filtering keeps one list working across both images, and anything skipped
+# is announced rather than swallowed.
+install_system_packages() {
+    local available=() missing=() pkg
+    for pkg in "$@"; do
+        if apt-cache policy "$pkg" 2>/dev/null | grep -q "Candidate: [^(]"; then
+            available+=("$pkg")
+        else
+            missing+=("$pkg")
+        fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo -e "${YELLOW} ---> Not available on this distro, skipping: ${missing[*]}${NC}" >&2
+    fi
+
+    DEBIAN_FRONTEND=noninteractive apt-get -y -q install "${available[@]}"
+}
+
 # Install required system packages
 apt-get update
 apt-get -y upgrade
 
-DEBIAN_FRONTEND=noninteractive apt-get -y -q install tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev libxml2-dev yasm libzmq3-dev build-essential libxslt1-dev python2-dev python-dev-is-python3 vim git sudo iptables network-manager screen ntp gnome-tweaks avahi-daemon
+install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp
 
 #### SYSTEM SETUP ####
 #########################
