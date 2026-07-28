@@ -94,12 +94,15 @@ class AuthService {
         await this.utils.auth.changeSystemPassword(password);
       }
     } catch (err) {
-      // Neither the error object nor its message may be logged as-is: this is a
-      // Knex error, and the bindings on the insert above are the password hash.
-      // The object carries them in `bindings`, and knex interpolates them into
-      // `message` too — which is why db.js sets compileSqlOnError:false. Log the
-      // code alone; the error still propagates to the caller.
-      console.error('Failed to set password. Database error code:', err.code || 'unknown');
+      // The message is safe to log — db.js sets compileSqlOnError:false, so knex
+      // leaves `?` placeholders in it rather than interpolating the bindings,
+      // which on the insert above are the password hash. The error OBJECT is not:
+      // it still carries `bindings`, so log the message only.
+      //
+      // This block also wraps changeSystemPassword, whose failures are plain
+      // Errors with no `code` — logging that alone left the one flow a user
+      // cannot retry past with nothing to explain it.
+      console.error('Failed to set password:', err.message);
       throw err;
     }
   }

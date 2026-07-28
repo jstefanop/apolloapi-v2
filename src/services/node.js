@@ -136,7 +136,13 @@ class NodeService {
       } catch (error) {
         if (error.code === 'ENOENT') {
           // File doesn't exist
-          console.log('format_node_disk_c_done file not found. Returning default progress.');
+          // No marker file is the normal state — nothing is running. The UI polls
+          // this continuously, so logging it unconditionally wrote thousands of
+          // lines a day into a journal this release makes persistent on the eMMC,
+          // rotating away the crash evidence it exists to keep.
+          if (process.env.NODE_ENV === 'development') {
+            console.log('format_node_disk_c_done file not found. Returning default progress.');
+          }
           fileExists = false;
         } else {
           throw error;

@@ -19,7 +19,19 @@ APOLLO_DIR="${APOLLO_DIR:-/opt/apolloapi}"
 if [ -d /var/log.hdd ]; then
   mkdir -p /var/log.hdd/journal
   if [ "$(readlink -f /var/log/journal 2>/dev/null)" != /var/log.hdd/journal ]; then
-    rm -rf /var/log/journal
+    # Never delete an existing journal: this runs on every update, and the
+    # archives under /var/log/journal are exactly the crash evidence the whole
+    # change exists to preserve — including the previous boot someone is updating
+    # in order to diagnose. Move the history across instead, and only replace the
+    # path once it is safe to do so.
+    if [ -d /var/log/journal ] && [ ! -L /var/log/journal ]; then
+      cp -a /var/log/journal/. /var/log.hdd/journal/ 2>/dev/null || true
+      mv /var/log/journal "/var/log/journal.migrated.$$" 2>/dev/null || true
+      rm -rf "/var/log/journal.migrated.$$" 2>/dev/null || true
+    else
+      # A symlink pointing somewhere else, or nothing at all: no history to lose.
+      rm -rf /var/log/journal
+    fi
     ln -sfn /var/log.hdd/journal /var/log/journal
   fi
 elif [ "$(findmnt -no FSTYPE /var/log 2>/dev/null)" = tmpfs ]; then

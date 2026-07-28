@@ -87,7 +87,13 @@ if [ -n "$BOARD_NAME_BEFORE" ] && [ -r /etc/armbian-release ]; then
     fi
 fi
 
-install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp gnome-tweaks avahi-daemon
+# A total failure here means apt could not read its lists at all, which makes
+# every later step build on a system missing sqlite3, tor and build-essential.
+# Better to stop than to finish and report success.
+if ! install_system_packages tor sqlite3 htop net-tools iputils-ping zip unzip whois traceroute vim openssh-server curl git libvips-dev libssl-dev libxslt-dev libxml2-dev imagemagick libmagickwand-dev libreadline-dev zlib1g-dev libsqlite3-dev libpq-dev yasm libzmq3-dev build-essential libxslt1-dev python-dev-is-python3 sudo iptables network-manager screen ntp gnome-tweaks avahi-daemon; then
+    echo -e "${RED} ---> Could not install the system packages; aborting${NC}" >&2
+    exit 1
+fi
 
 #### SYSTEM SETUP ####
 #########################

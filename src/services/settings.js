@@ -200,15 +200,25 @@ class SettingsService {
       // in the argument renderer where it stays invisible. Harmless on Apollo
       // I/II: custom there is driven by voltage and frequency, and miner_config3
       // is not the file that device reads.
-      if (settingsInput.minerMode === 'custom') {
-        const stored = await this._readSettings();
-        const hashrate =
-          settingsInput.minerHashrate !== undefined
-            ? settingsInput.minerHashrate
-            : stored?.minerHashrate;
-        if (hashrate === null || hashrate === undefined) {
-          settingsInput.minerHashrate = DEFAULT_APOLLO_III_HASHRATE;
-        }
+      // Decided on the resulting state, not on this request alone: a partial
+      // update that clears the hashrate without resending the mode would
+      // otherwise leave custom with nothing to act on, which is the mismatch this
+      // exists to prevent.
+      const storedSettings = await this._readSettings();
+      const resultingMode =
+        settingsInput.minerMode !== undefined
+          ? settingsInput.minerMode
+          : storedSettings?.minerMode;
+      const resultingHashrate =
+        settingsInput.minerHashrate !== undefined
+          ? settingsInput.minerHashrate
+          : storedSettings?.minerHashrate;
+
+      if (
+        resultingMode === 'custom' &&
+        (resultingHashrate === null || resultingHashrate === undefined)
+      ) {
+        settingsInput.minerHashrate = DEFAULT_APOLLO_III_HASHRATE;
       }
 
       // Get existing settings before update

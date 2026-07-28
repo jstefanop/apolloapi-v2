@@ -57,9 +57,10 @@ fail() {
     else
         progress "$FAILED_UNTOUCHED"
     fi
-    # Leave the failure visible long enough for the UI to poll it, then clear.
-    sleep 8
-    rm -f "$PROGRESS"
+    # The marker stays. A format that fails leaves the node down and, past the
+    # wipe, a disk with no filesystem — so the failure has to still be there when
+    # the user comes back, not only for whoever happened to be watching. The next
+    # format overwrites it, and /tmp clears on reboot.
     exit 1
 }
 

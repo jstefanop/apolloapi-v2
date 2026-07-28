@@ -156,7 +156,14 @@ beforeAll(async () => {
     if (!exists) {
       return knex.schema.createTable('settings', table => {
         table.increments('id');
-        table.string('miner_mode').defaultTo('balanced');
+        // Same CHECK the initial migration creates (table.enum on SQLite), plus
+        // super_eco: without it the constraint that migration 20260728120000
+        // exists to rewrite is unrepresented here, and the super_eco write path
+        // passes in CI whether or not that migration actually works.
+        table
+          .enu('miner_mode', ['super_eco', 'eco', 'balanced', 'turbo', 'custom'])
+          .notNullable()
+          .defaultTo('balanced');
         table.float('voltage').defaultTo(12.0);
         table.integer('frequency').defaultTo(650);
         table.integer('fan').defaultTo(null);

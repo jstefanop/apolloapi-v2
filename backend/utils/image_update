@@ -20,7 +20,26 @@ echo -e "${YELLOW} ---> Installing and upgrading required system packages${NC}"
 
 # Install required system packages
 apt-get update
+# The Armbian packages own /etc/armbian-release, so this upgrade rewrites it and
+# resets BOARD_NAME — which un-identifies an Apollo III: the UI renders Apollo
+# I/II controls and miner_start.sh launches the USB miner that is not there.
+BOARD_NAME_BEFORE=""
+if [ -r /etc/armbian-release ]; then
+    BOARD_NAME_BEFORE=$(grep -E "^BOARD_NAME=" /etc/armbian-release || true)
+fi
+
 apt-get -y upgrade
+
+if [ -n "$BOARD_NAME_BEFORE" ] && [ -r /etc/armbian-release ]; then
+    if ! grep -qxF "$BOARD_NAME_BEFORE" /etc/armbian-release; then
+        echo -e "${YELLOW} ---> Restoring ${BOARD_NAME_BEFORE} (reset by the upgrade)${NC}"
+        if grep -qE "^BOARD_NAME=" /etc/armbian-release; then
+            sed -i "s|^BOARD_NAME=.*|${BOARD_NAME_BEFORE}|" /etc/armbian-release
+        else
+            echo "$BOARD_NAME_BEFORE" >> /etc/armbian-release
+        fi
+    fi
+fi
 
 
 APOLLO_DIR=/opt/apolloapi
@@ -114,6 +133,13 @@ cp $APOLLO_DIR/backend/systemd/swap.service /etc/systemd/system/
 cp $APOLLO_DIR/backend/rc.local /etc/
 chmod +x /etc/rc.local
 cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
+
+# Persistent journald on the eMMC, so an abrupt hang leaves evidence (see
+# backend/systemd/journald-apollo.conf). Non-fatal: logging is a diagnostic aid,
+# never a reason to abort an update. This is a factory-capture flow that leaves
+# services stopped, so no restart — the config applies at the next boot.
+bash "${APOLLO_DIR}/backend/utils/install-journald.sh" "${APOLLO_DIR}" || \
+    echo "[journald] WARNING: could not install the journald policy; continuing" >&2
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
 systemctl daemon-reload
