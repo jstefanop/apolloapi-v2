@@ -368,6 +368,21 @@ class MinerService {
         return null;
       }
 
+      // The miner rewrites this file while we read it, and reports fields it has
+      // no measurement for yet as empty strings — which GraphQL cannot coerce
+      // into Float or Int, so a single restart replaced the whole miner page
+      // with "Float cannot represent non numeric value". Empty means "no reading",
+      // which is what null is for; the schema already allows it.
+      const blankToNull = (value) => {
+        if (value === '') return null;
+        if (Array.isArray(value)) return value.map(blankToNull);
+        if (value && typeof value === 'object') {
+          for (const key of Object.keys(value)) value[key] = blankToNull(value[key]);
+        }
+        return value;
+      };
+      received = blankToNull(received);
+
       received.uuid = fileDetails.id;
       received.version = fileDetails.version;
 
