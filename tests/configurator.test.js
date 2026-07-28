@@ -50,6 +50,19 @@ describe('configurator — shared arguments', () => {
     expect(mode).toBeUndefined();
   });
 
+  it.each([
+    ['empty', ''],
+    ['null', null],
+    ['whitespace-only', '   '],
+  ])('omits an %s optional primary password', async (_label, password) => {
+    await generate([pool({ password })], baseSettings());
+    const { config, config3 } = writtenFiles();
+    const expected = '-host pool.example.com -port 3333 -user wallet.worker -powermode balanced';
+
+    expect(config).toBe(expected);
+    expect(config3).toBe(expected);
+  });
+
   it('adds -pwrled off when powerLedOff is set', async () => {
     await generate([pool()], baseSettings({ powerLedOff: true }));
     const { config, config3 } = writtenFiles();
@@ -125,6 +138,23 @@ describe('configurator — Apollo III', () => {
     // legacy binary flags it does not define.
     expect(config).not.toContain('-host2');
     expect(config).toContain('-host main.example');
+  });
+
+  it('omits an empty optional backup password without consuming the next flag', async () => {
+    const pools = [
+      pool({ index: 0, url: 'stratum+tcp://main.example:1111', username: 'main' }),
+      pool({
+        index: 1,
+        url: 'stratum+tcp://backup.example:2222',
+        username: 'backup',
+        password: '',
+      }),
+    ];
+    await generate(pools, baseSettings());
+    const { config3 } = writtenFiles();
+
+    expect(config3).toContain('-host2 backup.example -port2 2222 -user2 backup -powermode balanced');
+    expect(config3).not.toContain('-pswd2');
   });
 
   it('spells Super ECO as supereco, the way the binary expects', async () => {

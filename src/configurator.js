@@ -28,6 +28,9 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const isSet = (value) =>
   value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) > 0;
 
+const hasText = (value) =>
+  value !== null && value !== undefined && String(value).trim() !== '';
+
 // Super ECO is spelled three ways: `super_eco` in the GraphQL enum and the DB
 // (a hyphen is not a legal enum name), `supereco` on the Apollo III command line,
 // and `super-eco` in older UI builds. Normalise on the way in so the rest of this
@@ -45,7 +48,9 @@ const splitPoolUrl = (url) => {
  */
 function buildCommonArgs(mainPool, settings) {
   const { host, port } = splitPoolUrl(mainPool.url);
-  let args = `-host ${host} -port ${port} -user ${mainPool.username} -pswd ${mainPool.password}`;
+  let args = `-host ${host} -port ${port} -user ${mainPool.username}`;
+
+  if (hasText(mainPool.password)) args += ` -pswd ${mainPool.password}`;
 
   if (settings.powerLedOff) args += ' -pwrled off';
 
@@ -96,7 +101,8 @@ function buildApollo3Config(common, settings, backupPool) {
     const backup = splitPoolUrl(backupPool.url);
     if (backup.host && backup.port) {
       args += ` -host2 ${backup.host} -port2 ${backup.port}` +
-        ` -user2 ${backupPool.username} -pswd2 ${backupPool.password}`;
+        ` -user2 ${backupPool.username}`;
+      if (hasText(backupPool.password)) args += ` -pswd2 ${backupPool.password}`;
     }
   }
 
