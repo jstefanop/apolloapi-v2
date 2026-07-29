@@ -21,6 +21,10 @@ reset_external_hashboards()
     local ports=(/dev/ttyACM*)
     if [[ -e ${ports[0]} ]]; then
         reset_hashboards "${ports[@]}"
+        # A reset makes these boards drop off the bus and come back tens of
+        # seconds later. Tell the next start to wait for them rather than probe
+        # an empty /dev and skip them; see miner_start.sh.
+        : > /run/apollo-miner-usb-reset
     fi
 }
 
