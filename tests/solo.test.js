@@ -220,6 +220,60 @@ describe('Solo API', () => {
     });
   });
 
+  describe('SoloService.getStats', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('publishes an inactive status without reading ckpool files', async () => {
+      jest.spyOn(SoloService, 'getStatus').mockResolvedValue('inactive');
+      const getCkpoolStats = jest
+        .spyOn(SoloService, '_getCkpoolStats')
+        .mockResolvedValue({
+          pool: { Workers: 1 },
+          users: [{ workers: 1 }],
+          blockFound: true,
+        });
+
+      const result = await SoloService.getStats();
+
+      expect(getCkpoolStats).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        status: 'inactive',
+        pool: null,
+        users: [],
+        blockFound: false,
+        timestamp: expect.any(String),
+        error: null,
+      });
+    });
+
+    it.each(['active', 'running'])(
+      'reads ckpool files when the service status is %s',
+      async (status) => {
+        jest.spyOn(SoloService, 'getStatus').mockResolvedValue(status);
+        const ckpoolData = {
+          pool: { Workers: 1 },
+          users: [{ workers: 1 }],
+          blockFound: true,
+        };
+        const getCkpoolStats = jest
+          .spyOn(SoloService, '_getCkpoolStats')
+          .mockResolvedValue(ckpoolData);
+
+        const result = await SoloService.getStats();
+
+        expect(getCkpoolStats).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+          status,
+          ...ckpoolData,
+          timestamp: expect.any(String),
+          error: null,
+        });
+      }
+    );
+  });
+
   describe('SoloService start/restart with _waitForActive (production)', () => {
     const originalNodeEnv = process.env.NODE_ENV;
 

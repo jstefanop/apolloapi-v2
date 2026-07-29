@@ -2,7 +2,7 @@
  * Apollo III tuning settings.
  *
  * The III tunes board voltage internally, so the legacy voltage/frequency pair
- * does not apply to it: custom mode is a single target hashrate (5-22 TH/s).
+ * does not apply to it: custom mode is a single target hashrate (5-20 TH/s).
  * Fan control is one PID target temperature, with an optional fixed-PWM override
  * for people who want to force it.
  *

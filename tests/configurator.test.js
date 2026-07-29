@@ -169,9 +169,9 @@ describe('configurator — Apollo III', () => {
     expect(config3).toContain('-hashrate 18');
   });
 
-  it('clamps the target hashrate to the range the binary accepts (5-22)', async () => {
+  it('clamps the target hashrate to the range the UI exposes (5-20)', async () => {
     await generate([pool()], baseSettings({ minerMode: 'custom', minerHashrate: 99 }));
-    expect(writtenFiles().config3).toContain('-hashrate 22');
+    expect(writtenFiles().config3).toContain('-hashrate 20');
 
     fs.promises.writeFile.mockClear();
     await generate([pool()], baseSettings({ minerMode: 'custom', minerHashrate: 1 }));

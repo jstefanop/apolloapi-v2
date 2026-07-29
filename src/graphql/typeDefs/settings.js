@@ -42,7 +42,7 @@ module.exports = gql`
     fan: Int
     fan_low: Int
     fan_high: Int
-    "Apollo III custom mode: target hashrate in TH/s (5-22). Replaces voltage/frequency, which the III tunes internally."
+    "Apollo III custom mode: target hashrate in TH/s (5-20). Replaces voltage/frequency, which the III tunes internally."
     minerHashrate: Int
     "Apollo III: automatic fan target temperature in C (40-80)."
     fanTemp: Int

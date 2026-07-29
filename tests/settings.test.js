@@ -342,8 +342,8 @@ describe('Apollo III tuning is settled on write', () => {
   const settingsService = require('../src/services/settings')(knex, utils);
 
   it('rejects a target hashrate outside the range the binary accepts', async () => {
-    await expect(settingsService.update({ minerHashrate: 99 })).rejects.toThrow(/5 and 22/);
-    await expect(settingsService.update({ minerHashrate: 1 })).rejects.toThrow(/5 and 22/);
+    await expect(settingsService.update({ minerHashrate: 99 })).rejects.toThrow(/5 and 20/);
+    await expect(settingsService.update({ minerHashrate: 1 })).rejects.toThrow(/5 and 20/);
   });
 
   it('rejects fan values outside their ranges', async () => {

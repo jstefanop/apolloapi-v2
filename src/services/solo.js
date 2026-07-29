@@ -154,14 +154,21 @@ class SoloService {
     try {
       // Get basic service status
       const status = await this.getStatus();
-      
-      // Get ckpool statistics by parsing the log files
-      let ckpoolData = null;
-      try {
-        ckpoolData = await this._getCkpoolStats();
-      } catch (ckpoolError) {
-        console.error('Error getting solo stats:', ckpoolError);
-        // Continue with null ckpool data instead of failing completely
+
+      // Keep publishing status while ckpool is stopped, but do not poll files
+      // that only exist after the service has started.
+      let ckpoolData = {
+        pool: null,
+        users: [],
+        blockFound: false,
+      };
+      if (status === 'active' || status === 'running') {
+        try {
+          ckpoolData = await this._getCkpoolStats();
+        } catch (ckpoolError) {
+          console.error('Error getting solo stats:', ckpoolError);
+          // Continue with empty ckpool data instead of failing completely
+        }
       }
 
       // Build the stats object

@@ -9,7 +9,7 @@ const { knex } = require('./db')
 // Anything shared lives in buildCommonArgs(); everything else is per-family.
 
 const V3_HASHRATE_MIN = 5;
-const V3_HASHRATE_MAX = 22;
+const V3_HASHRATE_MAX = 20;
 const V3_FAN_TEMP_MIN = 40;
 const V3_FAN_TEMP_MAX = 80;
 const V3_FAN_PWM_MIN = 10;

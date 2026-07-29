@@ -1,7 +1,7 @@
 const { GraphQLError } = require('graphql');
 const generateConf = require('../configurator');
 
-// Middle of the range apollo-miner-v3 accepts (5-22 TH/s); the UI seeds the same
+// Middle of the range the UI exposes for Apollo III custom mode (5-20 TH/s); the UI seeds the same
 // value when someone picks custom mode.
 const DEFAULT_APOLLO_III_HASHRATE = 12;
 
@@ -102,10 +102,10 @@ class SettingsService {
   // Apollo III tuning. Validated here, on the way in, rather than clamped when the
   // command line is rendered: a value that is only clamped later is stored and
   // read back at its original figure, so the UI reports 99 TH/s while the miner
-  // runs at 22 and nothing tells the user the two disagree.
+  // runs at 20 and nothing tells the user the two disagree.
   _validateApolloIiiTuning(input) {
     const ranges = {
-      minerHashrate: [5, 22, 'Target hashrate must be between 5 and 22 TH/s'],
+      minerHashrate: [5, 20, 'Target hashrate must be between 5 and 20 TH/s'],
       fanTemp: [40, 80, 'Fan target temperature must be between 40 and 80 C'],
       fanPwm: [10, 100, 'Fan speed must be between 10 and 100%'],
     };
