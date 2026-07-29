@@ -7,11 +7,24 @@ if [[ -r "$ARMBIAN_RELEASE" ]]; then
     . "$ARMBIAN_RELEASE"
 fi
 
-settings=$(<miner_config)
-settings3=$(<miner_config3)
+# Read each config only if it is there. Both are read up front, before the board
+# is known, so every device reads the file it will never use: a Solo Node has no
+# miner_config3, and a device whose settings have never been saved has neither.
+# `$(<file)` on a missing file prints "No such file or directory" and leaves the
+# variable empty — and with Restart=always on the unit, that line lands in the
+# journal every 30 seconds on a Solo Node, which is where it was found.
+#
+# Empty is not silently fine, though: a miner started with no pool is a miner
+# that mines for nobody. Each branch below says so for the file it actually uses.
+settings=""
+settings3=""
+[[ -r miner_config  ]] && settings=$(<miner_config)
+[[ -r miner_config3 ]] && settings3=$(<miner_config3)
 
 start_hashboards()
 {
+    [[ -n "$settings" ]] || echo "miner_config is missing or empty: USB boards will start with no pool"
+
     while [[ -n "${1:-}" ]]; do
         local port="$1"
         local boardType
@@ -98,11 +111,14 @@ rm -f apollo-miner.* apollo-miner-v*.*
 
 case "${BOARD_NAME:-}" in
     "Apollo 3")
+        [[ -n "$settings3" ]] || echo "miner_config3 is missing or empty: the internal board will start with no pool"
         screen -dmS miner ./futurebit-miner-v3 $settings3
         ;;
     "Solo Node")
         ;;
     *)
+        [[ -n "$settings" ]] || echo "miner_config is missing or empty: the internal board will start with no pool"
+
         # Reset the internal hashboard.
         gpio write 0 0
         sleep .5
