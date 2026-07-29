@@ -32,19 +32,16 @@ do
 done
 
 case "${BOARD_NAME:-}" in
-    "Apollo 3")
-        ;;
-    "Solo Node")
-        reset_external_hashboards
+    "Apollo 3"|"Solo Node")
         ;;
     *)
         # Reset the internal hashboard.
         gpio write 0 0
         sleep .5
         gpio write 0 1
-
-        reset_external_hashboards
         ;;
 esac
+
+reset_external_hashboards
 
 echo "Stopped"

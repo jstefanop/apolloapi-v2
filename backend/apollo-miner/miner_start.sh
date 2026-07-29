@@ -7,6 +7,9 @@ if [[ -r "$ARMBIAN_RELEASE" ]]; then
     . "$ARMBIAN_RELEASE"
 fi
 
+settings=$(<miner_config)
+settings3=$(<miner_config3)
+
 start_hashboards()
 {
     while [[ -n "${1:-}" ]]; do
@@ -37,16 +40,11 @@ start_external_hashboards()
 
 case "${BOARD_NAME:-}" in
     "Apollo 3")
-        settings3=$(<miner_config3)
         screen -dmS miner ./futurebit-miner-v3 $settings3
         ;;
     "Solo Node")
-        settings=$(<miner_config)
-        start_external_hashboards
         ;;
     *)
-        settings=$(<miner_config)
-
         # Clear old log files.
         rm apollo-miner*
 
@@ -67,9 +65,9 @@ case "${BOARD_NAME:-}" in
         else
             echo "internal board error"
         fi
-
-        start_external_hashboards
         ;;
 esac
+
+start_external_hashboards
 
 echo "Started"
