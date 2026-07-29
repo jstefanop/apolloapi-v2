@@ -82,6 +82,20 @@ start_external_hashboards()
     fi
 }
 
+# Clear the stat files of boards that are enumerated, and can therefore vanish.
+# The readers treat any stat file on disk as a hashboard: unplug a USB unit and
+# it stays in the UI for ever, counted but never active, and the 60s time-series
+# job keeps recording its last hashrate into the totals. This used to be a bare
+# `rm apollo-miner*` before the per-board case existed, so Apollo 3 and Solo Node
+# lost it and never clean up after an external board.
+#
+# Deliberately NOT apollo-miner-3.json: that is a fixed-name singleton for the
+# internal Apollo III board, which cannot go phantom. Deleting it would blank the
+# board for the seconds before the binary writes its first stats, for nothing.
+# Every Apollo I/II board — internal included — is uid-named, so there the two
+# globs still clear everything, exactly as before.
+rm -f apollo-miner.* apollo-miner-v*.*
+
 case "${BOARD_NAME:-}" in
     "Apollo 3")
         screen -dmS miner ./futurebit-miner-v3 $settings3
@@ -89,9 +103,6 @@ case "${BOARD_NAME:-}" in
     "Solo Node")
         ;;
     *)
-        # Clear old log files.
-        rm apollo-miner*
-
         # Reset the internal hashboard.
         gpio write 0 0
         sleep .5
