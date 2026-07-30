@@ -55,7 +55,12 @@ class MinerService {
           });
         console.log('Dev miner started - status updated to online');
       } else {
-        await this._execCommand('sudo systemctl start apollo-miner');
+        // --no-block: miner_start.sh sleeps ~35s waiting for USB boards to
+        // enumerate, and a forking unit blocks systemctl for that whole time.
+        // The board reset and that wait still run in full on the device; we just
+        // don't hold the API call open for them. The service monitor reports the
+        // miner coming online.
+        await this._execCommand('sudo systemctl start --no-block apollo-miner');
       }
     } catch (error) {
       throw new GraphQLError(`Failed to start miner: ${error.message}`);
@@ -127,7 +132,9 @@ class MinerService {
           });
         console.log('Dev miner restarted - status updated to online');
       } else {
-        await this._execCommand('sudo systemctl restart apollo-miner');
+        // --no-block: see start(). The 35s device-side wait is unchanged; the
+        // API returns at once and the service monitor tracks the miner online.
+        await this._execCommand('sudo systemctl restart --no-block apollo-miner');
       }
     } catch (error) {
       throw new GraphQLError(`Failed to restart miner: ${error.message}`);
