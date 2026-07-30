@@ -145,9 +145,13 @@ fi
 rm -rf $APOLLO_DIR/apolloui
 
 # The two repositories do not share a branch namespace: a backend feature branch
-# usually has no counterpart in the UI. Fall back rather than leaving the device
-# with no web interface at all, which is what an unchecked failure here produced.
+# usually has no counterpart in the UI. Staging is different: release images
+# must use matching API/UI staging branches so they can move to main together.
 if ! git clone --single-branch --branch "$BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR 2>/dev/null; then
+    if [ "$BRANCH" = "staging" ]; then
+        echo -e "${RED} ---> The UI staging branch is required for a staging install${NC}" >&2
+        exit 1
+    fi
     echo -e "${YELLOW} ---> No ${BRANCH} branch in the UI repo, using ${UI_FALLBACK_BRANCH}${NC}" >&2
     if ! git clone --single-branch --branch "$UI_FALLBACK_BRANCH" "$APOLLO_UI_URL" $APOLLO_UI_DIR; then
         echo -e "${RED} ---> Could not clone $APOLLO_UI_URL${NC}" >&2

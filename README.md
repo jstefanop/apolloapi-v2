@@ -79,6 +79,48 @@ sudo bash backend/install-v2 dev <branch>
 
 Use the `backend/utils/` installers for current image/device setup unless you specifically need the older `install-v2` path.
 
+### Staged release images
+
+To install a release candidate without publishing it on `main`, create matching
+`staging` branches in both `apolloapi-v2` and `apolloui-v2`, then run:
+
+```sh
+sudo bash backend/utils/image_install dev staging
+```
+
+A staging install requires the UI staging branch; it will not fall back to
+`dev`. The branch-aware `backend/update` and its
+`backend/utils/update_git.sh` helper must already be present on staging before
+the image is installed.
+
+Keep the staged UI version higher than the version currently published on
+`main`, and keep the API and UI `package.json` versions in step with each other.
+Staged devices stay frozen for as long as that holds. When the release is ready:
+
+1. Merge the matching API and UI staging branches into `main`.
+2. Publish a UI version strictly newer than the staged one, for example `2.1.4`
+   over a staged `2.1.3`.
+3. Run the normal update from the UI.
+
+Production update checks continue to watch the UI `main` version. Once that
+version is newer, `backend/update` explicitly fetches and switches both device
+repositories to `main`, then builds and reboots as usual. It does not install
+later staging commits. Manually running `backend/update` on any non-main
+checkout also intentionally moves both repositories to `main`.
+
+After the reboot, verify the migration with:
+
+```sh
+git -C /opt/apolloapi branch --show-current
+git -C /opt/apolloapi/apolloui-v2 branch --show-current
+```
+
+Both commands must report `main`. The factory-only `image_update` scripts keep
+their existing branch behavior and are not the staging-to-main promotion path.
+Devices already on `main` still use their previously installed updater for the
+first release containing this helper; the new safeguards apply after that
+bootstrap update succeeds.
+
 ## Production Updates
 
 For image/device installs that were originally set up with `image_install`, use:

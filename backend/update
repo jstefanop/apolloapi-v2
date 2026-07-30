@@ -5,37 +5,91 @@ RED='\033[0;31m'
 NC='\033[0m'
 TMPFILE='/tmp/update_progress'
 APOLLO_DIR=/opt/apolloapi
-
-rm $TMPFILE
-touch $TMPFILE
+APOLLO_UI_DIR=$APOLLO_DIR/apolloui-v2
+GIT_HELPER=$APOLLO_DIR/backend/utils/update_git.sh
 
 if [ "$EUID" -ne 0 ]
   then echo -e "${RED}Update script must be run by root or with sudo${NC}"
-  exit
+  exit 1
 fi
 
-echo "10" > $TMPFILE
+rm -f "$TMPFILE"
+touch "$TMPFILE" || exit 1
 
+fail_update() {
+    echo -e "${RED}Update failed: $1${NC}" >&2
+    echo "-10" > "$TMPFILE"
+    exit 1
+}
 
-git config --global --add safe.directory $APOLLO_DIR
-git config --global --add safe.directory $APOLLO_DIR/apolloui-v2
+echo "10" > "$TMPFILE"
 
-chown -R futurebit $APOLLO_DIR
+if [ ! -r "$GIT_HELPER" ]; then
+    fail_update "git update helper is missing"
+fi
 
-cd $APOLLO_DIR
+. "$GIT_HELPER" || fail_update "could not load git update helper"
 
-git reset --hard
-git pull
+git config --global --add safe.directory "$APOLLO_DIR"
+git config --global --add safe.directory "$APOLLO_UI_DIR"
 
-cd $APOLLO_DIR/apolloui-v2
+chown -R futurebit "$APOLLO_DIR"
 
-git reset --hard
-git pull
+API_ORIGINAL_BRANCH=$(apollo_git_current_branch "$APOLLO_DIR" 2>/dev/null || true)
+UI_ORIGINAL_BRANCH=$(apollo_git_current_branch "$APOLLO_UI_DIR" 2>/dev/null || true)
 
-chown -R futurebit $APOLLO_DIR
+if ! API_ORIGINAL_COMMIT=$(apollo_git_current_commit "$APOLLO_DIR"); then
+    fail_update "could not read the API repository state"
+fi
 
-echo "20" > $TMPFILE
+if ! UI_ORIGINAL_COMMIT=$(apollo_git_current_commit "$APOLLO_UI_DIR"); then
+    fail_update "could not read the UI repository state"
+fi
+
+rollback_repositories() {
+    local rollback_failed=0
+
+    apollo_git_restore \
+        "$APOLLO_DIR" "$API_ORIGINAL_BRANCH" "$API_ORIGINAL_COMMIT" \
+        || rollback_failed=1
+    apollo_git_restore \
+        "$APOLLO_UI_DIR" "$UI_ORIGINAL_BRANCH" "$UI_ORIGINAL_COMMIT" \
+        || rollback_failed=1
+
+    return "$rollback_failed"
+}
+
+# Fetch both repositories before changing either working tree. This also works
+# for staging images cloned with --single-branch, where origin/main is absent.
+apollo_git_fetch_main "$APOLLO_DIR" \
+    || fail_update "could not fetch the API main branch"
+apollo_git_fetch_main "$APOLLO_UI_DIR" \
+    || fail_update "could not fetch the UI main branch"
+
+if ! apollo_git_checkout_main "$APOLLO_DIR"; then
+    rollback_repositories \
+        || echo -e "${RED}WARNING: repository rollback was incomplete${NC}" >&2
+    fail_update "could not switch the API repository to main"
+fi
+
+if ! apollo_git_checkout_main "$APOLLO_UI_DIR"; then
+    rollback_repositories \
+        || echo -e "${RED}WARNING: repository rollback was incomplete${NC}" >&2
+    fail_update "could not switch the UI repository to main"
+fi
+
+if ! apollo_git_matches_main "$APOLLO_DIR" \
+    || ! apollo_git_matches_main "$APOLLO_UI_DIR"; then
+    rollback_repositories \
+        || echo -e "${RED}WARNING: repository rollback was incomplete${NC}" >&2
+    fail_update "API and UI repositories did not synchronize to main"
+fi
+
+chown -R futurebit "$APOLLO_DIR"
+
+echo "20" > "$TMPFILE"
 
 echo -e "${YELLOW} ---> Running update_system script${NC}"
 
-bash $APOLLO_DIR/backend/update_system
+bash "$APOLLO_DIR/backend/update_system" \
+    || fail_update "update_system exited with an error"
