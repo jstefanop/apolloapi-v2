@@ -574,6 +574,18 @@ module.exports.auth = {
       const sourcePath = `${apolloDir}/backend/node/bin/${targetSoftware}/${arch}/bitcoind`;
       const destPath = `${apolloDir}/backend/node/bitcoind`;
 
+      // Already on the target build? The binary is static per version, so
+      // re-copying it costs ~30s of node downtime for nothing — and this runs on
+      // every boot via manageBitcoinConf, delaying the API and forcing a browser
+      // refresh. cmp exits 0 when identical: skip the whole switch then.
+      try {
+        await execWithSudo(`cmp -s "${sourcePath}" "${destPath}"`);
+        console.log(`Bitcoin software already ${targetSoftware}, nothing to switch`);
+        return { success: true, message: `Already on ${targetSoftware}` };
+      } catch (_) {
+        // Differ or dest missing → fall through and do the real switch.
+      }
+
       // Stop node service if running
       if (wasServiceRunning) {
         try {
