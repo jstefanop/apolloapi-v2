@@ -171,6 +171,27 @@ class NodeService {
     } catch (error) {
       throw new GraphQLError(`Failed to format disk: ${error.message}`);
     }
+
+    // The worker stops the node itself, outside the monitor's knowledge: without
+    // this record that stop reads as unrequested — logged as a manual stop, and
+    // a stop that degrades to 'failed' (bitcoind slow to flush) meets
+    // requested=online + autoStart and gets restarted over the disk being wiped.
+    // Mirrors stop(), but only after a confirmed launch, so a refused format
+    // cannot touch the running one's bookkeeping; when the worker restarts the
+    // node at the end, the monitor's manual-start adoption swings requested back
+    // to online. Never fails the format over it — the worker is already running.
+    try {
+      await this.knex('service_status')
+        .where({ service_name: 'node' })
+        .update({
+          status: 'pending',
+          requested_status: 'offline',
+          requested_at: new Date()
+        });
+      this._notifyServicesStatus();
+    } catch (error) {
+      console.error('Failed to record the format stop request:', error.message);
+    }
   }
 
   // Check if the Bitcoin node is online

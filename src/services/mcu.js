@@ -113,7 +113,7 @@ class McuService {
       if (process.env.NODE_ENV === 'development') scriptName = 'update.fake';
 
       const updateScript = join(__dirname, '../../backend', scriptName);
-      const cmd = spawn(process.env.NODE_ENV === 'development' ? 'bash' : 'sudo', 
+      const cmd = spawn(process.env.NODE_ENV === 'development' ? 'bash' : 'sudo',
         process.env.NODE_ENV === 'development' ? [updateScript] : ['bash', updateScript]);
 
       cmd.stdout.on('data', (data) => {
@@ -126,6 +126,17 @@ class McuService {
 
       cmd.on('close', (code) => {
         console.log(`child process exited with code ${code}`);
+      });
+
+      // The update runs inline for many minutes and reports through its own
+      // progress marker (-10 on failure), so its OUTCOME is not awaited here —
+      // unlike the format launcher, which detaches at once. But the spawn itself
+      // must be: a process that cannot even start ('error' — sudo or bash
+      // missing, EACCES) used to be reported as a started update, and with no
+      // 'error' listener the event would crash the whole API.
+      await new Promise((resolve, reject) => {
+        cmd.once('spawn', resolve);
+        cmd.once('error', reject);
       });
     } catch (error) {
       throw new GraphQLError(`Failed to update firmware: ${error.message}`);
