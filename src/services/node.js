@@ -472,18 +472,30 @@ class NodeService {
         ? spawn('sudo', ['bash', scriptPath])
         : spawn('bash', [scriptPath]);
 
+      let stderr = '';
+
       cmd.stdout.on('data', (data) => {
         console.log(`stdout: ${data}`);
       });
 
+      // The launcher detaches (screen -dmS) and exits 0 once it starts the
+      // format; a non-zero exit means it could not even launch — screen missing,
+      // sudo denied — and its stderr says why. So collect stderr and reject only
+      // on a non-zero exit, not on the first byte: rejecting on any stderr byte
+      // turned a mere warning into "Failed to format disk: undefined" (the reject
+      // value was a Buffer, which has no .message). The format's own outcome is
+      // not seen here — it runs detached — the UI polls the progress marker for it.
       cmd.stderr.on('data', (data) => {
         console.error(`stderr: ${data}`);
-        reject(data);
+        stderr += data;
       });
+
+      cmd.on('error', (err) => reject(err));
 
       cmd.on('close', (code) => {
         console.log(`child process exited with code ${code}`);
-        resolve();
+        if (code === 0) resolve();
+        else reject(new Error(stderr.trim() || `format launcher exited with code ${code}`));
       });
     });
   }

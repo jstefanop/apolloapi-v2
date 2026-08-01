@@ -3,9 +3,37 @@
 # Formats the node SSD and mounts it at /media/nvme.
 #
 # The progress file is what the UI polls. It carries the outcome as well as the
-# position: 10..100 while running, and -1 if the format failed. Without that the
-# UI cannot tell a finished format from an aborted one — the file disappears
-# either way — and would report success over a disk that was never touched.
+# position: 10..90 while running, then a terminal value that STAYS — 100 on
+# success, -1/-2 on failure — until the next format overwrites it or /tmp clears
+# on reboot. A marker removed at the end could only be seen by whoever happened
+# to poll during its final seconds; one that persists also reaches the poller
+# that was throttled, disconnected, or opened later. (Pre-mutation UI bundles
+# wait for the final 0 that no longer comes: their format still runs and
+# completes, only the dialog keeps showing 100% until the page is reloaded.)
+
+# Only one format at a time. The lock is held for this worker's whole run and
+# releases when the process dies, so a crash never leaves it stuck (a screen-name
+# check would). The guard lives here, in the worker, not in the launcher: the
+# launcher detaches via screen and exits 0 regardless, so a lock there would be
+# released the instant it daemonized. (The launcher probes this same lock before
+# detaching so the common refusal reaches the API; this one stays authoritative.)
+#
+# Neither refusal below touches the progress marker: refusal means another worker
+# probably owns the marker right now, and writing it would corrupt that run.
+exec 9>/run/format_node_disk.lock || {
+    # bash does not abort on a failed exec redirection — it continues with status
+    # 1 — and flock on the dead fd would then land in the "already running" branch
+    # below: the opposite of the truth. Name the real failure instead.
+    echo "format_node_disk: cannot open /run/format_node_disk.lock" >&2
+    exit 1
+}
+if ! flock -n 9; then
+    echo "format_node_disk: a format is already running; not starting another" >&2
+    # Non-zero: losing the race is not a success. screen hides this exit from the
+    # API (the launcher's probe reports the common case there), but the journal
+    # and a manual run must not claim a format happened.
+    exit 1
+fi
 
 PROGRESS=/tmp/format_node_disk_c_done
 DEVICE=/dev/nvme0n1
@@ -102,10 +130,8 @@ progress 90
 
 restore_services
 
+# The 100 stays, exactly like the failure markers above: an 8-second window
+# before an rm here was only visible to a tab polling at that moment, and a
+# throttled or disconnected one concluded "failed" over a disk that formatted
+# fine. The next format's `progress 10` overwrites it.
 progress 100
-
-# Long enough for the UI to see the 100 that tells it this finished rather than
-# gave up.
-sleep 8
-
-rm -f "$PROGRESS"

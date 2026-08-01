@@ -1,3 +1,74 @@
 #!/bin/bash
 
-screen -dmS disk /opt/apolloapi/backend/format_node_disk_c
+# Detach and return at once so the API call does not block for the format's
+# duration; the worker holds the single-format lock and the UI polls the progress
+# marker for the outcome. $0-relative, not a hardcoded /opt/apolloapi, so the
+# launcher and its worker stay together on any checkout layout — the API always
+# invokes this by absolute path, so $0 is absolute.
+WORKER="$(dirname "$0")/format_node_disk_c"
+
+# screen -dmS below detaches and exits 0 even if the worker cannot be started, and
+# the API reads that 0 as "format launched". Catch the two ways that lies — a
+# missing worker and a format already running — here, where a non-zero exit still
+# reaches the caller, instead of letting it report a start that never happened.
+if [ ! -x "$WORKER" ]; then
+    echo "format_node_disk: worker $WORKER not found or not executable" >&2
+    exit 1
+fi
+
+LOCK=/run/format_node_disk.lock
+LAUNCH_LOCK=/run/format_node_disk.launch.lock
+
+# Serialize launchers from probe to confirmation. The probe below releases the
+# worker lock before screen has even started the worker, so two requests arriving
+# together would both pass it and both be told their format started, though only
+# one worker survives the worker-side flock. Holding this launcher-side lock
+# across probe → spawn → confirmation closes that window; -w bounds the wait (a
+# competing launcher holds it for well under a second) so callers cannot queue up
+# behind a wedged one forever.
+exec 8>"$LAUNCH_LOCK" || {
+    echo "format_node_disk: cannot open $LAUNCH_LOCK" >&2
+    exit 1
+}
+if ! flock -w 10 8; then
+    echo "format_node_disk: another format request is being processed; retry in a moment" >&2
+    exit 1
+fi
+
+# Non-blocking probe of the same lock the worker holds for its whole run. This only
+# rejects the common case (a second click while one is under way); the worker's own
+# flock is the authoritative guard. The subshell opens the fd (creating the file),
+# tries the lock, and releases on exit, so the worker can re-acquire it.
+#
+# Two steps, because they mean opposite things: a lock file that cannot even be
+# OPENED (unwritable /run) is not "a format is already running" — reporting it as
+# such would tell the operator to wait for something that will never finish.
+if ! ( exec 9>"$LOCK" ); then
+    echo "format_node_disk: cannot open $LOCK" >&2
+    exit 1
+fi
+if ! ( exec 9>"$LOCK"; flock -n 9 ); then
+    echo "format_node_disk: a format is already running; not starting another" >&2
+    exit 1
+fi
+
+# fd 8 must not reach the worker: inherited through screen it would keep the
+# launch lock held for the format's whole run, turning every later refusal into
+# the wrong message ("another request is being processed" instead of "already
+# running").
+screen -dmS disk "$WORKER" 8>&- || {
+    echo "format_node_disk: could not start screen" >&2
+    exit 1
+}
+
+# Report success only once the worker demonstrably holds the worker lock: screen
+# exits 0 even when the worker dies on arrival, and until the lock is held the
+# probe above would wave the next request through. A failing probe here can only
+# mean OUR worker took it — the launch lock excludes any other launcher, and the
+# probe just saw the lock free.
+for _ in {1..50}; do
+    ( exec 9>"$LOCK"; flock -n 9 ) || exit 0
+    sleep 0.1
+done
+echo "format_node_disk: worker did not start; no format is running" >&2
+exit 1
