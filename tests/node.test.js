@@ -230,15 +230,16 @@ describe('Node API', () => {
     });
   });
 
-  describe('Node.format resolver', () => {
+  describe('Node.format resolver (mutation)', () => {
     it('should request node disk formatting', async () => {
       // Mock node service
       const mockNodeService = {
         format: jest.fn().mockResolvedValue(undefined)
       };
 
-      // Test resolver directly
-      const result = await nodeResolver.NodeActions.format(
+      // format is a mutation now (queries are re-executed, which fired the wipe
+      // twice); it lives under NodeMutations, not NodeActions.
+      const result = await nodeResolver.NodeMutations.format(
         null,
         {},
         { services: { node: mockNodeService } }

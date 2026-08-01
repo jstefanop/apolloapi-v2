@@ -10,11 +10,38 @@ module.exports = gql`
     wifiScan: McuWifiScanOutput! @auth
     wifiConnect(input: McuWifiConnectInput!): McuWifiConnectOutput! @auth
     wifiDisconnect: McuWifiDisconnectOutput! @auth
+    # reboot/shutdown/update: deprecated aliases for pre-mutation UI bundles —
+    # see the NodeActions aliases for the rationale.
+    reboot: EmptyOutput!
+      @auth
+      @deprecated(
+        reason: "reboot is a Mutation (Mutation.Mcu.reboot); this query alias only serves pre-2.1.4 UI bundles"
+      )
+    shutdown: EmptyOutput!
+      @auth
+      @deprecated(
+        reason: "shutdown is a Mutation (Mutation.Mcu.shutdown); this query alias only serves pre-2.1.4 UI bundles"
+      )
+    version: McuAppVersionOutput! @auth
+    update: EmptyOutput!
+      @auth
+      @deprecated(
+        reason: "update is a Mutation (Mutation.Mcu.update); this query alias only serves pre-2.1.4 UI bundles"
+      )
+    updateProgress: McuUpdateProgressOutput! @auth
+  }
+
+  # Side-effectful actions must not be queries — Apollo Client re-executes
+  # queries on re-render (see typeDefs/node.js), and a phantom re-fire here
+  # reboots the device or launches a second concurrent update.
+  extend type Mutation {
+    Mcu: McuMutations
+  }
+
+  type McuMutations {
     reboot: EmptyOutput! @auth
     shutdown: EmptyOutput! @auth
-    version: McuAppVersionOutput! @auth
     update: EmptyOutput! @auth
-    updateProgress: McuUpdateProgressOutput! @auth
   }
 
   type McuStatsOutput {
