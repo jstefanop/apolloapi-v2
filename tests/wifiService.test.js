@@ -216,6 +216,8 @@ describe('a profile name is not an SSID', () => {
     expect(calls.some((c) => c.startsWith('c up uuid-np'))).toBe(true);
     expect(calls.some((c) => c.includes('dev wifi connect'))).toBe(false);
   });
+
+
 });
 
 describe('status answers about the radio it was asked about', () => {
@@ -449,7 +451,9 @@ describe('a failed connect must not leave a poisoned profile behind', () => {
     await expect(
       wifiService({ verifyTimeoutMs: 0 }).connect('wlan0', 'Wiffy', 'p')
     ).rejects.toMatchObject({ reason: 'ssid-not-found' });
-    expect(calls.some((c) => c.includes('c delete'))).toBe(false);
+    // The probe profile may be cleaned up; the user's own must not be, and it is
+    // the only one addressed by uuid.
+    expect(calls.some((c) => /^c delete uuid-\d+$/.test(c))).toBe(false);
   });
 });
 
@@ -495,63 +499,8 @@ describe('joining a network that is already saved', () => {
     expect(calls.some((c) => c.includes('dev wifi connect'))).toBe(false);
   });
 
-  it('updates the key on the saved profile when a passphrase is given', async () => {
-    const calls = withSaved(['Wiffy']);
-    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
-    await svc.connect('wlan0', 'Wiffy', 'newpass').catch(() => {});
-    // key-mgmt travels with the key: a profile that never had security set
-    // rejects a bare psk.
-    expect(
-      calls.some((c) => c.includes('c modify uuid-0 wifi-sec.key-mgmt wpa-psk wifi-sec.psk newpass'))
-    ).toBe(true);
-  });
 
-  it('puts the old key back when the new one does not work', async () => {
-    // `c modify` persists at once, so a typo replaced a working key. The attempt
-    // then failed, the profile kept the typo, and the device came up with no
-    // wifi at every later boot until someone retyped the password.
-    const secfields = '802-11-wireless-security.key-mgmt,802-11-wireless-security.psk';
-    const calls = [];
-    spawn.mockImplementation((cmd, argv) => {
-      calls.push(argv.join(' '));
-      const c = new EventEmitter();
-      c.stdout = new EventEmitter();
-      c.stderr = new EventEmitter();
-      c.kill = jest.fn();
-      setTimeout(() => {
-        const field = argv.includes('-g') ? argv[argv.indexOf('-g') + 1] : null;
-        if (field === secfields) {
-          c.stdout.emit('data', Buffer.from('wpa-psk:goodkey'));
-        } else if (!field && argv.includes('c') && argv.includes('show')) {
-          c.stdout.emit('data', Buffer.from('Home:uuid-0:802-11-wireless::no'));
-        } else if (argv.includes('up')) {
-          c.stderr.emit('data', Buffer.from('Error: Connection activation failed'));
-          c.emit('close', 4, null);
-          return;
-        }
-        c.emit('close', 0, null);
-      }, 0);
-      return c;
-    });
 
-    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0 });
-    await expect(svc.connect('wlan0', 'Home', 'typo')).rejects.toMatchObject({
-      reason: 'activation-failed',
-    });
-    expect(calls.some((c) => c.includes('wifi-sec.psk typo'))).toBe(true);
-    expect(calls.some((c) => c.includes('c modify uuid-0 wifi-sec.key-mgmt wpa-psk wifi-sec.psk goodkey'))).toBe(true);
-  });
-
-  it('keeps a WPA3 profile on sae instead of forcing it back to wpa-psk', async () => {
-    // Forcing key-mgmt rewrote a WPA3-SAE profile into one the AP refuses, and
-    // the network could then not be joined from the UI at all.
-    const secfields = '802-11-wireless-security.key-mgmt,802-11-wireless-security.psk';
-    const calls = withSaved(['Home3'], { [secfields]: 'sae:oldkey' });
-    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0 });
-    await svc.connect('wlan0', 'Home3', 'newpass').catch(() => {});
-    expect(calls.some((c) => c.includes('wifi-sec.key-mgmt sae wifi-sec.psk newpass'))).toBe(true);
-    expect(calls.some((c) => c.includes('wifi-sec.key-mgmt wpa-psk'))).toBe(false);
-  });
 
   it('sets hidden on the saved profile, not only on a freshly created one', async () => {
     // A profile saved without the flag left NetworkManager waiting for a beacon
@@ -561,6 +510,50 @@ describe('joining a network that is already saved', () => {
     const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0 });
     await svc.connect('wlan0', 'Ghost', null, { hidden: true }).catch(() => {});
     expect(calls.some((c) => c.includes('c modify uuid-0 802-11-wireless.hidden yes'))).toBe(true);
+  });
+
+  it('proves a new key on a throwaway profile, never on the saved one', async () => {
+    // The stored key cannot be read back (nmcli answers an empty psk even with
+    // --show-secrets), so overwriting it leaves nothing to restore. The new key
+    // is tried on a probe profile instead.
+    const calls = withSaved(['Wiffy']);
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Wiffy', 'newpass').catch(() => {});
+    expect(calls.some((c) => c.includes('c add type wifi con-name apollo-wifi-probe'))).toBe(true);
+    // The saved profile's key is never rewritten before the new one is proven.
+    expect(calls.some((c) => c.includes('c modify uuid-0 wifi-sec.psk'))).toBe(false);
+  });
+
+  it('leaves the saved profile alone when the new key does not work', async () => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('Wiffy:uuid-0:802-11-wireless::no'));
+          c.emit('close', 0, null);
+        } else if (argv.includes('up')) {
+          c.stderr.emit('data', Buffer.from('Error: Connection activation failed'));
+          c.emit('close', 4, null);
+        } else {
+          c.emit('close', 0, null);
+        }
+      }, 0);
+      return c;
+    });
+
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await expect(svc.connect('wlan0', 'Wiffy', 'wrong')).rejects.toMatchObject({
+      reason: 'activation-failed',
+    });
+    // The probe is deleted by its own name; the saved profile — addressed by
+    // uuid — is never touched, so the network the user had keeps its key.
+    expect(calls).toContain('c delete apollo-wifi-probe-uuid-0');
+    expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(false);
   });
 
   it('still creates a profile for a network it has never seen', async () => {

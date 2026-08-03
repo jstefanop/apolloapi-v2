@@ -133,49 +133,6 @@ const wifiService = ({
   // put it back. `-s` is what makes nmcli print the stored key at all: without it
   // the psk comes back as a placeholder, and "restoring" would write the
   // placeholder into the profile. null means it could not be read.
-  const profileSecurity = async (uuid) => {
-    try {
-      const { stdout } = await run(
-        [
-          '-s',
-          '-g',
-          '802-11-wireless-security.key-mgmt,802-11-wireless-security.psk',
-          'c',
-          'show',
-          'uuid',
-          uuid,
-        ],
-        { timeoutMs: 15000 }
-      );
-      const [keyMgmt, psk] = parseValues(stdout);
-      return { keyMgmt: keyMgmt || null, psk: psk || null };
-    } catch {
-      return null;
-    }
-  };
-
-  // Put back what was there before a failed attempt overwrote it. An empty value
-  // is how nmcli clears a property, which is the right restore for a profile that
-  // had no security set. Best-effort: the connect error is the one to report.
-  const restoreProfileSecurity = async (uuid, previous) => {
-    try {
-      await run(
-        [
-          'c',
-          'modify',
-          uuid,
-          'wifi-sec.key-mgmt',
-          previous.keyMgmt || '',
-          'wifi-sec.psk',
-          previous.psk || '',
-        ],
-        { timeoutMs: 15000 }
-      );
-    } catch {
-      /* nothing further to try, and the activation failure is the real news */
-    }
-  };
-
   const savedNetworks = async () => {
     const { stdout } = await run(['-t', '-f', 'NAME,UUID,TYPE,DEVICE,ACTIVE', 'c', 'show'], {
       sudo: false,
@@ -267,12 +224,53 @@ const wifiService = ({
     }
   };
 
+  // Joining a network whose profile already exists, with a NEW passphrase, is
+  // the one case that cannot be done in place. The stored key cannot be read
+  // back — nmcli returns an empty psk even with --show-secrets on these devices
+  // — so there is nothing to restore if the new key turns out wrong, and
+  // `c modify` persists the moment it runs. Supplying the key at activation
+  // time does not help either: passwd-file only answers a request for secrets,
+  // and a profile that already holds a key is never asked (verified on
+  // apollo3 — a deliberately wrong passwd-file activated the network anyway).
+  //
+  // So the new key is proven on a throwaway profile first, and only a profile
+  // that actually joined replaces the saved one.
+  const connectWithNewKey = async (device, ssid, passphrase, { hidden, preexisting }) => {
+    const tmpName = `apollo-wifi-probe-${preexisting.uuid.slice(0, 8)}`;
+    const addArgs = [
+      'c', 'add', 'type', 'wifi',
+      'con-name', tmpName,
+      'ifname', device,
+      'ssid', ssid,
+      'wifi-sec.key-mgmt', 'wpa-psk',
+      'wifi-sec.psk', passphrase,
+      'autoconnect', 'no',
+    ];
+    if (hidden) addArgs.push('802-11-wireless.hidden', 'yes');
+
+    await run(addArgs, { timeoutMs: 15000 });
+    const tmp = (await savedNetworks().catch(() => [])).find((n) => n.name === tmpName);
+
+    try {
+      await run(['c', 'up', tmp ? tmp.uuid : tmpName, 'ifname', device], {
+        timeoutMs: CONNECT_TIMEOUT_MS,
+      });
+    } catch (err) {
+      // The saved profile was never touched, so the working key is still there.
+      await run(['c', 'delete', tmp ? tmp.uuid : tmpName], { timeoutMs: 15000 }).catch(() => {});
+      throw err;
+    }
+
+    // It joined: the new key is the good one. Retire the old profile and give
+    // the probe its name, so the user is left with one network, not two.
+    const oldName = preexisting.name;
+    await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 }).catch(() => {});
+    await run(['c', 'modify', tmp ? tmp.uuid : tmpName, 'connection.id', oldName], {
+      timeoutMs: 15000,
+    }).catch(() => {});
+  };
+
   const connect = async (device, ssid, passphrase, { hidden = false } = {}) => {
-    // `nmcli dev wifi connect` SAVES a profile as it goes, including when the
-    // passphrase is wrong — observed on apollo3, where a single typo left a
-    // "Wiffy" profile holding the bad key and the radio stuck retrying against
-    // it, so even the correct password then failed. Remember what existed
-    // beforehand so a profile this attempt created can be taken back.
     // null, not [], when the read fails: an empty list would claim nothing was
     // saved and arm the cleanup below against a profile we never created.
     const before = await savedNetworks().catch(() => null);
@@ -285,57 +283,33 @@ const wifiService = ({
       (before || []).find((n) => n.name === ssid) ||
       null;
 
-    // Two different commands, because nmcli treats a known network differently.
-    // `dev wifi connect <ssid> password <x>` builds a NEW profile, and once one
-    // exists for that name it fails with "802-11-wireless-security.key-mgmt:
-    // property is missing" — even when the password is right (reproduced on
-    // apollo3: connect, disconnect, then every later attempt refused). So a
-    // saved network is joined by updating its key and activating it, which is
-    // also what makes reconnecting without retyping the passphrase work.
-    const args = preexisting
-      ? ['c', 'up', preexisting.uuid, 'ifname', device]
-      : ['dev', 'wifi', 'connect', ssid, 'ifname', device];
-    if (!preexisting && passphrase) args.push('password', passphrase);
-    if (!preexisting && hidden) args.push('hidden', 'yes');
-
-    // What the profile's security was before this attempt touched it, so a wrong
-    // passphrase can be undone. null when it could not be read, and then the
-    // attempt still goes ahead — refusing would break joining a network whose
-    // password has changed, which is the whole point of retyping one.
-    let previousSecurity = null;
-
     try {
       if (preexisting && passphrase) {
-        previousSecurity = await profileSecurity(preexisting.uuid);
-        // The profile's OWN key-mgmt, not a fixed one: forcing wpa-psk rewrites a
-        // WPA3-SAE profile into something the AP will not authenticate, and then
-        // the network cannot be joined at all. wpa-psk is only the default for a
-        // profile that never had security set, which rejects a bare psk.
-        const keyMgmt = previousSecurity?.keyMgmt || 'wpa-psk';
-        await run(
-          ['c', 'modify', preexisting.uuid, 'wifi-sec.key-mgmt', keyMgmt, 'wifi-sec.psk', passphrase],
-          { timeoutMs: 15000 }
-        );
-      }
-      if (preexisting && hidden) {
-        // The flag has to reach the profile, not just the create command: on one
-        // saved without it — netplan's, or an earlier attempt — NetworkManager
-        // waits for a beacon a hidden network never sends, and the activation
-        // times out with nothing saying the flag was dropped.
-        await run(['c', 'modify', preexisting.uuid, '802-11-wireless.hidden', 'yes'], {
-          timeoutMs: 15000,
+        await connectWithNewKey(device, ssid, passphrase, { hidden, preexisting });
+      } else if (preexisting) {
+        // No new key: activate what is saved. This is what makes reconnecting
+        // without retyping the passphrase work.
+        if (hidden) {
+          // The flag has to reach the profile: on one saved without it,
+          // NetworkManager waits for a beacon a hidden network never sends.
+          await run(['c', 'modify', preexisting.uuid, '802-11-wireless.hidden', 'yes'], {
+            timeoutMs: 15000,
+          }).catch(() => {});
+        }
+        await run(['c', 'up', preexisting.uuid, 'ifname', device], {
+          timeoutMs: CONNECT_TIMEOUT_MS,
         });
+      } else {
+        // Never seen: `dev wifi connect` creates the profile as it joins. It
+        // refuses when one already exists for the name, which is why the
+        // branches above exist.
+        const args = ['dev', 'wifi', 'connect', ssid, 'ifname', device];
+        if (passphrase) args.push('password', passphrase);
+        if (hidden) args.push('hidden', 'yes');
+        await run(args, { timeoutMs: CONNECT_TIMEOUT_MS });
       }
-      await run(args, { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       const reason = err.timedOut ? 'timeout' : classifyError(err.code, err.output);
-      // `c modify` persists immediately, so by here a mistyped key has already
-      // replaced the working one. Without this the device would fail to
-      // reconnect at every later boot until someone retyped the password.
-      if (previousSecurity) await restoreProfileSecurity(preexisting.uuid, previousSecurity);
-      // Only what we just created: a profile the user already had may hold a
-      // good key and have failed for a passing reason (out of range), and
-      // deleting it would lose a working network over one bad moment.
       if (!preexisting) await cleanupCreatedProfile(ssid, knownBefore);
       throw Object.assign(new Error(reason), { reason, detail: err.output });
     }
@@ -344,8 +318,6 @@ const wifiService = ({
     if (!confirmed) {
       // A radio that DID join is on the network the user asked for; only the
       // address is late (a slow DHCP server, or one handing out v6 only).
-      // Deleting the profile there would tear down a working join and lose the
-      // passphrase that had just worked.
       if (!preexisting && !associated) await cleanupCreatedProfile(ssid, knownBefore);
       const reason = associated ? 'no-ip-address' : 'not-confirmed';
       throw Object.assign(new Error(reason), {
