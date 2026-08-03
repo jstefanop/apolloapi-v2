@@ -308,6 +308,39 @@ describe('a failed connect must not leave a poisoned profile behind', () => {
     expect(calls.some((c) => c.includes('c delete uuid uuid-0'))).toBe(true);
   });
 
+  it('keeps a profile whose radio joined but is still waiting for an address', async () => {
+    // A slow DHCP server put the lease past the verification window. The join
+    // itself had worked, so deleting the profile tore the radio back off the
+    // network and lost the passphrase the user had just typed.
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('c') && argv.includes('show') && !argv.includes('-g')) {
+          const seen = calls.filter((x) => x.includes('wifi connect')).length > 0;
+          c.stdout.emit('data', Buffer.from(seen ? savedList(['Slow']) : ''));
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          // Associated, but the lease has not arrived: no IP4.ADDRESS line.
+          c.stdout.emit('data', Buffer.from(''));
+        } else if (argv.includes('dev') && !argv.includes('wifi')) {
+          c.stdout.emit('data', Buffer.from('wlan0:wifi:connected:Slow'));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+
+    const wifiService = require('../src/services/wifi');
+    await expect(
+      wifiService({ verifyTimeoutMs: 0 }).connect('wlan0', 'Slow', 'p')
+    ).rejects.toMatchObject({ reason: 'no-ip-address' });
+    expect(calls.some((c) => c.includes('c delete'))).toBe(false);
+  });
+
   it('deletes nothing when it could not read what was saved beforehand', async () => {
     // A transient NetworkManager hiccup on the pre-flight read used to read as
     // "nothing is saved", which armed the cleanup against the user's own

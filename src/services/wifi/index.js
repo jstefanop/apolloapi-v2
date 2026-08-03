@@ -181,15 +181,24 @@ const wifiService = ({
   // the previous code read the IP immediately after — before DHCP had answered,
   // so it reported the old address or none. Poll until the radio really is on
   // the requested network.
+  //
+  // `associated` is reported separately from `confirmed` because the two failures
+  // are not the same one: a radio that never joined leaves a useless profile
+  // behind, while a radio that joined and is still waiting on a slow DHCP server
+  // is holding the network the user asked for.
   const waitUntilConnected = async (device, ssid) => {
     const deadline = Date.now() + verifyTimeoutMs;
+    let associated = false;
     do {
       const current = await status(device).catch(() => null);
-      if (current?.connected && current.ssid === ssid && current.ipAddress) return current;
+      if (current?.connected && current.ssid === ssid) {
+        associated = true;
+        if (current.ipAddress) return { confirmed: current, associated };
+      }
       if (Date.now() >= deadline) break;
       await new Promise((r) => setTimeout(r, verifyIntervalMs));
     } while (Date.now() < deadline);
-    return null;
+    return { confirmed: null, associated };
   };
 
   // Remove the profile THIS attempt created, so the next try starts clean.
@@ -261,12 +270,19 @@ const wifiService = ({
       throw Object.assign(new Error(reason), { reason, detail: err.output });
     }
 
-    const confirmed = await waitUntilConnected(device, ssid);
+    const { confirmed, associated } = await waitUntilConnected(device, ssid);
     if (!confirmed) {
-      if (!preexisting) await cleanupCreatedProfile(ssid, knownBefore);
-      throw Object.assign(new Error('not-confirmed'), {
-        reason: 'not-confirmed',
-        detail: 'nmcli reported success but the interface never came up on that network',
+      // A radio that DID join is on the network the user asked for; only the
+      // address is late (a slow DHCP server, or one handing out v6 only).
+      // Deleting the profile there would tear down a working join and lose the
+      // passphrase that had just worked.
+      if (!preexisting && !associated) await cleanupCreatedProfile(ssid, knownBefore);
+      const reason = associated ? 'no-ip-address' : 'not-confirmed';
+      throw Object.assign(new Error(reason), {
+        reason,
+        detail: associated
+          ? 'the radio joined that network but no address arrived in time'
+          : 'nmcli reported success but the interface never came up on that network',
       });
     }
     return confirmed;
