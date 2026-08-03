@@ -245,10 +245,11 @@ module.exports = gql`
     # never had it, keeps working: it falls back to the preferred interface.
     ifname: String
     hidden: Boolean
-    # Pin the radio band: "bg" = 2.4 GHz, "a" = 5 GHz, null = let
+    # Pin the radio band: "bg" = 2.4 GHz, "a" = 5 GHz, "" = clear a pin and let
     # NetworkManager choose. It chooses 5 GHz when both are on offer, which the
     # built-in radio of an Apollo II cannot hold — so this is the users call,
-    # not a detail.
+    # not a detail. null (or absent) says nothing about the band and leaves a
+    # saved profile's own setting alone.
     band: String
   }
 

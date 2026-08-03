@@ -31,6 +31,7 @@ const {
 const CONNECT_TIMEOUT_MS = 45000;
 const VERIFY_TIMEOUT_MS = 20000;
 const VERIFY_INTERVAL_MS = 1000;
+const ROUTE_TIMEOUT_MS = 5000;
 
 // Timeouts are injectable so tests can exercise the state machine without
 // waiting on the real verification window.
@@ -53,16 +54,34 @@ const wifiService = ({
   // Which interface carries traffic. Read from `ip route`, not from nmcli: an
   // adapter can be "connected" to a network that goes nowhere — on an Apollo II
   // the built-in radio sits on the inverter's access point, with no route out.
+  //
+  // Bounded like every nmcli call: this child is awaited by listInterfaces, and
+  // listInterfaces by status(), by the connect verification poll and by both
+  // wifi queries — so one wedged `ip` would hang the whole panel on its loading
+  // skeleton until the API is restarted. Which radio carries the route is a
+  // nicety; not answering at all is not.
   const defaultRouteDevice = async () =>
     new Promise((resolve) => {
       const { spawn } = require('child_process');
       const child = spawn('ip', ['-o', 'route', 'show', 'default']);
       let out = '';
+      let settled = false;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => {
+        child.kill?.('SIGKILL');
+        done(null);
+      }, ROUTE_TIMEOUT_MS);
+      timer.unref?.();
       child.stdout.on('data', (d) => {
         out += d;
       });
-      child.on('close', () => resolve(parseDefaultRouteDevice(out)));
-      child.on('error', () => resolve(null));
+      child.on('close', () => done(parseDefaultRouteDevice(out)));
+      child.on('error', () => done(null));
     });
 
   // Every usable wifi radio, labelled. The UI shows a picker only when there is
@@ -119,16 +138,31 @@ const wifiService = ({
   // for the network `Home`, and netplan is what Solo Node and Apollo III ship,
   // so the two differ on most of the fleet. Ask the profile which network it
   // actually joins.
-  const profileSsid = async (id) => {
+  const profileProperty = async (id, property) => {
     if (!id) return null;
     try {
-      const { stdout } = await run(['-g', '802-11-wireless.ssid', 'c', 'show', id], {
+      const { stdout } = await run(['-g', property, 'c', 'show', id], {
         sudo: false,
       });
       return parseValues(stdout)[0] || null;
     } catch {
       return null;
     }
+  };
+
+  const profileSsid = (id) => profileProperty(id, '802-11-wireless.ssid');
+
+  // A profile remembers the radio it was built for — `addProfile` passes
+  // `ifname`, and netplan writes the same binding — and nmcli then refuses to
+  // activate it anywhere else: "Connection 'Home' is not available on device
+  // wlx…", which classifies as activation-failed and reaches the user as "check
+  // the password". An Apollo II with a USB dongle is exactly that case: the
+  // password is right and retyping it can never work. The activation names the
+  // radio anyway, so a binding that contradicts it is released.
+  const releaseInterfaceBinding = async (uuid, device) => {
+    const bound = await profileProperty(uuid, 'connection.interface-name');
+    if (!bound || bound === device) return;
+    await run(['c', 'modify', uuid, 'connection.interface-name', ''], { timeoutMs: 15000 });
   };
 
   // What a profile's security is set to right now, so an attempt that fails can
@@ -262,6 +296,14 @@ const wifiService = ({
   const applyBand = (uuid, band) =>
     run(['c', 'modify', uuid, '802-11-wireless.band', band || ''], { timeoutMs: 15000 });
 
+  // What makes the device rejoin on its own after a reboot or a power cut.
+  // Profiles are created inert (see addProfile) and switched on once they are
+  // the one the user keeps: on a wifi-only Apollo a saved network that never
+  // auto-activates means the device comes back with no way in at all, over the
+  // very LAN it is administered from.
+  const enableAutoconnect = (uuid) =>
+    run(['c', 'modify', uuid, 'connection.autoconnect', 'yes'], { timeoutMs: 15000 });
+
   // Build a profile explicitly. `dev wifi connect` cannot express a band, so any
   // join that constrains one goes through here.
   const addProfile = async ({ name, device, ssid, passphrase, hidden, band }) => {
@@ -270,6 +312,10 @@ const wifiService = ({
       'con-name', name,
       'ifname', device,
       'ssid', ssid,
+      // Inert on creation: NetworkManager activates a new profile the moment
+      // `c add` returns, which would race the explicit activation below — and on
+      // the probe path, race the profile it may still have to give way to.
+      // `enableAutoconnect` switches it on once the profile is a keeper.
       'autoconnect', 'no',
     ];
     if (passphrase) args.push('wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', passphrase);
@@ -291,6 +337,28 @@ const wifiService = ({
   //
   // So the new key is proven on a throwaway profile first, and only a profile
   // that actually joined replaces the saved one.
+
+  // The probe held the network: the new key is the good one. Retire the old
+  // profile and give the probe its name, so the user is left with one network,
+  // not two.
+  const promoteProbe = async (tmpUuid, preexisting) => {
+    await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 }).catch(() => {});
+    await run(['c', 'modify', tmpUuid, 'connection.id', preexisting.name], {
+      timeoutMs: 15000,
+    }).catch(() => {});
+    await enableAutoconnect(tmpUuid).catch(() => {});
+  };
+
+  // It did not: drop the probe and put the radio back on the profile that was
+  // working. Activating the probe took the radio off it, so leaving it at that
+  // is a device sitting on no network — and on a wifi-only Apollo, out of reach.
+  const discardProbe = async (tmpUuid, device, preexisting) => {
+    await run(['c', 'delete', tmpUuid], { timeoutMs: 15000 }).catch(() => {});
+    await run(['c', 'up', preexisting.uuid, 'ifname', device], {
+      timeoutMs: CONNECT_TIMEOUT_MS,
+    }).catch(() => {});
+  };
+
   const connectWithNewKey = async (device, ssid, passphrase, { hidden, band, preexisting }) => {
     const tmpName = `apollo-wifi-probe-${preexisting.uuid.slice(0, 8)}`;
     const tmpUuid = await addProfile({
@@ -306,17 +374,15 @@ const wifiService = ({
       await run(['c', 'up', tmpUuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       // The saved profile was never touched, so the working key is still there.
-      await run(['c', 'delete', tmpUuid], { timeoutMs: 15000 }).catch(() => {});
+      await discardProbe(tmpUuid, device, preexisting);
       throw err;
     }
 
-    // It joined: the new key is the good one. Retire the old profile and give
-    // the probe its name, so the user is left with one network, not two.
-    const oldName = preexisting.name;
-    await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 }).catch(() => {});
-    await run(['c', 'modify', tmpUuid, 'connection.id', oldName], { timeoutMs: 15000 }).catch(
-      () => {}
-    );
+    // nmcli returning 0 means it started the activation, which is NOT the same
+    // as being on the network — so the swap waits for the verification below.
+    // Retiring the saved profile here left a join that stalled on DHCP with no
+    // working profile at all, and nothing to roll back to.
+    return tmpUuid;
   };
 
   const connect = async (device, ssid, passphrase, { hidden = false, band = null } = {}) => {
@@ -332,13 +398,25 @@ const wifiService = ({
       (before || []).find((n) => n.name === ssid) ||
       null;
 
+    // Set while a probe profile is on trial, so the verification below knows
+    // there is a swap left to settle one way or the other.
+    let probeUuid = null;
+
     try {
       if (preexisting && passphrase) {
-        await connectWithNewKey(device, ssid, passphrase, { hidden, band, preexisting });
+        probeUuid = await connectWithNewKey(device, ssid, passphrase, {
+          hidden,
+          band,
+          preexisting,
+        });
       } else if (preexisting) {
         // Band is a property of the saved profile, so it is applied before the
-        // activation that has to honour it.
-        await applyBand(preexisting.uuid, band).catch(() => {});
+        // activation that has to honour it — but only when the caller said
+        // something about it. The UI's picker is per visit, so a plain reconnect
+        // carries no band, and writing '' then would silently drop a pin the
+        // user made in an earlier session. '' is how they clear it deliberately.
+        if (band != null) await applyBand(preexisting.uuid, band).catch(() => {});
+        await releaseInterfaceBinding(preexisting.uuid, device).catch(() => {});
         // No new key: activate what is saved. This is what makes reconnecting
         // without retyping the passphrase work.
         if (hidden) {
@@ -356,6 +434,7 @@ const wifiService = ({
         // builds the profile first and activates it.
         const uuid = await addProfile({ name: ssid, device, ssid, passphrase, hidden, band });
         await run(['c', 'up', uuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
+        await enableAutoconnect(uuid).catch(() => {});
       } else {
         // Never seen and no constraint: `dev wifi connect` creates the profile as
         // it joins. It refuses when one already exists for the name, which is why
@@ -372,6 +451,13 @@ const wifiService = ({
     }
 
     const { confirmed, associated } = await waitUntilConnected(device, ssid);
+    // A probe that carried the radio onto the network proved its key, address or
+    // not; one that never got there is undone, and the profile the device had
+    // comes back.
+    if (probeUuid) {
+      if (associated) await promoteProbe(probeUuid, preexisting);
+      else await discardProbe(probeUuid, device, preexisting);
+    }
     if (!confirmed) {
       // A radio that DID join is on the network the user asked for; only the
       // address is late (a slow DHCP server, or one handing out v6 only).

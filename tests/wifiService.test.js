@@ -564,3 +564,148 @@ describe('joining a network that is already saved', () => {
     expect(calls.some((c) => c.includes('c modify'))).toBe(false);
   });
 });
+
+describe('what the device is left with when the join is over', () => {
+  // The whole connect state machine against one fake nmcli. `connectedOn` is the
+  // radio the verification poll finds on the network — null is a join that never
+  // landed — and `properties` answers the `-g` reads of a single profile.
+  const nmcli = ({ saved = [], properties = {}, connectedOn = null, joins = true } = {}) => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        const field = argv.includes('-g') ? argv[argv.indexOf('-g') + 1] : null;
+        if (field) {
+          c.stdout.emit('data', Buffer.from(properties[field] ?? ''));
+        } else if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from(saved.join('\n')));
+        } else if (argv.includes('c') && argv.includes('up') && !joins) {
+          c.stderr.emit('data', Buffer.from('Error: Connection activation failed'));
+          c.emit('close', 4, null);
+          return;
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        } else if (argv.includes('dev') && !argv.includes('wifi')) {
+          c.stdout.emit(
+            'data',
+            Buffer.from(connectedOn ? `${connectedOn}:wifi:connected:Home` : '')
+          );
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+    return calls;
+  };
+
+  const SAVED_HOME = 'Home:uuid-0:802-11-wireless::no';
+  const service = () =>
+    require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+
+  it('turns autoconnect on, so the device rejoins after a reboot', async () => {
+    // Every profile was built with `autoconnect no` and nothing switched it back
+    // on: the join worked, and the next power cut left a wifi-only device off
+    // the network for good — unreachable over the LAN it is administered from.
+    const calls = nmcli({ connectedOn: 'wlan0' });
+    await service().connect('wlan0', 'Home', 'secret', { band: 'bg' });
+    expect(calls.some((c) => /^c modify \S+ connection\.autoconnect yes$/.test(c))).toBe(true);
+  });
+
+  it('keeps the working profile until the new key has really joined', async () => {
+    // The old order deleted it as soon as `nmcli c up` returned 0 — which only
+    // means the activation started. A join that stalls on DHCP then left no
+    // working profile at all and nothing to fall back to.
+    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: null });
+    await expect(service().connect('wlan0', 'Home', 'newkey')).rejects.toMatchObject({
+      reason: 'not-confirmed',
+    });
+    expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(false);
+    // and the radio is put back on what was serving it
+    expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(true);
+  });
+
+  it('promotes the probe once the radio is actually on the network', async () => {
+    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: 'wlan0' });
+    await expect(service().connect('wlan0', 'Home', 'newkey')).resolves.toMatchObject({
+      connected: true,
+    });
+    expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(true);
+    expect(calls.some((c) => /connection\.id Home$/.test(c))).toBe(true);
+    expect(calls.some((c) => /connection\.autoconnect yes$/.test(c))).toBe(true);
+  });
+
+  it('leaves a band the user pinned earlier alone on a plain reconnect', async () => {
+    // The UI's picker is per visit, so a reconnect carries no band. Writing ''
+    // then silently un-pinned 2.4 GHz and let NetworkManager go back to 5 GHz —
+    // the very failure the band choice exists to prevent.
+    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: 'wlan0' });
+    await service().connect('wlan0', 'Home', null);
+    expect(calls.some((c) => c.includes('802-11-wireless.band'))).toBe(false);
+  });
+
+  it('still clears it when the user picks auto', async () => {
+    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: 'wlan0' });
+    await service().connect('wlan0', 'Home', null, { band: '' });
+    expect(calls.some((c) => c.startsWith('c modify uuid-0 802-11-wireless.band'))).toBe(true);
+  });
+
+  it('releases a profile bound to the other radio instead of failing on it', async () => {
+    // An Apollo II with a USB dongle: nmcli refuses a wlan0-bound profile on the
+    // dongle with "not available on device", which reaches the user as "check
+    // the password" — for a password that is right.
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { 'connection.interface-name': 'wlan0' },
+      connectedOn: 'wlx98',
+    });
+    await service().connect('wlx98', 'Home', null);
+    expect(calls.some((c) => /^c modify uuid-0 connection\.interface-name/.test(c))).toBe(true);
+  });
+
+  it('does not touch a binding that already matches the radio', async () => {
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { 'connection.interface-name': 'wlan0' },
+      connectedOn: 'wlan0',
+    });
+    await service().connect('wlan0', 'Home', null);
+    // The read is expected; the rewrite is not.
+    expect(calls.some((c) => /^c modify \S+ connection\.interface-name/.test(c))).toBe(false);
+  });
+});
+
+describe('the route lookup cannot hang the panel', () => {
+  it('gives up on an `ip` that never answers', async () => {
+    // listInterfaces is awaited by status(), by the connect verification poll and
+    // by both wifi queries: an unbounded child here left the panel on its
+    // loading skeleton until the API was restarted.
+    jest.useFakeTimers();
+    try {
+      spawn.mockImplementation((cmd) => {
+        const c = new EventEmitter();
+        c.stdout = new EventEmitter();
+        c.stderr = new EventEmitter();
+        c.kill = jest.fn();
+        // nmcli answers; `ip` is the one wedged in the kernel.
+        if (cmd === 'ip') return c;
+        setTimeout(() => {
+          c.stdout.emit('data', Buffer.from('wlan0:wifi:connected:Home'));
+          c.emit('close', 0, null);
+        }, 0);
+        return c;
+      });
+
+      const pending = require('../src/services/wifi')().listInterfaces();
+      await jest.advanceTimersByTimeAsync(6000);
+      await expect(pending).resolves.toEqual([
+        expect.objectContaining({ device: 'wlan0', carriesDefaultRoute: false }),
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

@@ -47,7 +47,10 @@ const wifiConnectImpl = async (_, { input }, { services }) => {
     if (!ifname) throw new Error('no-wifi-interface');
     const status = await services.wifi.connect(ifname, input.ssid, input.passphrase, {
       hidden: !!input.hidden,
-      band: input.band || null,
+      // `??`, not `||`: "" is the caller asking to clear a pinned band, and null
+      // is them saying nothing about it. Collapsing the two made every reconnect
+      // clear a band the user had pinned in an earlier session.
+      band: input.band ?? null,
     });
     // The legacy shape promised { address }; the new one carries the whole
     // status, and address stays so old bundles keep reading it.
