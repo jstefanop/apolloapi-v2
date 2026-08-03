@@ -129,6 +129,53 @@ const wifiService = ({
     }
   };
 
+  // What a profile's security is set to right now, so an attempt that fails can
+  // put it back. `-s` is what makes nmcli print the stored key at all: without it
+  // the psk comes back as a placeholder, and "restoring" would write the
+  // placeholder into the profile. null means it could not be read.
+  const profileSecurity = async (uuid) => {
+    try {
+      const { stdout } = await run(
+        [
+          '-s',
+          '-g',
+          '802-11-wireless-security.key-mgmt,802-11-wireless-security.psk',
+          'c',
+          'show',
+          'uuid',
+          uuid,
+        ],
+        { timeoutMs: 15000 }
+      );
+      const [keyMgmt, psk] = parseValues(stdout);
+      return { keyMgmt: keyMgmt || null, psk: psk || null };
+    } catch {
+      return null;
+    }
+  };
+
+  // Put back what was there before a failed attempt overwrote it. An empty value
+  // is how nmcli clears a property, which is the right restore for a profile that
+  // had no security set. Best-effort: the connect error is the one to report.
+  const restoreProfileSecurity = async (uuid, previous) => {
+    try {
+      await run(
+        [
+          'c',
+          'modify',
+          uuid,
+          'wifi-sec.key-mgmt',
+          previous.keyMgmt || '',
+          'wifi-sec.psk',
+          previous.psk || '',
+        ],
+        { timeoutMs: 15000 }
+      );
+    } catch {
+      /* nothing further to try, and the activation failure is the real news */
+    }
+  };
+
   const savedNetworks = async () => {
     const { stdout } = await run(['-t', '-f', 'NAME,UUID,TYPE,DEVICE,ACTIVE', 'c', 'show'], {
       sudo: false,
@@ -251,18 +298,32 @@ const wifiService = ({
     if (!preexisting && passphrase) args.push('password', passphrase);
     if (!preexisting && hidden) args.push('hidden', 'yes');
 
+    // What the profile's security was before this attempt touched it, so a wrong
+    // passphrase can be undone. null when it could not be read, and then the
+    // attempt still goes ahead — refusing would break joining a network whose
+    // password has changed, which is the whole point of retyping one.
+    let previousSecurity = null;
+
     try {
       if (preexisting && passphrase) {
-        // key-mgmt alongside the key: a profile that never had security set
-        // rejects a bare psk.
+        previousSecurity = await profileSecurity(preexisting.uuid);
+        // The profile's OWN key-mgmt, not a fixed one: forcing wpa-psk rewrites a
+        // WPA3-SAE profile into something the AP will not authenticate, and then
+        // the network cannot be joined at all. wpa-psk is only the default for a
+        // profile that never had security set, which rejects a bare psk.
+        const keyMgmt = previousSecurity?.keyMgmt || 'wpa-psk';
         await run(
-          ['c', 'modify', preexisting.uuid, 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', passphrase],
+          ['c', 'modify', preexisting.uuid, 'wifi-sec.key-mgmt', keyMgmt, 'wifi-sec.psk', passphrase],
           { timeoutMs: 15000 }
         );
       }
       await run(args, { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       const reason = err.timedOut ? 'timeout' : classifyError(err.code, err.output);
+      // `c modify` persists immediately, so by here a mistyped key has already
+      // replaced the working one. Without this the device would fail to
+      // reconnect at every later boot until someone retyped the password.
+      if (previousSecurity) await restoreProfileSecurity(preexisting.uuid, previousSecurity);
       // Only what we just created: a profile the user already had may hold a
       // good key and have failed for a passing reason (out of range), and
       // deleting it would lose a working network over one bad moment.
