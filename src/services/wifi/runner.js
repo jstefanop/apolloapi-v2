@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const { fixtureFor } = require('./devFixtures');
 
 // Every nmcli invocation goes through here, and it takes an argv ARRAY.
 //
@@ -62,7 +63,16 @@ const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null } = {}) =>
     });
 
     child.on('error', (err) =>
-      settle(() => reject(new NmcliError(err.message, { output: err.message })))
+      settle(() => {
+        // No nmcli on the machine: outside production that is a development
+        // laptop, and the wifi pages are worth being able to open there.
+        const fixture = err.code === 'ENOENT' ? fixtureFor(args) : null;
+        if (fixture !== null) {
+          resolve({ stdout: fixture, code: 0 });
+          return;
+        }
+        reject(new NmcliError(err.message, { output: err.message }));
+      })
     );
 
     child.on('close', (code, signal) => {

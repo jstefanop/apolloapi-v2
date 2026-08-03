@@ -77,6 +77,44 @@ describe('runner — nmcli is never handed to a shell', () => {
     });
     await expect(run(['dev'], { sudo: false })).rejects.toThrow('ENOENT');
   });
+
+  it('serves canned output off-device, so the wifi pages can be opened in dev', async () => {
+    // The old scanner had `wifi_scan_fake` behind NODE_ENV; going through the
+    // real binary meant the page could not be rendered on a laptop at all.
+    const missing = Object.assign(new Error('spawn nmcli ENOENT'), { code: 'ENOENT' });
+    spawn.mockImplementation(() => {
+      child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      setTimeout(() => child.emit('error', missing), 0);
+      return child;
+    });
+    const svc = require('../src/services/wifi')();
+    const networks = await svc.scan('wlan0', { rescan: false });
+    expect(networks.length).toBeGreaterThan(0);
+    // The awkward names are the point of the fixture: they are what broke the
+    // bash parser this module replaced.
+    expect(networks.map((n) => n.ssid)).toContain('Ospiti: casa "bella"');
+    expect(networks.some((n) => n.hidden)).toBe(true);
+  });
+
+  it('still fails outright in production, where a missing nmcli is real', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const missing = Object.assign(new Error('spawn nmcli ENOENT'), { code: 'ENOENT' });
+      spawn.mockImplementation(() => {
+        child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        setTimeout(() => child.emit('error', missing), 0);
+        return child;
+      });
+      await expect(run(['dev'], { sudo: false })).rejects.toThrow('ENOENT');
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+  });
 });
 
 describe('service — disconnect and forget are different operations', () => {
