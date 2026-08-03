@@ -158,6 +158,78 @@ const parseScan = (stdout) =>
       .filter(Boolean)
   );
 
+
+// ---------------------------------------------------------------------------
+// Interfaces, saved profiles, routing
+// ---------------------------------------------------------------------------
+
+// `nmcli -t -f DEVICE,TYPE,STATE,CONNECTION dev` -> the wifi radios.
+//
+// `wifi-p2p` entries (`p2p-dev-wlan0`) are filtered out: NetworkManager exposes
+// one per radio for Wi-Fi Direct, they cannot hold a normal connection, and
+// showing them would offer the user an adapter that does nothing.
+const parseDevices = (stdout) =>
+  String(stdout ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(splitTerse)
+    .filter((f) => f.length >= 4)
+    .map(([device, type, state, connection]) => ({
+      device,
+      type,
+      state,
+      connection: connection || null,
+    }))
+    .filter((d) => d.type === 'wifi');
+
+// `nmcli -t -f NAME,UUID,TYPE,DEVICE,ACTIVE c show` -> the saved wifi profiles.
+// A profile with no device is simply not active right now; it is still saved.
+const parseConnections = (stdout) =>
+  String(stdout ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(splitTerse)
+    .filter((f) => f.length >= 5)
+    .map(([name, uuid, type, device, active]) => ({
+      name,
+      uuid,
+      type,
+      device: device || null,
+      active: active === 'yes',
+    }))
+    .filter((c) => c.type === '802-11-wireless');
+
+// `ip -o route show default` -> which interface actually carries traffic.
+// Used to preselect the adapter when a device has more than one radio: on an
+// Apollo II with a USB dongle the built-in may be attached to something else
+// entirely, so "built-in" is the wrong default.
+const parseDefaultRouteDevice = (stdout) => {
+  const m = String(stdout ?? '').match(/\bdev\s+(\S+)/);
+  return m ? m[1] : null;
+};
+
+// An adapter plugged into USB sits under a usb bus in sysfs; a built-in one
+// hangs off the platform or PCI bus. Used to LABEL the adapter, never to hide
+// it — on many Apollo II the USB dongle is the only wifi that works well.
+const isUsbPath = (sysfsPath) => /\/usb\d|\/usb[/:]/.test(String(sysfsPath ?? ''));
+
+// nmcli exit codes are stable enough to branch on, and its messages are the only
+// thing that says WHY. Mapping them here keeps "wrong password" from reaching the
+// user as "exited with code 4".
+const classifyError = (code, output = '') => {
+  const text = String(output);
+  if (/No network with SSID/i.test(text)) return 'ssid-not-found';
+  if (/Secrets were required|password.*required|invalid password|802\.1X supplicant/i.test(text))
+    return 'bad-passphrase';
+  if (/Timeout|timed out/i.test(text)) return 'timeout';
+  if (/not authorized|Not authorized|permission/i.test(text)) return 'not-authorized';
+  if (code === 10) return 'ssid-not-found';
+  if (code === 4) return 'timeout';
+  return 'failed';
+};
+
 module.exports = {
   SCAN_FIELDS,
   splitTerse,
@@ -165,4 +237,9 @@ module.exports = {
   parseScanLine,
   dedupeBySsid,
   parseScan,
+  parseDevices,
+  parseConnections,
+  parseDefaultRouteDevice,
+  isUsbPath,
+  classifyError,
 };

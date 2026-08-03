@@ -195,3 +195,129 @@ describe('dedupeBySsid — an active radio marks the whole network active', () =
     expect(merged[0]).toMatchObject({ signal: 90, active: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Interfaces, saved profiles, routing — fixtures captured 2026-08-02
+// ---------------------------------------------------------------------------
+const {
+  parseDevices,
+  parseConnections,
+  parseDefaultRouteDevice,
+  isUsbPath,
+  classifyError,
+} = require('../src/services/wifi/nmcli');
+
+describe('parseDevices — which radios the user can actually use', () => {
+  it('drops the wifi-p2p pseudo-interfaces', () => {
+    // NetworkManager exposes one per radio for Wi-Fi Direct; offering it would
+    // give the user an adapter that cannot hold a connection.
+    const stdout = [
+      'enP4p65s0:ethernet:connected:Wired connection 1',
+      'lo:loopback:connected (externally):lo',
+      'wlP2p33s0:wifi:disconnected:',
+      'p2p-dev-wlP2p33s0:wifi-p2p:disconnected:',
+    ].join('\n');
+    expect(parseDevices(stdout)).toEqual([
+      { device: 'wlP2p33s0', type: 'wifi', state: 'disconnected', connection: null },
+    ]);
+  });
+
+  it('reports both radios of an Apollo II, with what each is attached to', () => {
+    // Verbatim from apollo2: the built-in serves the inverter, the USB dongle
+    // carries the LAN. Neither may be hidden from the user.
+    const stdout = [
+      'wlx98254aa4b822:wifi:connected:Wiffy_EXT 2.4',
+      'wlan0:wifi:connected:sun2000',
+      'p2p-dev-wlan0:wifi-p2p:disconnected:',
+      'eth0:ethernet:unavailable:',
+      'lo:loopback:unmanaged:',
+    ].join('\n');
+    expect(parseDevices(stdout)).toEqual([
+      { device: 'wlx98254aa4b822', type: 'wifi', state: 'connected', connection: 'Wiffy_EXT 2.4' },
+      { device: 'wlan0', type: 'wifi', state: 'connected', connection: 'sun2000' },
+    ]);
+  });
+
+  it('returns nothing rather than throwing on empty output', () => {
+    expect(parseDevices('')).toEqual([]);
+    expect(parseDevices(null)).toEqual([]);
+  });
+});
+
+describe('parseConnections — the saved networks', () => {
+  const SOLONODE = [
+    'Wiffy:6fc2dda0-1d8b-4e69-b973-7c7cfe2bd99d:802-11-wireless:wlP2p33s0:yes',
+    'lo:0f2db2ec-9588-48e8-a087-77fe93ac16c4:loopback:lo:yes',
+    'docker0:969f647c-6a04-4cb0-b656-185e1f0c6a27:bridge:docker0:yes',
+    'FutureBit_5G:9b0ccb01-90b1-4fdf-9332-f9b88a6ea365:802-11-wireless::no',
+    'Wired connection 1:fc196676-e51a-3753-bad6-2d99e68c8f5a:802-3-ethernet::no',
+  ].join('\n');
+
+  it('keeps only wifi profiles, ethernet and docker aside', () => {
+    expect(parseConnections(SOLONODE).map((c) => c.name)).toEqual(['Wiffy', 'FutureBit_5G']);
+  });
+
+  it('a profile with no device is saved but not active', () => {
+    const saved = parseConnections(SOLONODE).find((c) => c.name === 'FutureBit_5G');
+    expect(saved).toMatchObject({ device: null, active: false });
+  });
+
+  it('marks the one currently in use', () => {
+    const live = parseConnections(SOLONODE).find((c) => c.name === 'Wiffy');
+    expect(live).toMatchObject({ device: 'wlP2p33s0', active: true });
+  });
+});
+
+describe('parseDefaultRouteDevice — which adapter actually carries traffic', () => {
+  it('finds the interface on an Apollo II where the USB dongle wins', () => {
+    // The reason the built-in cannot simply be assumed: here it is on the
+    // inverter, and the route goes out through the dongle.
+    expect(
+      parseDefaultRouteDevice(
+        'default via 192.168.86.1 dev wlx98254aa4b822 proto dhcp metric 600 '
+      )
+    ).toBe('wlx98254aa4b822');
+  });
+
+  it('finds it on ethernet too', () => {
+    expect(
+      parseDefaultRouteDevice(
+        'default via 192.168.86.1 dev enP4p65s0 proto dhcp src 192.168.86.237 metric 100 '
+      )
+    ).toBe('enP4p65s0');
+  });
+
+  it('returns null when there is no default route', () => {
+    expect(parseDefaultRouteDevice('')).toBeNull();
+  });
+});
+
+describe('isUsbPath — labelling the adapter, not filtering it', () => {
+  it('recognises a USB dongle', () => {
+    expect(isUsbPath('/sys/devices/platform/fe3c0000.usb/usb1/1-1/1-1:1.0/net/wlx98254aa4b822')).toBe(true);
+  });
+
+  it('recognises the built-in radios of both generations', () => {
+    expect(isUsbPath('/sys/devices/platform/unisoc_wifi/net/wlan0')).toBe(false);
+    expect(isUsbPath('/sys/devices/platform/a40800000.pcie/pci0002:20/net/wlP2p33s0')).toBe(false);
+  });
+});
+
+describe('classifyError — say why, not "exit code 4"', () => {
+  it('recognises an SSID that is not on the air', () => {
+    // Observed verbatim on apollo3, exit 10.
+    expect(classifyError(10, "Error: No network with SSID 'Nope' found.")).toBe('ssid-not-found');
+  });
+
+  it('recognises a wrong passphrase', () => {
+    expect(classifyError(4, 'Error: Connection activation failed: Secrets were required, but not provided')).toBe('bad-passphrase');
+  });
+
+  it('recognises a timeout', () => {
+    expect(classifyError(4, 'Error: Timeout expired (10 seconds)')).toBe('timeout');
+  });
+
+  it('falls back to a generic failure rather than inventing a cause', () => {
+    expect(classifyError(1, 'something unexpected')).toBe('failed');
+  });
+});
