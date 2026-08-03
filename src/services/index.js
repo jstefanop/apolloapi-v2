@@ -8,6 +8,7 @@ const poolsService = require('./pools')(knex, utils);
 const nodeService = require('./node')(knex, utils);
 const settingsService = require('./settings')(knex, utils);
 const mcuService = require('./mcu')(knex, utils);
+const wifiService = require('./wifi')();
 const timeSeriesService = require('./timeSeries')(knex);
 const servicesService = require('./services')(knex);
 const logsService = require('./logs')(knex);
@@ -29,6 +30,7 @@ module.exports = {
   node: nodeService,
   settings: settingsService,
   mcu: mcuService,
+  wifi: wifiService,
   timeSeries: timeSeriesService,
   services: servicesService,
   logs: logsService,
