@@ -192,13 +192,20 @@ const wifiService = ({
     return null;
   };
 
-  // Remove a profile left behind by a failed attempt, so the next try starts
-  // clean. Best-effort: failing to tidy up must not mask why the connect failed.
-  const cleanupProfile = async (ssid) => {
+  // Remove the profile THIS attempt created, so the next try starts clean.
+  // `knownBefore` is the set of uuids that existed beforehand, or null when that
+  // read failed — and then nothing is deleted, because "I could not tell what was
+  // saved" is not "nothing was saved", and the difference is the user's own
+  // network. Best-effort otherwise: failing to tidy up must not mask why the
+  // connect failed.
+  const cleanupCreatedProfile = async (ssid, knownBefore) => {
+    if (!knownBefore) return;
     try {
       const now = await savedNetworks();
-      const stale = now.find((n) => n.ssid === ssid || n.name === ssid);
-      if (stale) await run(['c', 'delete', 'uuid', stale.uuid], { timeoutMs: 15000 });
+      const created = now.find(
+        (n) => (n.ssid === ssid || n.name === ssid) && !knownBefore.has(n.uuid)
+      );
+      if (created) await run(['c', 'delete', 'uuid', created.uuid], { timeoutMs: 15000 });
     } catch {
       /* the connect error is the one worth reporting */
     }
@@ -210,12 +217,17 @@ const wifiService = ({
     // "Wiffy" profile holding the bad key and the radio stuck retrying against
     // it, so even the correct password then failed. Remember what existed
     // beforehand so a profile this attempt created can be taken back.
-    const before = await savedNetworks().catch(() => []);
+    // null, not [], when the read fails: an empty list would claim nothing was
+    // saved and arm the cleanup below against a profile we never created.
+    const before = await savedNetworks().catch(() => null);
+    const knownBefore = before && new Set(before.map((n) => n.uuid));
     // By SSID first: on a netplan device the profile for `Home` is called
     // `netplan-wlan0-Home`, and matching on the name alone would miss it and
     // build a duplicate profile on every join.
     const preexisting =
-      before.find((n) => n.ssid === ssid) || before.find((n) => n.name === ssid) || null;
+      (before || []).find((n) => n.ssid === ssid) ||
+      (before || []).find((n) => n.name === ssid) ||
+      null;
 
     // Two different commands, because nmcli treats a known network differently.
     // `dev wifi connect <ssid> password <x>` builds a NEW profile, and once one
@@ -245,13 +257,13 @@ const wifiService = ({
       // Only what we just created: a profile the user already had may hold a
       // good key and have failed for a passing reason (out of range), and
       // deleting it would lose a working network over one bad moment.
-      if (!preexisting) await cleanupProfile(ssid);
+      if (!preexisting) await cleanupCreatedProfile(ssid, knownBefore);
       throw Object.assign(new Error(reason), { reason, detail: err.output });
     }
 
     const confirmed = await waitUntilConnected(device, ssid);
     if (!confirmed) {
-      if (!preexisting) await cleanupProfile(ssid);
+      if (!preexisting) await cleanupCreatedProfile(ssid, knownBefore);
       throw Object.assign(new Error('not-confirmed'), {
         reason: 'not-confirmed',
         detail: 'nmcli reported success but the interface never came up on that network',

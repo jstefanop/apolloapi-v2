@@ -308,6 +308,45 @@ describe('a failed connect must not leave a poisoned profile behind', () => {
     expect(calls.some((c) => c.includes('c delete uuid uuid-0'))).toBe(true);
   });
 
+  it('deletes nothing when it could not read what was saved beforehand', async () => {
+    // A transient NetworkManager hiccup on the pre-flight read used to read as
+    // "nothing is saved", which armed the cleanup against the user's own
+    // long-standing profile — the outcome the pre-existing guard exists to stop.
+    const calls = [];
+    let savedReads = 0;
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      const isSavedQuery = argv.includes('c') && argv.includes('show') && !argv.includes('-g');
+      setTimeout(() => {
+        if (isSavedQuery) {
+          savedReads += 1;
+          if (savedReads === 1) {
+            c.stderr.emit('data', Buffer.from('Error: NetworkManager is not running.'));
+            c.emit('close', 8, null);
+            return;
+          }
+          c.stdout.emit('data', Buffer.from(savedList(['HomeNet'])));
+        } else if (argv.includes('connect')) {
+          c.stderr.emit('data', Buffer.from('Error: Connection activation failed'));
+          c.emit('close', 4, null);
+          return;
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+
+    const wifiService = require('../src/services/wifi');
+    await expect(
+      wifiService({ verifyTimeoutMs: 0 }).connect('wlan0', 'HomeNet', 'p')
+    ).rejects.toMatchObject({ reason: 'activation-failed' });
+    expect(calls.some((c) => c.includes('c delete'))).toBe(false);
+  });
+
   it('leaves a profile the user already had alone', async () => {
     // It may hold a good key and have failed for a passing reason — out of
     // range, AP rebooting. Deleting it would lose a working network.
