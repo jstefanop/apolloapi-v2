@@ -184,6 +184,11 @@ module.exports = gql`
     kind: String
     carriesDefaultRoute: Boolean
     ipAddress: String
+    # Which band the link is actually on. Read without rescanning, because a
+    # rescan while associated lags and reports the previous channel.
+    channel: Int
+    frequency: Int
+    band: String
   }
 
   type McuWifiNetworksOutput {
@@ -240,6 +245,11 @@ module.exports = gql`
     # never had it, keeps working: it falls back to the preferred interface.
     ifname: String
     hidden: Boolean
+    # Pin the radio band: "bg" = 2.4 GHz, "a" = 5 GHz, null = let
+    # NetworkManager choose. It chooses 5 GHz when both are on offer, which the
+    # built-in radio of an Apollo II cannot hold — so this is the users call,
+    # not a detail.
+    band: String
   }
 
   type McuWifiConnectOutput {
@@ -248,7 +258,16 @@ module.exports = gql`
   }
 
   type McuWifiConnectResult {
+    # The address the join produced. Kept non-null and first because a
+    # pre-2.1.4 bundle asks for exactly this and nothing else.
     address: String!
+    # The rest of the resulting status, so a caller does not have to follow up
+    # with wifiStatus to learn what it just joined.
+    connected: Boolean
+    ssid: String
+    interface: String
+    kind: String
+    ipAddress: String
   }
 
   type McuWifiDisconnectOutput {

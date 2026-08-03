@@ -98,7 +98,10 @@ describe('connect reports why it failed, not nmcli raw text', () => {
       { input: { ssid: 'Home', passphrase: 'p', ifname: 'wlx98' } },
       { services: { wifi } }
     );
-    expect(wifi.connect).toHaveBeenCalledWith('wlx98', 'Home', 'p', { hidden: false });
+    expect(wifi.connect).toHaveBeenCalledWith('wlx98', 'Home', 'p', {
+      hidden: false,
+      band: null,
+    });
     expect(wifi.listInterfaces).not.toHaveBeenCalled(); // no need to guess
   });
 

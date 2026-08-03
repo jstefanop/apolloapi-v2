@@ -121,7 +121,10 @@ describe('MCU API', () => {
       // The alias still answers with `address`, which is what an old bundle reads.
       expect(result.result.address).toBe('192.168.1.100');
       expect(result.error).toBeNull();
-      expect(wifi.connect).toHaveBeenCalledWith('wlan0', 'MyNetwork', 'secret', { hidden: false });
+      expect(wifi.connect).toHaveBeenCalledWith('wlan0', 'MyNetwork', 'secret', {
+        hidden: false,
+        band: null,
+      });
     });
 
     it('should handle connection errors', async () => {

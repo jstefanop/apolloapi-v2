@@ -9,6 +9,8 @@ const {
   parseDefaultRouteDevice,
   isUsbPath,
   classifyError,
+  splitTerse,
+  bandOf,
 } = require('./nmcli');
 
 // The wifi domain. Three rules hold the whole thing together:
@@ -171,6 +173,32 @@ const wifiService = ({
       }
     }
 
+    // Which band the link is actually on, read WITHOUT rescanning. A rescan while
+    // associated disturbs the link and its results lag behind reality: reading
+    // them back reported the PREVIOUS channel, which is exactly how a working
+    // band constraint can look inverted.
+    let channel = null;
+    let frequency = null;
+    if (iface.connected) {
+      try {
+        const { stdout } = await run(
+          ['-t', '-f', 'IN-USE,CHAN,FREQ', 'dev', 'wifi', 'list', 'ifname', iface.device, '--rescan', 'no'],
+          { sudo: false }
+        );
+        // IN-USE is '*' on the associated AP and a space on every other row.
+        const row = stdout.split('\n').find((l) => l.trim().startsWith('*'));
+        if (row) {
+          const f = splitTerse(row);
+          const c = parseInt(f[1], 10);
+          const q = parseInt(f[2], 10);
+          channel = Number.isFinite(c) ? c : null;
+          frequency = Number.isFinite(q) ? q : null;
+        }
+      } catch {
+        /* the rest of the status is still worth returning */
+      }
+    }
+
     return {
       connected: iface.connected,
       ssid: iface.connection ? (await profileSsid(iface.connection)) || iface.connection : null,
@@ -178,6 +206,9 @@ const wifiService = ({
       kind: iface.kind,
       carriesDefaultRoute: iface.carriesDefaultRoute,
       ipAddress,
+      channel,
+      frequency,
+      band: bandOf(frequency),
     };
   };
 
@@ -224,6 +255,31 @@ const wifiService = ({
     }
   };
 
+  // NetworkManager picks the band on its own, and left alone it prefers 5 GHz —
+  // verified on apollo3, where an unconstrained join landed on channel 40. On an
+  // Apollo II whose built-in radio cannot hold 5 GHz that is the wrong choice,
+  // and the user is the only one who knows. '' clears the constraint.
+  const applyBand = (uuid, band) =>
+    run(['c', 'modify', uuid, '802-11-wireless.band', band || ''], { timeoutMs: 15000 });
+
+  // Build a profile explicitly. `dev wifi connect` cannot express a band, so any
+  // join that constrains one goes through here.
+  const addProfile = async ({ name, device, ssid, passphrase, hidden, band }) => {
+    const args = [
+      'c', 'add', 'type', 'wifi',
+      'con-name', name,
+      'ifname', device,
+      'ssid', ssid,
+      'autoconnect', 'no',
+    ];
+    if (passphrase) args.push('wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', passphrase);
+    if (hidden) args.push('802-11-wireless.hidden', 'yes');
+    if (band) args.push('802-11-wireless.band', band);
+    await run(args, { timeoutMs: 15000 });
+    const created = (await savedNetworks().catch(() => [])).find((n) => n.name === name);
+    return created?.uuid || name;
+  };
+
   // Joining a network whose profile already exists, with a NEW passphrase, is
   // the one case that cannot be done in place. The stored key cannot be read
   // back — nmcli returns an empty psk even with --show-secrets on these devices
@@ -235,29 +291,22 @@ const wifiService = ({
   //
   // So the new key is proven on a throwaway profile first, and only a profile
   // that actually joined replaces the saved one.
-  const connectWithNewKey = async (device, ssid, passphrase, { hidden, preexisting }) => {
+  const connectWithNewKey = async (device, ssid, passphrase, { hidden, band, preexisting }) => {
     const tmpName = `apollo-wifi-probe-${preexisting.uuid.slice(0, 8)}`;
-    const addArgs = [
-      'c', 'add', 'type', 'wifi',
-      'con-name', tmpName,
-      'ifname', device,
-      'ssid', ssid,
-      'wifi-sec.key-mgmt', 'wpa-psk',
-      'wifi-sec.psk', passphrase,
-      'autoconnect', 'no',
-    ];
-    if (hidden) addArgs.push('802-11-wireless.hidden', 'yes');
-
-    await run(addArgs, { timeoutMs: 15000 });
-    const tmp = (await savedNetworks().catch(() => [])).find((n) => n.name === tmpName);
+    const tmpUuid = await addProfile({
+      name: tmpName,
+      device,
+      ssid,
+      passphrase,
+      hidden,
+      band,
+    });
 
     try {
-      await run(['c', 'up', tmp ? tmp.uuid : tmpName, 'ifname', device], {
-        timeoutMs: CONNECT_TIMEOUT_MS,
-      });
+      await run(['c', 'up', tmpUuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       // The saved profile was never touched, so the working key is still there.
-      await run(['c', 'delete', tmp ? tmp.uuid : tmpName], { timeoutMs: 15000 }).catch(() => {});
+      await run(['c', 'delete', tmpUuid], { timeoutMs: 15000 }).catch(() => {});
       throw err;
     }
 
@@ -265,12 +314,12 @@ const wifiService = ({
     // the probe its name, so the user is left with one network, not two.
     const oldName = preexisting.name;
     await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 }).catch(() => {});
-    await run(['c', 'modify', tmp ? tmp.uuid : tmpName, 'connection.id', oldName], {
-      timeoutMs: 15000,
-    }).catch(() => {});
+    await run(['c', 'modify', tmpUuid, 'connection.id', oldName], { timeoutMs: 15000 }).catch(
+      () => {}
+    );
   };
 
-  const connect = async (device, ssid, passphrase, { hidden = false } = {}) => {
+  const connect = async (device, ssid, passphrase, { hidden = false, band = null } = {}) => {
     // null, not [], when the read fails: an empty list would claim nothing was
     // saved and arm the cleanup below against a profile we never created.
     const before = await savedNetworks().catch(() => null);
@@ -285,8 +334,11 @@ const wifiService = ({
 
     try {
       if (preexisting && passphrase) {
-        await connectWithNewKey(device, ssid, passphrase, { hidden, preexisting });
+        await connectWithNewKey(device, ssid, passphrase, { hidden, band, preexisting });
       } else if (preexisting) {
+        // Band is a property of the saved profile, so it is applied before the
+        // activation that has to honour it.
+        await applyBand(preexisting.uuid, band).catch(() => {});
         // No new key: activate what is saved. This is what makes reconnecting
         // without retyping the passphrase work.
         if (hidden) {
@@ -299,10 +351,15 @@ const wifiService = ({
         await run(['c', 'up', preexisting.uuid, 'ifname', device], {
           timeoutMs: CONNECT_TIMEOUT_MS,
         });
+      } else if (band) {
+        // `dev wifi connect` has no way to express a band, so a constrained join
+        // builds the profile first and activates it.
+        const uuid = await addProfile({ name: ssid, device, ssid, passphrase, hidden, band });
+        await run(['c', 'up', uuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
       } else {
-        // Never seen: `dev wifi connect` creates the profile as it joins. It
-        // refuses when one already exists for the name, which is why the
-        // branches above exist.
+        // Never seen and no constraint: `dev wifi connect` creates the profile as
+        // it joins. It refuses when one already exists for the name, which is why
+        // the branches above exist.
         const args = ['dev', 'wifi', 'connect', ssid, 'ifname', device];
         if (passphrase) args.push('password', passphrase);
         if (hidden) args.push('hidden', 'yes');

@@ -261,4 +261,5 @@ module.exports = {
   parseDefaultRouteDevice,
   isUsbPath,
   classifyError,
+  bandOf,
 };
