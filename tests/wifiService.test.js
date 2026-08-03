@@ -125,6 +125,61 @@ describe('service — disconnect and forget are different operations', () => {
   });
 });
 
+describe('a profile name is not an SSID', () => {
+  // netplan — what Solo Node and Apollo III ship — names the profile for the
+  // network `Home` `netplan-wlan0-Home`. Reporting or matching on that name
+  // shows the user a generated string and never finds their saved network.
+  const withNetplanProfile = () => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('-g') && argv.includes('802-11-wireless.ssid')) {
+          c.stdout.emit('data', Buffer.from('Home\n'));
+        } else if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit(
+            'data',
+            Buffer.from('netplan-wlan0-Home:uuid-np:802-11-wireless:wlan0:yes')
+          );
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        } else if (argv.includes('dev')) {
+          c.stdout.emit('data', Buffer.from('wlan0:wifi:connected:netplan-wlan0-Home'));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+    return calls;
+  };
+
+  it('reports the network the radio is on, not the generated profile name', async () => {
+    withNetplanProfile();
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({ connected: true, ssid: 'Home' });
+  });
+
+  it('carries the ssid alongside the name on saved profiles', async () => {
+    withNetplanProfile();
+    const [saved] = await require('../src/services/wifi')().savedNetworks();
+    expect(saved).toMatchObject({ name: 'netplan-wlan0-Home', ssid: 'Home' });
+  });
+
+  it('activates the saved profile instead of duplicating it', async () => {
+    // Matching on the name alone missed, so every join built a second profile
+    // for a network that was already there.
+    const calls = withNetplanProfile();
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Home', null).catch(() => {});
+    expect(calls.some((c) => c.startsWith('c up uuid-np'))).toBe(true);
+    expect(calls.some((c) => c.includes('dev wifi connect'))).toBe(false);
+  });
+});
+
 describe('preferredInterface — which radio the UI should preselect', () => {
   const { preferredInterface } = require('../src/services/wifi')();
 

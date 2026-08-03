@@ -201,6 +201,17 @@ const parseConnections = (stdout) =>
     }))
     .filter((c) => c.type === '802-11-wireless');
 
+// `nmcli -g <fields> ...` prints the values alone, one line, still escaping `:`
+// and `\` — so the same splitter that reads a terse table reads them here.
+const parseValues = (stdout) => {
+  const line =
+    String(stdout ?? '')
+      .split('\n')
+      .map((l) => l.replace(/\r$/, ''))
+      .find((l) => l.length) ?? '';
+  return splitTerse(line);
+};
+
 // `ip -o route show default` -> which interface actually carries traffic.
 // Used to preselect the adapter when a device has more than one radio: on an
 // Apollo II with a USB dongle the built-in may be attached to something else
@@ -246,6 +257,7 @@ module.exports = {
   parseScan,
   parseDevices,
   parseConnections,
+  parseValues,
   parseDefaultRouteDevice,
   isUsbPath,
   classifyError,

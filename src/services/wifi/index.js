@@ -5,6 +5,7 @@ const {
   parseScan,
   parseDevices,
   parseConnections,
+  parseValues,
   parseDefaultRouteDevice,
   isUsbPath,
   classifyError,
@@ -111,11 +112,35 @@ const wifiService = ({
     return parseScan(stdout);
   };
 
+  // A profile's NAME — nmcli's CONNECTION column, and the NAME column of
+  // `c show` — is its id, NOT the SSID. netplan generates `netplan-wlan0-Home`
+  // for the network `Home`, and netplan is what Solo Node and Apollo III ship,
+  // so the two differ on most of the fleet. Ask the profile which network it
+  // actually joins.
+  const profileSsid = async (id) => {
+    if (!id) return null;
+    try {
+      const { stdout } = await run(['-g', '802-11-wireless.ssid', 'c', 'show', id], {
+        sudo: false,
+      });
+      return parseValues(stdout)[0] || null;
+    } catch {
+      return null;
+    }
+  };
+
   const savedNetworks = async () => {
     const { stdout } = await run(['-t', '-f', 'NAME,UUID,TYPE,DEVICE,ACTIVE', 'c', 'show'], {
       sudo: false,
     });
-    return parseConnections(stdout);
+    // Carry both: the name is what identifies the profile, the ssid is what the
+    // radio joins, and matching a network by name misses on every netplan device.
+    return Promise.all(
+      parseConnections(stdout).map(async (p) => ({
+        ...p,
+        ssid: (await profileSsid(p.uuid)) || p.name,
+      }))
+    );
   };
 
   const status = async (device) => {
@@ -138,7 +163,7 @@ const wifiService = ({
 
     return {
       connected: iface.connected,
-      ssid: iface.connection,
+      ssid: iface.connection ? (await profileSsid(iface.connection)) || iface.connection : null,
       interface: iface.device,
       kind: iface.kind,
       carriesDefaultRoute: iface.carriesDefaultRoute,
@@ -166,7 +191,7 @@ const wifiService = ({
   const cleanupProfile = async (ssid) => {
     try {
       const now = await savedNetworks();
-      const stale = now.find((n) => n.name === ssid);
+      const stale = now.find((n) => n.ssid === ssid || n.name === ssid);
       if (stale) await run(['c', 'delete', 'uuid', stale.uuid], { timeoutMs: 15000 });
     } catch {
       /* the connect error is the one worth reporting */
@@ -180,7 +205,11 @@ const wifiService = ({
     // it, so even the correct password then failed. Remember what existed
     // beforehand so a profile this attempt created can be taken back.
     const before = await savedNetworks().catch(() => []);
-    const preexisting = before.find((n) => n.name === ssid) || null;
+    // By SSID first: on a netplan device the profile for `Home` is called
+    // `netplan-wlan0-Home`, and matching on the name alone would miss it and
+    // build a duplicate profile on every join.
+    const preexisting =
+      before.find((n) => n.ssid === ssid) || before.find((n) => n.name === ssid) || null;
 
     // Two different commands, because nmcli treats a known network differently.
     // `dev wifi connect <ssid> password <x>` builds a NEW profile, and once one

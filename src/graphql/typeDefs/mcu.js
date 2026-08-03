@@ -224,7 +224,10 @@ module.exports = gql`
   }
 
   type McuWifiSavedNetwork {
+    # The profile's id, which is NOT the network: netplan calls the profile for
+    # the network Home "netplan-wlan0-Home". Show ssid, match on ssid.
     name: String!
+    ssid: String
     uuid: String!
     device: String
     active: Boolean!
