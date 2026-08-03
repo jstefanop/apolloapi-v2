@@ -317,6 +317,15 @@ const wifiService = ({
           { timeoutMs: 15000 }
         );
       }
+      if (preexisting && hidden) {
+        // The flag has to reach the profile, not just the create command: on one
+        // saved without it — netplan's, or an earlier attempt — NetworkManager
+        // waits for a beacon a hidden network never sends, and the activation
+        // times out with nothing saying the flag was dropped.
+        await run(['c', 'modify', preexisting.uuid, '802-11-wireless.hidden', 'yes'], {
+          timeoutMs: 15000,
+        });
+      }
       await run(args, { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       const reason = err.timedOut ? 'timeout' : classifyError(err.code, err.output);

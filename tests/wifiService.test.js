@@ -515,6 +515,16 @@ describe('joining a network that is already saved', () => {
     expect(calls.some((c) => c.includes('wifi-sec.key-mgmt wpa-psk'))).toBe(false);
   });
 
+  it('sets hidden on the saved profile, not only on a freshly created one', async () => {
+    // A profile saved without the flag left NetworkManager waiting for a beacon
+    // a hidden network never sends, and the join timed out with nothing saying
+    // the flag had been dropped.
+    const calls = withSaved(['Ghost']);
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0 });
+    await svc.connect('wlan0', 'Ghost', null, { hidden: true }).catch(() => {});
+    expect(calls.some((c) => c.includes('c modify uuid-0 802-11-wireless.hidden yes'))).toBe(true);
+  });
+
   it('still creates a profile for a network it has never seen', async () => {
     const calls = withSaved([]);
     const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
