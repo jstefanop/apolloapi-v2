@@ -145,8 +145,14 @@ const wifiService = ({
 
   const status = async (device) => {
     const interfaces = await listInterfaces();
-    const iface = interfaces.find((i) => i.device === device) || preferredInterface(interfaces);
-    if (!iface) return { connected: false, interface: null };
+    // Choose for the caller only when they did not name a radio. Substituting
+    // another adapter answers about a network nobody asked about — an unplugged
+    // dongle would report the built-in's connection as its own — and inside the
+    // connect verification it would confirm the join on the wrong radio.
+    const iface = device
+      ? interfaces.find((i) => i.device === device)
+      : preferredInterface(interfaces);
+    if (!iface) return { connected: false, interface: device || null };
 
     let ipAddress = null;
     if (iface.connected) {

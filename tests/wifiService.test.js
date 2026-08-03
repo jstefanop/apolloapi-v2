@@ -180,6 +180,47 @@ describe('a profile name is not an SSID', () => {
   });
 });
 
+describe('status answers about the radio it was asked about', () => {
+  const twoRadios = (line) => {
+    spawn.mockImplementation((cmd, argv) => {
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('dev') && !argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from(line));
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+  };
+
+  it('does not substitute another adapter when the named one is gone', async () => {
+    // An Apollo II with the built-in on the LAN and a USB dongle unplugged: the
+    // dongle drops out of `nmcli dev`, and answering with wlan0's SSID and IP
+    // showed the missing adapter as connected to the house network.
+    twoRadios('wlan0:wifi:connected:HomeNet');
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan1')).resolves.toMatchObject({
+      connected: false,
+      interface: 'wlan1',
+    });
+  });
+
+  it('still picks the preferred radio when the caller names none', async () => {
+    twoRadios('wlan0:wifi:connected:HomeNet');
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status(null)).resolves.toMatchObject({
+      connected: true,
+      interface: 'wlan0',
+    });
+  });
+});
+
 describe('preferredInterface — which radio the UI should preselect', () => {
   const { preferredInterface } = require('../src/services/wifi')();
 
