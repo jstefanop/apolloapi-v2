@@ -68,43 +68,38 @@ describe('Implemented fixes (security & reliability)', () => {
 
   describe('3. MCU: WiFi connect uses spawn with argv (no shell on ssid/passphrase)', () => {
     it('calls spawn with nmcli args array so ssid/passphrase are not interpolated', async () => {
+      // The wifi work moved out of mcu.js into services/wifi, which discovers
+      // the radio instead of assuming wlan0. The guarantee this test exists for
+      // is unchanged and still asserted here: an SSID is attacker-chosen text
+      // and must reach nmcli as an argv element, never through a shell.
       const childProcess = require('child_process');
-      const mockChild = {
-        stdin: { write: jest.fn(), end: jest.fn() },
-        stdout: { on: jest.fn((ev, cb) => ev === 'data' && cb('')) },
-        stderr: { on: jest.fn((ev, cb) => ev === 'data' && cb('')) },
-        on: jest.fn((event, callback) => { if (event === 'close') callback(0); })
-      };
-      childProcess.spawn.mockImplementation(() => mockChild);
-      // _getIpAddress uses exec; ensure callback (err, stdout, stderr) is called so the promise resolves
-      childProcess.exec.mockImplementation((cmd, opts, cb) => cb && setImmediate(() => cb(null, '192.168.1.1', '')));
+      childProcess.spawn.mockImplementation(() => {
+        const { EventEmitter } = require('events');
+        const c = new EventEmitter();
+        c.stdout = new EventEmitter();
+        c.stderr = new EventEmitter();
+        c.kill = jest.fn();
+        setImmediate(() => c.emit('close', 0, null));
+        return c;
+      });
 
-      const McuService = require('../src/services/mcu');
-      const mcuService = McuService(knex, {});
+      const wifiService = require('../src/services/wifi');
+      const svc = wifiService({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
 
-      const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
-      try {
-        await mcuService.connectWifi({
-          ssid: "Net'; echo pwned",
-          passphrase: 'p@ss"; id'
-        });
-      } finally {
-        process.env.NODE_ENV = origEnv;
-      }
+      const ssid = "Net'; echo pwned";
+      const passphrase = 'p@ss"; id';
+      await svc.connect('wlan0', ssid, passphrase).catch(() => {});
 
-      const nmcliCalls = childProcess.spawn.mock.calls.filter(c => c[0] === 'sudo' && c[1] && c[1][0] === 'nmcli');
-      expect(nmcliCalls.length).toBeGreaterThanOrEqual(1);
-      const args = nmcliCalls[nmcliCalls.length - 1][1];
-      expect(args).toEqual([
-        'nmcli',
-        'dev',
-        'wifi',
-        'connect',
-        "Net'; echo pwned",
-        'password',
-        'p@ss"; id'
-      ]);
+      const argv = childProcess.spawn.mock.calls
+        .map((c) => c[1])
+        .find((a) => a && a.includes('connect'));
+
+      expect(argv).toBeDefined();
+      // Whole strings, one argv element each: nothing splits them, so nothing
+      // can execute them. And no shell anywhere in the chain.
+      expect(argv.filter((a) => a === ssid)).toHaveLength(1);
+      expect(argv.filter((a) => a === passphrase)).toHaveLength(1);
+      expect(childProcess.spawn.mock.calls.every((c) => c[0] !== 'sh' && c[0] !== 'bash')).toBe(true);
     });
   });
 
