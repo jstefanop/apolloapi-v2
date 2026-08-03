@@ -110,18 +110,16 @@ describe('service — disconnect and forget are different operations', () => {
   });
 
   it('connect passes the passphrase as an argument, never interpolated', async () => {
-    install({ stdout: '' });
-    // The verification poll runs for VERIFY_TIMEOUT_MS afterwards; what this
-    // test is about is the argv handed to nmcli, so inspect that and let the
-    // rest settle on its own.
-    const pending = wifiService()
-      .connect('wlan0', 'My:Net"work', "p'a$$ `word`")
-      .catch(() => {});
-    await new Promise((r) => setImmediate(r));
+    // Fail at the nmcli step so connect never enters its verification poll: a
+    // loop left running here keeps calling spawn during the LATER tests and
+    // silently swaps their mocks out from under them.
+    install({ stderr: "Error: No network with SSID 'x' found.", code: 10 });
+    await expect(
+      wifiService().connect('wlan0', 'My:Net"work', "p'a$$ `word`")
+    ).rejects.toMatchObject({ reason: 'ssid-not-found' });
     const argv = spawn.mock.calls[0][1];
     expect(argv).toContain('My:Net"work');
     expect(argv).toContain("p'a$$ `word`");
-    void pending;
   });
 });
 
@@ -148,5 +146,27 @@ describe('preferredInterface — which radio the UI should preselect', () => {
 
   it('returns null when the device has no wifi at all', () => {
     expect(preferredInterface([])).toBeNull();
+  });
+});
+
+describe('disconnect is idempotent — already down is the asked-for outcome', () => {
+  it('treats "device is not active" as success', async () => {
+    // Observed on apollo3: nmcli exits non-zero when the radio is already down.
+    // Reporting that as an error alarms someone who got what they wanted.
+    install({
+      stderr: "Error: Device 'wlP2p33s0' disconnecting failed: This device is not active",
+      code: 1,
+    });
+    const wifiService = require('../src/services/wifi');
+    await expect(wifiService().disconnect('wlP2p33s0')).resolves.toMatchObject({
+      disconnected: true,
+      alreadyDisconnected: true,
+    });
+  });
+
+  it('still reports a genuine failure', async () => {
+    install({ stderr: 'Error: Device not found', code: 1 });
+    const wifiService = require('../src/services/wifi');
+    await expect(wifiService().disconnect('nope0')).rejects.toThrow('Device not found');
   });
 });

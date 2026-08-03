@@ -181,8 +181,18 @@ const wifiService = () => {
   // not mean typing the passphrase again. This is what "Disconnect" always
   // should have meant.
   const disconnect = async (device) => {
-    await run(['dev', 'disconnect', device], { timeoutMs: 20000 });
-    return { disconnected: true, interface: device };
+    try {
+      await run(['dev', 'disconnect', device], { timeoutMs: 20000 });
+    } catch (err) {
+      // "This device is not active" is the outcome the caller asked for, and
+      // nmcli reports it as a failure (observed on apollo3). Surfacing that as
+      // an error would alarm someone whose radio is already down.
+      if (/not active/i.test(err.output || err.message || '')) {
+        return { disconnected: true, interface: device, alreadyDisconnected: true };
+      }
+      throw err;
+    }
+    return { disconnected: true, interface: device, alreadyDisconnected: false };
   };
 
   // Forget ONE network, addressed by its uuid so a name containing odd
