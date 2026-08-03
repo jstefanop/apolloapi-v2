@@ -117,7 +117,9 @@ describe('service — disconnect and forget are different operations', () => {
     await expect(
       wifiService().connect('wlan0', 'My:Net"work', "p'a$$ `word`")
     ).rejects.toMatchObject({ reason: 'ssid-not-found' });
-    const argv = spawn.mock.calls[0][1];
+    // connect first reads the saved profiles, so find the call that matters
+    // instead of assuming it is the first one.
+    const argv = spawn.mock.calls.map((c) => c[1]).find((a) => a.includes('connect'));
     expect(argv).toContain('My:Net"work');
     expect(argv).toContain("p'a$$ `word`");
   });
@@ -168,5 +170,132 @@ describe('disconnect is idempotent — already down is the asked-for outcome', (
     install({ stderr: 'Error: Device not found', code: 1 });
     const wifiService = require('../src/services/wifi');
     await expect(wifiService().disconnect('nope0')).rejects.toThrow('Device not found');
+  });
+});
+
+describe('a failed connect must not leave a poisoned profile behind', () => {
+  // Observed on apollo3: `nmcli dev wifi connect` saves a profile even when the
+  // passphrase is wrong, so one typo left the radio retrying against a bad key
+  // and the correct password failed too.
+  const savedList = (names) =>
+    names.map((n, i) => `${n}:uuid-${i}:802-11-wireless::no`).join('\n');
+
+  it('deletes the profile it just created', async () => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      const isSavedQuery = argv.includes('c') && argv.includes('show');
+      // Before the attempt there is no Wiffy; after the failed connect there is.
+      const already = calls.filter((x) => x.includes('wifi connect')).length > 0;
+      setTimeout(() => {
+        if (isSavedQuery) {
+          c.stdout.emit('data', Buffer.from(savedList(already ? ['Wiffy'] : [])));
+          c.emit('close', 0, null);
+        } else if (argv.includes('connect')) {
+          c.stderr.emit('data', Buffer.from('Error: Connection activation failed'));
+          c.emit('close', 4, null);
+        } else {
+          c.emit('close', 0, null);
+        }
+      }, 0);
+      return c;
+    });
+
+    const wifiService = require('../src/services/wifi');
+    await expect(
+      wifiService({ verifyTimeoutMs: 0 }).connect('wlan0', 'Wiffy', 'wrong')
+    ).rejects.toMatchObject({ reason: 'activation-failed' });
+    expect(calls.some((c) => c.includes('c delete uuid uuid-0'))).toBe(true);
+  });
+
+  it('leaves a profile the user already had alone', async () => {
+    // It may hold a good key and have failed for a passing reason — out of
+    // range, AP rebooting. Deleting it would lose a working network.
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from(savedList(['Wiffy'])));
+          c.emit('close', 0, null);
+        } else if (argv.includes('up') || argv.includes('connect')) {
+          c.stderr.emit('data', Buffer.from("Error: No network with SSID 'Wiffy' found."));
+          c.emit('close', 10, null);
+        } else {
+          c.emit('close', 0, null);
+        }
+      }, 0);
+      return c;
+    });
+
+    const wifiService = require('../src/services/wifi');
+    await expect(
+      wifiService({ verifyTimeoutMs: 0 }).connect('wlan0', 'Wiffy', 'p')
+    ).rejects.toMatchObject({ reason: 'ssid-not-found' });
+    expect(calls.some((c) => c.includes('c delete'))).toBe(false);
+  });
+});
+
+describe('joining a network that is already saved', () => {
+  // `nmcli dev wifi connect <ssid> password <x>` builds a NEW profile, and once
+  // one exists for that name it refuses with "802-11-wireless-security.key-mgmt:
+  // property is missing" — even when the password is correct. Reproduced on
+  // apollo3: connect, disconnect, and every later attempt was rejected. A saved
+  // network is therefore activated, not re-created.
+  const withSaved = (names) => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit(
+            'data',
+            Buffer.from(names.map((n, i) => `${n}:uuid-${i}:802-11-wireless::no`).join('\n'))
+          );
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+    return calls;
+  };
+
+  it('activates the saved profile instead of building a new one', async () => {
+    const calls = withSaved(['Wiffy']);
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Wiffy', null).catch(() => {}); // verification is not the point
+    expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(true);
+    expect(calls.some((c) => c.includes('dev wifi connect'))).toBe(false);
+  });
+
+  it('updates the key on the saved profile when a passphrase is given', async () => {
+    const calls = withSaved(['Wiffy']);
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Wiffy', 'newpass').catch(() => {});
+    // key-mgmt travels with the key: a profile that never had security set
+    // rejects a bare psk.
+    expect(
+      calls.some((c) => c.includes('c modify uuid-0 wifi-sec.key-mgmt wpa-psk wifi-sec.psk newpass'))
+    ).toBe(true);
+  });
+
+  it('still creates a profile for a network it has never seen', async () => {
+    const calls = withSaved([]);
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'BrandNew', 'secret').catch(() => {});
+    expect(calls.some((c) => c.includes('dev wifi connect BrandNew'))).toBe(true);
+    expect(calls.some((c) => c.includes('c modify'))).toBe(false);
   });
 });

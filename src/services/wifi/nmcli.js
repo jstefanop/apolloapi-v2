@@ -225,8 +225,15 @@ const classifyError = (code, output = '') => {
     return 'bad-passphrase';
   if (/Timeout|timed out/i.test(text)) return 'timeout';
   if (/not authorized|Not authorized|permission/i.test(text)) return 'not-authorized';
+  // Observed on apollo3 with a wrong passphrase: nmcli exits 4 saying "Connection
+  // activation failed: The Wi-Fi network could not be found", which is neither a
+  // timeout nor the truth. The cause is genuinely ambiguous at this layer — a
+  // wrong key, a radio that dropped, an AP that refused — so say what happened
+  // rather than guess why. The UI can suggest checking the password without the
+  // backend pretending to know.
+  if (/activation failed/i.test(text)) return 'activation-failed';
   if (code === 10) return 'ssid-not-found';
-  if (code === 4) return 'timeout';
+  if (code === 4) return 'activation-failed';
   return 'failed';
 };
 

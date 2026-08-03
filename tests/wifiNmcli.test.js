@@ -317,6 +317,15 @@ describe('classifyError — say why, not "exit code 4"', () => {
     expect(classifyError(4, 'Error: Timeout expired (10 seconds)')).toBe('timeout');
   });
 
+  it('does not call a failed activation a timeout', () => {
+    // Observed on apollo3 with a wrong passphrase. nmcli exits 4 and blames a
+    // network it cannot find, which is neither a timeout nor true — and the real
+    // cause is ambiguous here, so report what happened instead of guessing.
+    expect(
+      classifyError(4, 'Error: Connection activation failed: The Wi-Fi network could not be found.')
+    ).toBe('activation-failed');
+  });
+
   it('falls back to a generic failure rather than inventing a cause', () => {
     expect(classifyError(1, 'something unexpected')).toBe('failed');
   });

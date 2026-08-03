@@ -29,7 +29,12 @@ const CONNECT_TIMEOUT_MS = 45000;
 const VERIFY_TIMEOUT_MS = 20000;
 const VERIFY_INTERVAL_MS = 1000;
 
-const wifiService = () => {
+// Timeouts are injectable so tests can exercise the state machine without
+// waiting on the real verification window.
+const wifiService = ({
+  verifyTimeoutMs = VERIFY_TIMEOUT_MS,
+  verifyIntervalMs = VERIFY_INTERVAL_MS,
+} = {}) => {
   // Which physical bus the adapter hangs off. A USB dongle is labelled as such
   // in the UI, never hidden: on many Apollo II it is the only radio that works
   // well, and the built-in may be serving something else entirely.
@@ -146,29 +151,72 @@ const wifiService = () => {
   // so it reported the old address or none. Poll until the radio really is on
   // the requested network.
   const waitUntilConnected = async (device, ssid) => {
-    const deadline = Date.now() + VERIFY_TIMEOUT_MS;
-    while (Date.now() < deadline) {
+    const deadline = Date.now() + verifyTimeoutMs;
+    do {
       const current = await status(device).catch(() => null);
       if (current?.connected && current.ssid === ssid && current.ipAddress) return current;
-      await new Promise((r) => setTimeout(r, VERIFY_INTERVAL_MS));
-    }
+      if (Date.now() >= deadline) break;
+      await new Promise((r) => setTimeout(r, verifyIntervalMs));
+    } while (Date.now() < deadline);
     return null;
   };
 
+  // Remove a profile left behind by a failed attempt, so the next try starts
+  // clean. Best-effort: failing to tidy up must not mask why the connect failed.
+  const cleanupProfile = async (ssid) => {
+    try {
+      const now = await savedNetworks();
+      const stale = now.find((n) => n.name === ssid);
+      if (stale) await run(['c', 'delete', 'uuid', stale.uuid], { timeoutMs: 15000 });
+    } catch {
+      /* the connect error is the one worth reporting */
+    }
+  };
+
   const connect = async (device, ssid, passphrase, { hidden = false } = {}) => {
-    const args = ['dev', 'wifi', 'connect', ssid, 'ifname', device];
-    if (passphrase) args.push('password', passphrase);
-    if (hidden) args.push('hidden', 'yes');
+    // `nmcli dev wifi connect` SAVES a profile as it goes, including when the
+    // passphrase is wrong — observed on apollo3, where a single typo left a
+    // "Wiffy" profile holding the bad key and the radio stuck retrying against
+    // it, so even the correct password then failed. Remember what existed
+    // beforehand so a profile this attempt created can be taken back.
+    const before = await savedNetworks().catch(() => []);
+    const preexisting = before.find((n) => n.name === ssid) || null;
+
+    // Two different commands, because nmcli treats a known network differently.
+    // `dev wifi connect <ssid> password <x>` builds a NEW profile, and once one
+    // exists for that name it fails with "802-11-wireless-security.key-mgmt:
+    // property is missing" — even when the password is right (reproduced on
+    // apollo3: connect, disconnect, then every later attempt refused). So a
+    // saved network is joined by updating its key and activating it, which is
+    // also what makes reconnecting without retyping the passphrase work.
+    const args = preexisting
+      ? ['c', 'up', preexisting.uuid, 'ifname', device]
+      : ['dev', 'wifi', 'connect', ssid, 'ifname', device];
+    if (!preexisting && passphrase) args.push('password', passphrase);
+    if (!preexisting && hidden) args.push('hidden', 'yes');
 
     try {
+      if (preexisting && passphrase) {
+        // key-mgmt alongside the key: a profile that never had security set
+        // rejects a bare psk.
+        await run(
+          ['c', 'modify', preexisting.uuid, 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', passphrase],
+          { timeoutMs: 15000 }
+        );
+      }
       await run(args, { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       const reason = err.timedOut ? 'timeout' : classifyError(err.code, err.output);
+      // Only what we just created: a profile the user already had may hold a
+      // good key and have failed for a passing reason (out of range), and
+      // deleting it would lose a working network over one bad moment.
+      if (!preexisting) await cleanupProfile(ssid);
       throw Object.assign(new Error(reason), { reason, detail: err.output });
     }
 
     const confirmed = await waitUntilConnected(device, ssid);
     if (!confirmed) {
+      if (!preexisting) await cleanupProfile(ssid);
       throw Object.assign(new Error('not-confirmed'), {
         reason: 'not-confirmed',
         detail: 'nmcli reported success but the interface never came up on that network',
