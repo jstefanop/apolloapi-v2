@@ -666,15 +666,31 @@ describe('what the device is left with when the join is over', () => {
     expect(calls.some((c) => /^c modify uuid-0 connection\.interface-name/.test(c))).toBe(true);
   });
 
-  it('does not touch a binding that already matches the radio', async () => {
+  it('releases the binding even when it matches the radio in use', async () => {
+    // A profile tied to one radio cannot be activated — or AUTO-activated — on
+    // another. On an Apollo II that pins the network to the USB dongle, so a
+    // dongle unplugged or failed leaves the device unable to come back on the
+    // built-in. The activation names the radio; the profile does not have to.
     const calls = nmcli({
       saved: [SAVED_HOME],
       properties: { 'connection.interface-name': 'wlan0' },
       connectedOn: 'wlan0',
     });
     await service().connect('wlan0', 'Home', null);
-    // The read is expected; the rewrite is not.
-    expect(calls.some((c) => /^c modify \S+ connection\.interface-name/.test(c))).toBe(false);
+    expect(
+      calls.some((c) => /^c modify \S+ connection\.interface-name\s*$/.test(c.trim()))
+    ).toBe(true);
+  });
+
+  it('does not bind a profile it creates to the radio it was built on', async () => {
+    const calls = nmcli({ saved: [], connectedOn: 'wlan0' });
+    // The profile is built before the join is verified, and this fixture never
+    // reports the radio landing on `Fresh` — the creation arguments are what
+    // this pins down, so let the verification fail.
+    await service().connect('wlan0', 'Fresh', 'secret', { band: 'bg' }).catch(() => {});
+    const add = calls.find((c) => c.startsWith('c add type wifi'));
+    expect(add).toBeDefined();
+    expect(add).not.toContain('ifname');
   });
 });
 

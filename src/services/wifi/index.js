@@ -159,9 +159,12 @@ const wifiService = ({
   // the password". An Apollo II with a USB dongle is exactly that case: the
   // password is right and retyping it can never work. The activation names the
   // radio anyway, so a binding that contradicts it is released.
+  // `device === null` means release it whatever it is: the profile should not be
+  // tied to a radio at all. A named device only releases a binding that
+  // contradicts it, which is the cheaper check on the reconnect path.
   const releaseInterfaceBinding = async (uuid, device) => {
     const bound = await profileProperty(uuid, 'connection.interface-name');
-    if (!bound || bound === device) return;
+    if (!bound || (device !== null && bound === device)) return;
     await run(['c', 'modify', uuid, 'connection.interface-name', ''], { timeoutMs: 15000 });
   };
 
@@ -306,11 +309,15 @@ const wifiService = ({
 
   // Build a profile explicitly. `dev wifi connect` cannot express a band, so any
   // join that constrains one goes through here.
-  const addProfile = async ({ name, device, ssid, passphrase, hidden, band }) => {
+  const addProfile = async ({ name, ssid, passphrase, hidden, band }) => {
     const args = [
       'c', 'add', 'type', 'wifi',
       'con-name', name,
-      'ifname', device,
+      // No `ifname`: it writes connection.interface-name, and a profile bound to
+      // one radio cannot be activated — or auto-activated — on another. On an
+      // Apollo II that pins the network to the USB dongle, so a dongle that is
+      // unplugged or fails leaves the device unable to come back on the built-in.
+      // The activation names the radio anyway, which is what actually decides.
       'ssid', ssid,
       // Inert on creation: NetworkManager activates a new profile the moment
       // `c add` returns, which would race the explicit activation below — and on
@@ -361,14 +368,7 @@ const wifiService = ({
 
   const connectWithNewKey = async (device, ssid, passphrase, { hidden, band, preexisting }) => {
     const tmpName = `apollo-wifi-probe-${preexisting.uuid.slice(0, 8)}`;
-    const tmpUuid = await addProfile({
-      name: tmpName,
-      device,
-      ssid,
-      passphrase,
-      hidden,
-      band,
-    });
+    const tmpUuid = await addProfile({ name: tmpName, ssid, passphrase, hidden, band });
 
     try {
       await run(['c', 'up', tmpUuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
@@ -432,7 +432,7 @@ const wifiService = ({
       } else if (band) {
         // `dev wifi connect` has no way to express a band, so a constrained join
         // builds the profile first and activates it.
-        const uuid = await addProfile({ name: ssid, device, ssid, passphrase, hidden, band });
+        const uuid = await addProfile({ name: ssid, ssid, passphrase, hidden, band });
         await run(['c', 'up', uuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
         await enableAutoconnect(uuid).catch(() => {});
       } else {
@@ -451,6 +451,12 @@ const wifiService = ({
     }
 
     const { confirmed, associated } = await waitUntilConnected(device, ssid);
+
+    // `dev wifi connect` binds the profile it builds to the radio it used, so
+    // the release has to happen after the join whatever path got us here.
+    const live = probeUuid || preexisting?.uuid || (await savedNetworks().catch(() => []))
+      .find((n) => n.ssid === ssid)?.uuid;
+    if (live) await releaseInterfaceBinding(live, null).catch(() => {});
     // A probe that carried the radio onto the network proved its key, address or
     // not; one that never got there is undone, and the profile the device had
     // comes back.
