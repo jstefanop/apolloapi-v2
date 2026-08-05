@@ -666,11 +666,12 @@ describe('what the device is left with when the join is over', () => {
     expect(calls.some((c) => /^c modify uuid-0 connection\.interface-name/.test(c))).toBe(true);
   });
 
-  it('releases the binding even when it matches the radio in use', async () => {
-    // A profile tied to one radio cannot be activated — or AUTO-activated — on
-    // another. On an Apollo II that pins the network to the USB dongle, so a
-    // dongle unplugged or failed leaves the device unable to come back on the
-    // built-in. The activation names the radio; the profile does not have to.
+  it('leaves a binding that already names the radio in use', async () => {
+    // On a device with two radios the binding is what keeps each network on the
+    // adapter it belongs to — observed on apollo2, where the house network lives
+    // on the USB dongle and the inverter on the built-in, every profile bound.
+    // Stripping it lets NetworkManager move a network onto the wrong adapter,
+    // including the one serving the session doing the stripping.
     const calls = nmcli({
       saved: [SAVED_HOME],
       properties: { 'connection.interface-name': 'wlan0' },
@@ -679,10 +680,10 @@ describe('what the device is left with when the join is over', () => {
     await service().connect('wlan0', 'Home', null);
     expect(
       calls.some((c) => /^c modify \S+ connection\.interface-name\s*$/.test(c.trim()))
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it('does not bind a profile it creates to the radio it was built on', async () => {
+  it('binds a profile it creates to the radio it was made for', async () => {
     const calls = nmcli({ saved: [], connectedOn: 'wlan0' });
     // The profile is built before the join is verified, and this fixture never
     // reports the radio landing on `Fresh` — the creation arguments are what
@@ -690,7 +691,7 @@ describe('what the device is left with when the join is over', () => {
     await service().connect('wlan0', 'Fresh', 'secret', { band: 'bg' }).catch(() => {});
     const add = calls.find((c) => c.startsWith('c add type wifi'));
     expect(add).toBeDefined();
-    expect(add).not.toContain('ifname');
+    expect(add).toContain('ifname wlan0');
   });
 });
 
