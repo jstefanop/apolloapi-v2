@@ -183,6 +183,14 @@ const parseDevices = (stdout) =>
     }))
     .filter((d) => d.type === 'wifi');
 
+// nmcli QUALIFIES the connected state: `connected (site only)` when the network
+// has no way out, `connected (local only)`, `connected (externally)` for a link
+// another daemon brought up. All of them are a radio that is associated with a
+// network, which is what the panel and the connect verification ask about — an
+// exact match on the bare word reported a joined radio as disconnected, and the
+// join then tore its own profile back down as unconfirmed.
+const isConnectedState = (state) => /^connected\b/.test(String(state ?? '').trim());
+
 // `nmcli -t -f NAME,UUID,TYPE,DEVICE,ACTIVE c show` -> the saved wifi profiles.
 // A profile with no device is simply not active right now; it is still saved.
 const parseConnections = (stdout) =>
@@ -256,6 +264,7 @@ module.exports = {
   dedupeBySsid,
   parseScan,
   parseDevices,
+  isConnectedState,
   parseConnections,
   parseValues,
   parseDefaultRouteDevice,

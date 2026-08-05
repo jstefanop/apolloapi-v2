@@ -123,7 +123,9 @@ describe('service — disconnect and forget are different operations', () => {
   it('disconnect touches only the radio, and keeps the profile', async () => {
     install({ stdout: '' });
     await wifiService().disconnect('wlan0');
-    const argv = spawn.mock.calls[0][1];
+    // Both operations read what they are about to act on first, so find the call
+    // that matters rather than assuming it is the first one.
+    const argv = spawn.mock.calls.map((c) => c[1]).find((a) => a.includes('disconnect'));
     expect(argv).toEqual(expect.arrayContaining(['dev', 'disconnect', 'wlan0']));
     // The bug being fixed: never `c delete` behind a disconnect.
     expect(argv).not.toContain('delete');
@@ -134,10 +136,29 @@ describe('service — disconnect and forget are different operations', () => {
     // Apollo II that is the link the built-in radio serves.
     install({ stdout: '' });
     await wifiService().forget('6502ecf9-01cf-44dc-8556-65592d68c2a7');
-    const argv = spawn.mock.calls[0][1];
+    const argv = spawn.mock.calls.map((c) => c[1]).find((a) => a.includes('delete'));
     expect(argv).toEqual(
       expect.arrayContaining(['c', 'delete', 'uuid', '6502ecf9-01cf-44dc-8556-65592d68c2a7'])
     );
+  });
+
+  it('refuses to disconnect something that is not a radio', async () => {
+    // A stale ifname from an open panel, or a caller that is not the shipped UI:
+    // `nmcli dev disconnect eth0` takes an Apollo off the Ethernet it is
+    // administered over, and nothing brings it back at the next boot.
+    install({ stdout: 'eth0:ethernet:connected:Wired connection 1' });
+    await expect(wifiService().disconnect('eth0')).rejects.toMatchObject({
+      reason: 'not-a-wifi-interface',
+    });
+    expect(spawn.mock.calls.map((c) => c[1]).some((a) => a.includes('disconnect'))).toBe(false);
+  });
+
+  it('refuses to forget a profile that is not wifi', async () => {
+    install({ stdout: '802-3-ethernet' });
+    await expect(wifiService().forget('1f0b0b3e-0000-4000-8000-0000000000ff')).rejects.toMatchObject(
+      { reason: 'not-a-wifi-profile' }
+    );
+    expect(spawn.mock.calls.map((c) => c[1]).some((a) => a.includes('delete'))).toBe(false);
   });
 
   it('scan asks the chosen radio, not "the wifi"', async () => {
@@ -248,6 +269,20 @@ describe('status answers about the radio it was asked about', () => {
     await expect(svc.status('wlan1')).resolves.toMatchObject({
       connected: false,
       interface: 'wlan1',
+    });
+  });
+
+  it('reads a qualified state as connected', async () => {
+    // nmcli says `connected (site only)` for a network with no way out — a
+    // captive portal, a router whose WAN is down. The radio IS associated, and
+    // an exact match on the bare word reported it as disconnected: no SSID, no
+    // Disconnect button, and a first-time join deleted its own profile as
+    // unconfirmed.
+    twoRadios('wlan0:wifi:connected (site only):HomeNet');
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({
+      connected: true,
+      interface: 'wlan0',
     });
   });
 
@@ -683,6 +718,48 @@ describe('what the device is left with when the join is over', () => {
     ).toBe(false);
   });
 
+  it('keeps the profile the OTHER radio is running instead of deleting it', async () => {
+    // An Apollo II administered over its USB dongle, with the built-in joining
+    // the same network: promoting the probe over the saved profile would tear
+    // down the link the request arrived on. Each radio keeps a profile.
+    const calls = nmcli({
+      saved: ['Home:uuid-0:802-11-wireless:wlx98:yes'],
+      connectedOn: 'wlan0',
+    });
+    await service().connect('wlan0', 'Home', 'newkey');
+    expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(false);
+    expect(calls.some((c) => c.includes('connection.id Home (wlan0)'))).toBe(true);
+  });
+
+  it('puts a released binding back when the activation it was released for fails', async () => {
+    // The binding is only given up to let THIS activation through. Left off, the
+    // profile auto-activates on whichever radio is free at the next boot — the
+    // network moved onto the wrong adapter, which is what the binding prevents.
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { 'connection.interface-name': 'wlan0' },
+      joins: false,
+    });
+    await expect(service().connect('wlx98', 'Home', null)).rejects.toMatchObject({
+      reason: 'activation-failed',
+    });
+    expect(calls).toContain('c modify uuid-0 connection.interface-name wlan0');
+  });
+
+  it('clears a probe left behind by an API restart, and never promotes over it', async () => {
+    // A probe outlives its attempt when apollo-api dies mid-join. It then shows
+    // up in the saved list under its internal name, and the next attempt could
+    // pick it as the saved profile — leaving the real one holding the stale key.
+    const calls = nmcli({
+      saved: ['apollo-wifi-probe-uuid-0:uuid-9:802-11-wireless::no', SAVED_HOME],
+      properties: { '802-11-wireless.ssid': 'Home' },
+      connectedOn: 'wlan0',
+    });
+    await service().connect('wlan0', 'Home', null);
+    expect(calls).toContain('c delete uuid uuid-9');
+    expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(true);
+  });
+
   it('binds a profile it creates to the radio it was made for', async () => {
     const calls = nmcli({ saved: [], connectedOn: 'wlan0' });
     // The profile is built before the join is verified, and this fixture never
@@ -692,6 +769,72 @@ describe('what the device is left with when the join is over', () => {
     const add = calls.find((c) => c.startsWith('c add type wifi'));
     expect(add).toBeDefined();
     expect(add).toContain('ifname wlan0');
+  });
+});
+
+describe('a profile built by hand has to match the AP', () => {
+  // `dev wifi connect` negotiates key management itself; a profile built for a
+  // band or for a probe does not, and hardcoding wpa-psk made a WPA3-only
+  // network refuse a passphrase that was right — with no way out but Forget.
+  const withScan = (security) => {
+    const calls = [];
+    const row = [
+      Buffer.from('Casa', 'utf8').toString('hex'),
+      'AABBCCDDEEFF',
+      'Infra',
+      '36',
+      '5180 MHz',
+      '70',
+      security,
+      'no',
+    ].join(':');
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('wifi') && argv.includes('list')) {
+          c.stdout.emit('data', Buffer.from(row));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+    return calls;
+  };
+
+  const addArgs = (calls) => calls.find((c) => c.startsWith('c add type wifi')) || '';
+
+  it('asks for SAE on a WPA3-only network', async () => {
+    const calls = withScan('WPA3');
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Casa', 'secret', { band: 'a' }).catch(() => {});
+    expect(addArgs(calls)).toContain('wifi-sec.key-mgmt sae');
+  });
+
+  it('still asks for wpa-psk in WPA2/WPA3 transition mode', async () => {
+    // Both are advertised and wpa-psk is what joins it; SAE here would refuse a
+    // network the device can hold.
+    const calls = withScan('WPA2 WPA3');
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Casa', 'secret', { band: 'a' }).catch(() => {});
+    expect(addArgs(calls)).toContain('wifi-sec.key-mgmt wpa-psk');
+  });
+
+  it('writes a WEP key as a WEP key', async () => {
+    const calls = withScan('WEP');
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Casa', 'secret', { band: 'a' }).catch(() => {});
+    expect(addArgs(calls)).toContain('wifi-sec.wep-key0 secret');
+  });
+
+  it('sets no security at all on an open network', async () => {
+    const calls = withScan('');
+    const svc = require('../src/services/wifi')({ verifyTimeoutMs: 0, verifyIntervalMs: 0 });
+    await svc.connect('wlan0', 'Casa', 'secret', { band: 'a' }).catch(() => {});
+    expect(addArgs(calls)).not.toContain('wifi-sec');
   });
 });
 
