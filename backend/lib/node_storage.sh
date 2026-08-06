@@ -25,15 +25,22 @@ NODE_DISK="${NODE_DISK:-/dev/nvme0n1}"
 NODE_PARTITION="${NODE_PARTITION:-/dev/nvme0n1p1}"
 NODE_MOUNTPOINT="${NODE_MOUNTPOINT:-/media/nvme}"
 
+# Indirection, not decoration: the states below are told apart only by which
+# block devices exist, and a test cannot create one without root. Overriding this
+# is how the state machine gets exercised on a machine with a working disk.
+node_storage_is_block() {
+    [ -b "$1" ]
+}
+
 node_storage_state() {
     # The whole disk, not the partition: an unformatted drive has no partition,
     # and calling that "no drive" would hide the one thing the user can act on.
-    if [ ! -b "$NODE_DISK" ] && [ ! -b "$NODE_PARTITION" ]; then
+    if ! node_storage_is_block "$NODE_DISK" && ! node_storage_is_block "$NODE_PARTITION"; then
         echo "no-drive"
         return
     fi
 
-    if [ ! -b "$NODE_PARTITION" ]; then
+    if ! node_storage_is_block "$NODE_PARTITION"; then
         echo "unformatted"
         return
     fi
@@ -62,10 +69,22 @@ node_storage_state() {
 # so the UI can say WHICH disk it found on a drive that is present but unusable.
 node_storage_size() {
     local target="$NODE_DISK"
-    [ -b "$target" ] || target="$NODE_PARTITION"
-    [ -b "$target" ] || return 0
+    node_storage_is_block "$target" || target="$NODE_PARTITION"
+    node_storage_is_block "$target" || return 0
     lsblk -bdno SIZE "$target" 2>/dev/null | tr -d ' '
 }
+
+# ExecCondition= in node.service. Exiting 1 makes systemd SKIP the unit rather
+# than fail it, and a unit that never went active is never restarted — which is
+# the only way out of the loop: Restart=always fires on a clean exit too, and
+# RestartPreventExitStatus= is matched against the main process, not the control
+# process a Type=forking launcher runs as.
+if [ "${1:-}" = "--check" ]; then
+    state="$(node_storage_state)"
+    [ "$state" = "ready" ] && exit 0
+    echo "no usable node drive ($state); not starting bitcoind" >&2
+    exit 1
+fi
 
 if [ "${1:-}" = "--json" ]; then
     state="$(node_storage_state)"

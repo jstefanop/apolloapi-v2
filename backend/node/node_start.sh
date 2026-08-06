@@ -93,7 +93,10 @@ if [ "$storage_state" != "ready" ]; then
         not-mounted) log "WARN: $MOUNTPOINT is not mounted; bitcoind not started" ;;
         foreign)     log "WARN: $MOUNTPOINT is mounted from something other than the node drive; bitcoind not started" ;;
     esac
-    exit 0
+    # Under systemd this is unreachable — ExecCondition= already refused the
+    # start. It stays for anyone running the launcher by hand, and 69 is
+    # EX_UNAVAILABLE rather than 0 so a shell script calling it can tell.
+    exit 69
 fi
 
 log "Node storage OK: $MOUNTPOINT mounted from $NODE_PARTITION"

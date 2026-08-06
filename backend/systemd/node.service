@@ -7,6 +7,10 @@ After=dev-nvme0n1.device
 [Service]
 Type=forking
 User=futurebit
+# No drive, no node. Skipping the unit is not the same as failing it: a unit that
+# never went active is never restarted, and with Restart=always — which fires on
+# a clean exit too — that is the only way this does not loop every 30s forever.
+ExecCondition=/opt/apolloapi/backend/lib/node_storage.sh --check
 #Start:
 ExecStart=/opt/apolloapi/backend/node/node_start.sh
 #WorkingDirectory=/opt/apolloapi/backend/node
