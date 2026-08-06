@@ -133,8 +133,16 @@ const wifiService = ({
         () => {}
       );
     }
+    // `--rescan no` is what actually suppresses the scan: nmcli's default is
+    // `auto`, which scans on its own whenever its cache is older than 30s. Left
+    // off, `rescan: false` only skipped the explicit rescan above — and the join
+    // path, which asks for the cache precisely because the radio is about to be
+    // told to associate, disassociated it for the length of a scan instead.
     const { stdout } = await run(
-      ['-t', '-f', SCAN_FIELDS.join(','), 'dev', 'wifi', 'list', 'ifname', device],
+      [
+        '-t', '-f', SCAN_FIELDS.join(','), 'dev', 'wifi', 'list', 'ifname', device,
+        '--rescan', rescan ? 'auto' : 'no',
+      ],
       { sudo: false }
     );
     return parseScan(stdout);
@@ -212,17 +220,24 @@ const wifiService = ({
   // put it back. `-s` is what makes nmcli print the stored key at all: without it
   // the psk comes back as a placeholder, and "restoring" would write the
   // placeholder into the profile. null means it could not be read.
-  const savedNetworks = async () => {
+  // Probes are ours, not networks the user saved, so they are left out unless a
+  // caller asks for them — the connect path does, because it is the one that
+  // creates them and has to recognise the ones an API restart left behind.
+  // Without the filter a leftover probe reaches the panel resolved to the real
+  // SSID: two identical rows, one of which forgets an internal profile.
+  const savedNetworks = async ({ includeProbes = false } = {}) => {
     const { stdout } = await run(['-t', '-f', 'NAME,UUID,TYPE,DEVICE,ACTIVE', 'c', 'show'], {
       sudo: false,
     });
     // Carry both: the name is what identifies the profile, the ssid is what the
     // radio joins, and matching a network by name misses on every netplan device.
     return Promise.all(
-      parseConnections(stdout).map(async (p) => ({
-        ...p,
-        ssid: (await profileSsid(p.uuid)) || p.name,
-      }))
+      parseConnections(stdout)
+        .filter((p) => includeProbes || !isProbeProfile(p))
+        .map(async (p) => ({
+          ...p,
+          ssid: (await profileSsid(p.uuid)) || p.name,
+        }))
     );
   };
 
@@ -322,7 +337,7 @@ const wifiService = ({
   const cleanupCreatedProfile = async (ssid, knownBefore) => {
     if (!knownBefore) return;
     try {
-      const now = await savedNetworks();
+      const now = await savedNetworks({ includeProbes: true });
       const created = now.find(
         (n) => (n.ssid === ssid || n.name === ssid) && !knownBefore.has(n.uuid)
       );
@@ -414,7 +429,9 @@ const wifiService = ({
     if (hidden) args.push('802-11-wireless.hidden', 'yes');
     if (band) args.push('802-11-wireless.band', band);
     await run(args, { timeoutMs: 15000 });
-    const created = (await savedNetworks().catch(() => [])).find((n) => n.name === name);
+    const created = (await savedNetworks({ includeProbes: true }).catch(() => [])).find(
+      (n) => n.name === name
+    );
     return created?.uuid || name;
   };
 
@@ -439,29 +456,75 @@ const wifiService = ({
   // deleting the profile then tears down the link the request arrived on, and
   // the session dies mid-swap. The two radios keep a profile each instead — the
   // arrangement the interface binding exists to preserve.
-  const promoteProbe = async (tmpUuid, preexisting, device) => {
+  const promoteProbe = async (tmpUuid, preexisting, device, band) => {
     const heldElsewhere = preexisting.active && preexisting.device && preexisting.device !== device;
-    const name = heldElsewhere ? `${preexisting.name} (${device})` : preexisting.name;
-    if (!heldElsewhere) {
-      await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 }).catch(() => {});
+
+    // The probe is built from what the caller supplied, and a reconnect supplies
+    // only a key: everything else the retired profile carried would go with it.
+    // The band pin is the one that matters — unpinned, NetworkManager prefers
+    // 5 GHz, which the built-in radio of an Apollo II may not be able to hold,
+    // so the swap would leave a network the device cannot rejoin.
+    if (band == null) {
+      const pinned = await profileProperty(preexisting.uuid, '802-11-wireless.band');
+      if (pinned) await applyBand(tmpUuid, pinned).catch(() => {});
     }
+    const priority = await profileProperty(preexisting.uuid, 'connection.autoconnect-priority');
+    if (priority && priority !== '0')
+      await run(['c', 'modify', tmpUuid, 'connection.autoconnect-priority', priority], {
+        timeoutMs: 15000,
+      }).catch(() => {});
+
+    // Retiring the old profile is what makes the rename safe: two profiles under
+    // one id, both autoconnecting and one holding the stale key, is a device
+    // that can pick the wrong one at the next boot and never come back. So a
+    // delete that FAILS is not swallowed — the probe keeps a name of its own and
+    // the profile that could not be removed is taken out of the running instead.
+    let retired = !heldElsewhere;
+    if (!heldElsewhere) {
+      try {
+        await run(['c', 'delete', preexisting.uuid], { timeoutMs: 15000 });
+      } catch (err) {
+        retired = false;
+        console.error(
+          `[wifi] ${preexisting.name} could not be replaced (${err.output || err.message}) — ` +
+            'disabling autoconnect on it so the stale key cannot win at the next boot'
+        );
+        await run(['c', 'modify', preexisting.uuid, 'connection.autoconnect', 'no'], {
+          timeoutMs: 15000,
+        }).catch(() => {});
+      }
+    }
+    const name = retired ? preexisting.name : `${preexisting.name} (${device})`;
     await run(['c', 'modify', tmpUuid, 'connection.id', name], {
       timeoutMs: 15000,
-    }).catch(() => {});
+    }).catch((err) => {
+      // Not fatal — the profile works and is about to autoconnect — but it stays
+      // under its internal probe name, which nothing else would explain.
+      console.error(`[wifi] could not rename the proven profile to ${name}: ${err.message}`);
+    });
     await enableAutoconnect(tmpUuid);
   };
 
-  // It did not: drop the probe and put the radio back on the profile that was
-  // working. Activating the probe took the radio off it, so leaving it at that
-  // is a device sitting on no network — and on a wifi-only Apollo, out of reach.
-  const discardProbe = async (tmpUuid, device, preexisting) => {
+  // It did not: drop the probe and put the radio back on the connection it was
+  // ACTUALLY on — which is not necessarily the profile of the network being
+  // joined. Activating the probe took the radio off whatever it was serving, so
+  // reaching for the target's profile instead moves the device onto a network it
+  // was never on, with the key that had just been refused; on a wifi-only Apollo
+  // that is the session gone. Nothing to restore means the radio was on nothing.
+  const discardProbe = async (tmpUuid, device, restoreTo) => {
     await run(['c', 'delete', tmpUuid], { timeoutMs: 15000 }).catch(() => {});
-    await run(['c', 'up', preexisting.uuid, 'ifname', device], {
+    if (!restoreTo) return;
+    await run(['c', 'up', restoreTo.uuid, 'ifname', device], {
       timeoutMs: CONNECT_TIMEOUT_MS,
     }).catch(() => {});
   };
 
-  const connectWithNewKey = async (device, ssid, passphrase, { hidden, band, preexisting }) => {
+  const connectWithNewKey = async (
+    device,
+    ssid,
+    passphrase,
+    { hidden, band, preexisting, restoreTo }
+  ) => {
     const tmpName = `${PROBE_PREFIX}${preexisting.uuid.slice(0, 8)}`;
     const tmpUuid = await addProfile({ name: tmpName, device, ssid, passphrase, hidden, band });
 
@@ -469,7 +532,7 @@ const wifiService = ({
       await run(['c', 'up', tmpUuid, 'ifname', device], { timeoutMs: CONNECT_TIMEOUT_MS });
     } catch (err) {
       // The saved profile was never touched, so the working key is still there.
-      await discardProbe(tmpUuid, device, preexisting);
+      await discardProbe(tmpUuid, device, restoreTo);
       throw err;
     }
 
@@ -483,7 +546,7 @@ const wifiService = ({
   const connect = async (device, ssid, passphrase, { hidden = false, band = null } = {}) => {
     // null, not [], when the read fails: an empty list would claim nothing was
     // saved and arm the cleanup below against a profile we never created.
-    const before = await savedNetworks().catch(() => null);
+    const before = await savedNetworks({ includeProbes: true }).catch(() => null);
     const knownBefore = before && new Set(before.map((n) => n.uuid));
     // A probe outlives its attempt only when the API died between creating it
     // and settling it — an apollo-api restart, a power cut. Left there it shows
@@ -508,7 +571,28 @@ const wifiService = ({
     // And on THIS radio first: two adapters can hold a profile each for the same
     // network, and reaching for the other one's is how a join on the built-in
     // ends up rewriting what the dongle is running.
-    const preexisting = matches.find((n) => n.device === device) || matches[0] || null;
+    //
+    // The DEVICE column names a radio only while the profile is ACTIVE, so on an
+    // idle one it says nothing — and the rule above then never fired at all,
+    // leaving whichever profile nmcli happened to list first. What survives a
+    // profile being down is its binding, so that is what places it.
+    let preexisting = matches.find((n) => n.device === device) || null;
+    if (!preexisting && matches.length > 1) {
+      const bindings = await Promise.all(
+        matches.map((n) => profileProperty(n.uuid, 'connection.interface-name'))
+      );
+      preexisting =
+        matches.find((n, i) => bindings[i] === device) ||
+        // An unbound profile belongs to no radio in particular, so it is a
+        // better answer than one that names the other adapter.
+        matches.find((n, i) => !bindings[i]) ||
+        null;
+    }
+    preexisting = preexisting || matches[0] || null;
+
+    // What the radio is on RIGHT NOW, which is what a failed attempt has to put
+    // back. It is not necessarily the profile of the network being joined.
+    const restoreTo = (before || []).find((n) => n.active && n.device === device) || null;
 
     // Set while a probe profile is on trial, so the verification below knows
     // there is a swap left to settle one way or the other.
@@ -516,6 +600,21 @@ const wifiService = ({
     // The binding taken off the saved profile, to be put back if the activation
     // it was taken off for does not land.
     let releasedBinding = null;
+    // What the saved profile carried before this attempt pinned something onto
+    // it, for the same reason: these are written BEFORE the activation, because
+    // the activation has to honour them, so an activation that never lands must
+    // not leave them behind. A band the radio cannot hold turns an autoconnecting
+    // profile into one that never comes back from a power cut. null = not written.
+    let previousBand = null;
+    let previousHidden = null;
+    const revertProfilePins = async () => {
+      if (previousBand !== null) await applyBand(preexisting.uuid, previousBand).catch(() => {});
+      if (previousHidden !== null)
+        await run(
+          ['c', 'modify', preexisting.uuid, '802-11-wireless.hidden', previousHidden],
+          { timeoutMs: 15000 }
+        ).catch(() => {});
+    };
 
     try {
       if (preexisting && passphrase) {
@@ -523,6 +622,7 @@ const wifiService = ({
           hidden,
           band,
           preexisting,
+          restoreTo,
         });
       } else if (preexisting) {
         // Band is a property of the saved profile, so it is applied before the
@@ -530,7 +630,10 @@ const wifiService = ({
         // something about it. The UI's picker is per visit, so a plain reconnect
         // carries no band, and writing '' then would silently drop a pin the
         // user made in an earlier session. '' is how they clear it deliberately.
-        if (band != null) await applyBand(preexisting.uuid, band).catch(() => {});
+        if (band != null) {
+          previousBand = (await profileProperty(preexisting.uuid, '802-11-wireless.band')) || '';
+          await applyBand(preexisting.uuid, band).catch(() => {});
+        }
         releasedBinding = await releaseInterfaceBinding(preexisting.uuid, device).catch(
           () => null
         );
@@ -539,6 +642,7 @@ const wifiService = ({
         if (hidden) {
           // The flag has to reach the profile: on one saved without it,
           // NetworkManager waits for a beacon a hidden network never sends.
+          previousHidden = await profileProperty(preexisting.uuid, '802-11-wireless.hidden');
           await run(['c', 'modify', preexisting.uuid, '802-11-wireless.hidden', 'yes'], {
             timeoutMs: 15000,
           }).catch(() => {});
@@ -564,6 +668,7 @@ const wifiService = ({
     } catch (err) {
       const reason = err.timedOut ? 'timeout' : classifyError(err.code, err.output);
       if (releasedBinding) await restoreInterfaceBinding(preexisting.uuid, releasedBinding);
+      if (preexisting) await revertProfilePins();
       if (!preexisting) await cleanupCreatedProfile(ssid, knownBefore);
       // The classified reason is what the user sees, and `activation-failed` is
       // genuinely ambiguous — a wrong key, a missing regulatory domain and a
@@ -583,16 +688,23 @@ const wifiService = ({
     // not; one that never got there is undone, and the profile the device had
     // comes back.
     if (probeUuid) {
-      if (associated) await promoteProbe(probeUuid, preexisting, device);
-      else await discardProbe(probeUuid, device, preexisting);
+      if (associated) await promoteProbe(probeUuid, preexisting, device, band);
+      else await discardProbe(probeUuid, device, restoreTo);
     }
+    // The release was justified by an activation, and that activation has landed
+    // on THIS radio — so the profile is bound to the radio it is running on
+    // rather than left naming none. An unbound profile is one NetworkManager is
+    // free to auto-activate on whichever adapter comes up first at the next
+    // boot, which is the outcome the binding exists to prevent.
+    if (associated && releasedBinding) await restoreInterfaceBinding(preexisting.uuid, device);
     if (!confirmed) {
       // A radio that DID join is on the network the user asked for; only the
       // address is late (a slow DHCP server, or one handing out v6 only).
       if (!preexisting && !associated) await cleanupCreatedProfile(ssid, knownBefore);
-      // The radio never landed, so the release that let it try is undone too.
+      // The radio never landed, so everything written to let it try is undone.
       if (!associated && releasedBinding)
         await restoreInterfaceBinding(preexisting.uuid, releasedBinding);
+      if (!associated && preexisting) await revertProfilePins();
       const reason = associated ? 'no-ip-address' : 'not-confirmed';
       const detail = associated
         ? 'the radio joined that network but no address arrived in time'
@@ -623,7 +735,14 @@ const wifiService = ({
       if (/not active/i.test(err.output || err.message || '')) {
         return { disconnected: true, interface: device, alreadyDisconnected: true };
       }
-      throw err;
+      // Classified like connect's failures, and with a reason of its own. A raw
+      // NmcliError carries no `reason`, and the UI's lookup then falls back to
+      // the connect-specific default — telling someone who asked to LEAVE a
+      // network that the device could not join it.
+      throw Object.assign(new Error('disconnect-failed'), {
+        reason: err.timedOut ? 'timeout' : 'disconnect-failed',
+        detail: err.output,
+      });
     }
     return { disconnected: true, interface: device, alreadyDisconnected: false };
   };
@@ -637,7 +756,16 @@ const wifiService = ({
     const type = await profileProperty(uuid, 'connection.type');
     if (type && type !== '802-11-wireless')
       throw Object.assign(new Error('not-a-wifi-profile'), { reason: 'not-a-wifi-profile' });
-    await run(['c', 'delete', 'uuid', uuid], { timeoutMs: 20000 });
+    try {
+      await run(['c', 'delete', 'uuid', uuid], { timeoutMs: 20000 });
+    } catch (err) {
+      // Same reason as disconnect: unclassified, this reaches the user as
+      // "could not join the network" for an operation that joins nothing.
+      throw Object.assign(new Error('forget-failed'), {
+        reason: err.timedOut ? 'timeout' : 'forget-failed',
+        detail: err.output,
+      });
+    }
     return { forgotten: true, uuid };
   };
 

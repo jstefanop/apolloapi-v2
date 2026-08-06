@@ -82,7 +82,9 @@ module.exports = {
         // What the UI is told is classified; what nmcli said is kept in the
         // journal, because it is the only account of WHY and the device is
         // rarely in the room.
-        console.error(`[wifi] disconnect ${ifname} failed: ${error.output || error.message}`);
+        console.error(
+          `[wifi] disconnect ${ifname} failed: ${error.detail || error.output || error.message}`
+        );
         return { error: { message: error.reason || error.message } };
       }
     },
@@ -92,7 +94,9 @@ module.exports = {
         await services.wifi.forget(uuid);
         return { error: null };
       } catch (error) {
-        console.error(`[wifi] forget ${uuid} failed: ${error.output || error.message}`);
+        console.error(
+          `[wifi] forget ${uuid} failed: ${error.detail || error.output || error.message}`
+        );
         return { error: { message: error.reason || error.message } };
       }
     },

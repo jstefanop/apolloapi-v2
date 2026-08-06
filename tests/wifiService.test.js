@@ -168,6 +168,30 @@ describe('service — disconnect and forget are different operations', () => {
     expect(argv).toEqual(expect.arrayContaining(['ifname', 'wlx98254aa4b822']));
   });
 
+  it('really suppresses the scan when asked for the cache', async () => {
+    // Skipping the explicit `dev wifi rescan` is not enough: nmcli's default is
+    // `--rescan auto`, which scans on its own once the cache is 30s old. On the
+    // join path — which reads the cache precisely because the radio is about to
+    // associate — that disassociates it for the length of a scan.
+    install({ stdout: '' });
+    await wifiService().scan('wlan0', { rescan: false });
+    expect(spawn.mock.calls[0][1]).toEqual(expect.arrayContaining(['--rescan', 'no']));
+  });
+
+  it('leaves probe profiles out of the saved networks it reports', async () => {
+    // A probe outlives its attempt when apollo-api dies mid-join. Reported as a
+    // saved network it resolves to the real SSID, so the panel shows the network
+    // twice and Forget can be pressed on the internal one.
+    install({
+      stdout: [
+        'apollo-wifi-probe-uuid-0:uuid-9:802-11-wireless::no',
+        'Home:uuid-0:802-11-wireless::no',
+      ].join('\n'),
+    });
+    const saved = await wifiService().savedNetworks();
+    expect(saved.map((n) => n.uuid)).toEqual(['uuid-0']);
+  });
+
   it('connect passes the passphrase as an argument, never interpolated', async () => {
     // Fail at the nmcli step so connect never enters its verification poll: a
     // loop left running here keeps calling spawn during the LATER tests and
@@ -337,10 +361,25 @@ describe('disconnect is idempotent — already down is the asked-for outcome', (
     });
   });
 
-  it('still reports a genuine failure', async () => {
+  it('still reports a genuine failure, with a reason of its own', async () => {
+    // Classified, not raw: an error without a `reason` reaches the panel through
+    // the connect-specific fallback, which tells someone who asked to LEAVE a
+    // network that the device could not join it. nmcli's own words stay in
+    // `detail`, for the journal.
     install({ stderr: 'Error: Device not found', code: 1 });
     const wifiService = require('../src/services/wifi');
-    await expect(wifiService().disconnect('nope0')).rejects.toThrow('Device not found');
+    await expect(wifiService().disconnect('nope0')).rejects.toMatchObject({
+      reason: 'disconnect-failed',
+      detail: expect.stringContaining('Device not found'),
+    });
+  });
+
+  it('classifies a failed forget too, instead of rethrowing nmcli', async () => {
+    install({ stderr: 'Error: Connection could not be deleted', code: 1 });
+    const wifiService = require('../src/services/wifi');
+    await expect(
+      wifiService().forget('6502ecf9-01cf-44dc-8556-65592d68c2a7')
+    ).rejects.toMatchObject({ reason: 'forget-failed' });
   });
 });
 
@@ -654,13 +693,38 @@ describe('what the device is left with when the join is over', () => {
     // The old order deleted it as soon as `nmcli c up` returned 0 — which only
     // means the activation started. A join that stalls on DHCP then left no
     // working profile at all and nothing to fall back to.
-    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: null });
+    const calls = nmcli({ saved: ['Home:uuid-0:802-11-wireless:wlan0:yes'], connectedOn: null });
     await expect(service().connect('wlan0', 'Home', 'newkey')).rejects.toMatchObject({
       reason: 'not-confirmed',
     });
     expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(false);
     // and the radio is put back on what was serving it
     expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(true);
+  });
+
+  it('puts the radio back on the network it was on, not on the one it was trying', async () => {
+    // A wifi-only Apollo administered over `Other` while the user retries the
+    // key of `Home`. The probe takes the radio off `Other`; rolling back onto
+    // `Home` — inactive, and holding the key that was just refused — moves the
+    // device onto a network it was never on and drops the session with it.
+    const calls = nmcli({
+      saved: ['Other:uuid-7:802-11-wireless:wlan0:yes', SAVED_HOME],
+      properties: { '802-11-wireless.ssid': '' },
+      connectedOn: null,
+    });
+    await expect(service().connect('wlan0', 'Home', 'newkey')).rejects.toMatchObject({
+      reason: 'not-confirmed',
+    });
+    expect(calls.some((c) => c.startsWith('c up uuid-7'))).toBe(true);
+    expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(false);
+  });
+
+  it('restores nothing when the radio was on nothing', async () => {
+    const calls = nmcli({ saved: [SAVED_HOME], connectedOn: null });
+    await expect(service().connect('wlan0', 'Home', 'newkey')).rejects.toMatchObject({
+      reason: 'not-confirmed',
+    });
+    expect(calls.some((c) => /^c up uuid-\d+/.test(c))).toBe(false);
   });
 
   it('promotes the probe once the radio is actually on the network', async () => {
@@ -671,6 +735,61 @@ describe('what the device is left with when the join is over', () => {
     expect(calls.some((c) => /^c delete uuid-0$/.test(c))).toBe(true);
     expect(calls.some((c) => /connection\.id Home$/.test(c))).toBe(true);
     expect(calls.some((c) => /connection\.autoconnect yes$/.test(c))).toBe(true);
+  });
+
+  it('carries the retired profile’s band pin onto the probe that replaces it', async () => {
+    // The probe is built from what the caller sent, and a retyped password sends
+    // no band. Promoting it as-is dropped a pin made in an earlier session:
+    // NetworkManager then prefers 5 GHz, which the built-in radio of an Apollo II
+    // may not hold, and the device does not come back from the next power cut.
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { '802-11-wireless.band': 'bg' },
+      connectedOn: 'wlan0',
+    });
+    await service().connect('wlan0', 'Home', 'newkey');
+    expect(
+      calls.some((c) => /^c modify apollo-wifi-probe\S* 802-11-wireless\.band bg$/.test(c))
+    ).toBe(true);
+  });
+
+  it('does not rename the probe over a profile it failed to delete', async () => {
+    // Two profiles under one id, both autoconnecting and one holding the stale
+    // key, is a device that can pick the wrong one at the next boot. The delete
+    // failing used to be swallowed and the rename went ahead anyway.
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.join(' ') === 'c delete uuid-0') {
+          c.stderr.emit('data', Buffer.from('Error: Connection is read-only'));
+          c.emit('close', 1, null);
+          return;
+        }
+        if (argv.includes('-g')) {
+          c.stdout.emit('data', Buffer.from(''));
+        } else if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from(SAVED_HOME));
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        } else if (argv.includes('dev') && !argv.includes('wifi')) {
+          c.stdout.emit('data', Buffer.from('wlan0:wifi:connected:Home'));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+
+    await service().connect('wlan0', 'Home', 'newkey');
+    expect(calls.some((c) => /connection\.id Home$/.test(c))).toBe(false);
+    expect(calls.some((c) => c.includes('connection.id Home (wlan0)'))).toBe(true);
+    // and the one that could not be removed is taken out of the running, so the
+    // stale key cannot win the next boot
+    expect(calls).toContain('c modify uuid-0 connection.autoconnect no');
   });
 
   it('leaves a band the user pinned earlier alone on a plain reconnect', async () => {
@@ -699,6 +818,78 @@ describe('what the device is left with when the join is over', () => {
     });
     await service().connect('wlx98', 'Home', null);
     expect(calls.some((c) => /^c modify uuid-0 connection\.interface-name/.test(c))).toBe(true);
+  });
+
+  it('binds the profile to the radio it ended up on, never leaving it unbound', async () => {
+    // The release is only justified by the activation it was made for. Once that
+    // activation has landed the profile belongs to THIS radio; left naming none,
+    // NetworkManager auto-activates it on whichever adapter comes up first at the
+    // next boot — a network moved onto the wrong radio, which is exactly what the
+    // binding exists to prevent.
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { 'connection.interface-name': 'wlan0' },
+      connectedOn: 'wlx98',
+    });
+    await service().connect('wlx98', 'Home', null);
+    expect(calls).toContain('c modify uuid-0 connection.interface-name wlx98');
+  });
+
+  it('takes back a band it pinned for an activation that never landed', async () => {
+    // The pin is written before the activation because the activation has to
+    // honour it. When the radio cannot hold that band the write outlives the
+    // attempt: an autoconnecting profile pinned to a band it can never satisfy
+    // stops rejoining at all, and a wifi-only device needs physical access.
+    const calls = nmcli({
+      saved: [SAVED_HOME],
+      properties: { '802-11-wireless.band': 'bg' },
+      joins: false,
+    });
+    await expect(service().connect('wlan0', 'Home', null, { band: 'a' })).rejects.toMatchObject({
+      reason: 'activation-failed',
+    });
+    expect(calls).toContain('c modify uuid-0 802-11-wireless.band a');
+    expect(calls.lastIndexOf('c modify uuid-0 802-11-wireless.band bg')).toBeGreaterThan(
+      calls.indexOf('c modify uuid-0 802-11-wireless.band a')
+    );
+  });
+
+  it('places an idle profile by its binding, since nmcli names no device on one', async () => {
+    // Two saved profiles for one network, one per radio, neither active: the
+    // DEVICE column is empty on both, so "the one on THIS radio" matched neither
+    // and the first row won — a join on the dongle rewriting, or deleting, the
+    // profile the built-in owns.
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push(argv.join(' '));
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (argv.includes('-g')) {
+          const field = argv[argv.indexOf('-g') + 1];
+          const uuid = argv[argv.indexOf('show') + 1];
+          if (field === 'connection.interface-name')
+            c.stdout.emit('data', Buffer.from(uuid === 'uuid-0' ? 'wlan0' : 'wlx98'));
+        } else if (argv.includes('c') && argv.includes('show')) {
+          c.stdout.emit(
+            'data',
+            Buffer.from('Home:uuid-0:802-11-wireless::no\nHome:uuid-1:802-11-wireless::no')
+          );
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        } else if (argv.includes('dev') && !argv.includes('wifi')) {
+          c.stdout.emit('data', Buffer.from('wlx98:wifi:connected:Home'));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+
+    await service().connect('wlx98', 'Home', null);
+    expect(calls.some((c) => c.startsWith('c up uuid-1'))).toBe(true);
+    expect(calls.some((c) => c.startsWith('c up uuid-0'))).toBe(false);
   });
 
   it('leaves a binding that already names the radio in use', async () => {
