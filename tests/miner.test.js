@@ -250,3 +250,22 @@ describe('stat file parsing tolerates a miner that has just restarted', () => {
     expect(JSON.stringify(board)).not.toContain('""');
   });
 });
+
+// A forking miner unit blocks systemctl for the ~35s miner_start.sh spends
+// waiting on USB enumeration. --no-block returns at once so setup and the restart
+// button don't hang for it; the device-side sequence is unchanged.
+describe('miner start/restart do not block the API on the 35s device wait', () => {
+  it('start() and restart() use systemctl --no-block', async () => {
+    const minerService = require('../src/services/miner')(knex, {});
+    const exec = jest.spyOn(minerService, '_execCommand').mockResolvedValue('');
+
+    await minerService.start();
+    await minerService.restart();
+
+    expect(exec.mock.calls.map((c) => c[0])).toEqual([
+      'sudo systemctl start --no-block apollo-miner',
+      'sudo systemctl restart --no-block apollo-miner',
+    ]);
+    exec.mockRestore();
+  });
+});

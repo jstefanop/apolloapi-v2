@@ -75,7 +75,7 @@ describe('T1 — miner start/stop/restart (Miner.*)', () => {
     expect(res.data.Miner.start.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'miner' }).first();
     expect(row.requested_status).toBe('online');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl start apollo-miner');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl start --no-block apollo-miner');
   });
 
   it('Miner.stop → requested_status=offline + systemctl stop apollo-miner', async () => {
@@ -91,7 +91,7 @@ describe('T1 — miner start/stop/restart (Miner.*)', () => {
     const spy = jest.spyOn(services.miner, '_execCommand').mockResolvedValue('');
     const res = await run(`query { Miner { restart { error { message } } } }`);
     expect(res.data.Miner.restart.error).toBeNull();
-    expect(spy).toHaveBeenCalledWith('sudo systemctl restart apollo-miner');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl restart --no-block apollo-miner');
   });
 });
 

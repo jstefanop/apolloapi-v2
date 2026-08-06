@@ -1,14 +1,26 @@
 #!/bin/bash
 
 YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 #This script assumes image_install has already been run previously
 
+# Not `set -e`: the systemctl stop below and the cleanup steps exit non-zero
+# benignly.
+fail() {
+    echo -e "${RED} ---> $1${NC}" >&2
+    exit 1
+}
+
+copy_or_fail() {
+    cp "$1" "$2" || fail "could not copy $1"
+}
+
 if [ "$EUID" -ne 0 ]
   then echo -e "${RED}Update script must be run by root or with sudo${NC}"
-  exit
+  exit 1
 fi
 
 
@@ -56,30 +68,48 @@ nvm use 21
 ### API ###
 echo -e "${YELLOW} ---> Updating API modules${NC}"
 
-cd $APOLLO_DIR
+cd $APOLLO_DIR || fail "cannot enter $APOLLO_DIR"
 
-rm futurebit.sqlite
+git reset --hard || fail "could not reset the API repo"
+git pull || fail "could not pull the API repo"
 
-git reset --hard
-git pull
+# After the pull, so a failed run leaves the device re-runnable.
+rm -f futurebit.sqlite
 
-yarn
+yarn || fail "yarn install failed for the API"
 
 ### UI ###
 echo -e "${YELLOW} ---> Updating UI modules${NC}"
 
-cd $APOLLO_DIR/apolloui-v2
+cd $APOLLO_DIR/apolloui-v2 || fail "cannot enter $APOLLO_DIR/apolloui-v2"
 
-git reset --hard
-git pull
+git reset --hard || fail "could not reset the UI repo"
+git pull || fail "could not pull the UI repo"
 
-yarn
+API_BRANCH=$(git -C $APOLLO_DIR rev-parse --abbrev-ref HEAD) || fail "could not read the API branch"
+UI_BRANCH=$(git -C $APOLLO_DIR/apolloui-v2 rev-parse --abbrev-ref HEAD) || fail "could not read the UI branch"
+
+# image_install falls back to the UI's dev branch when a backend branch has no UI
+# counterpart, so a mismatch is only fatal on main/staging.
+is_release_branch() {
+    [ "$1" = "main" ] || [ "$1" = "staging" ]
+}
+
+if [ "$API_BRANCH" != "$UI_BRANCH" ]; then
+    if is_release_branch "$API_BRANCH" || is_release_branch "$UI_BRANCH"; then
+        fail "API is on $API_BRANCH but the UI is on $UI_BRANCH, refusing to capture a mixed release image"
+    fi
+    echo -e "${YELLOW} ---> API is on $API_BRANCH, UI is on $UI_BRANCH (developer image)${NC}" >&2
+fi
+
+yarn || fail "yarn install failed for the UI"
 
 echo -e "${YELLOW} ---> Building UI (could take few minutes)${NC}"
 
-yarn build
+yarn build || fail "the UI build failed"
 
 yarn cache clean
+rm -rf .next/cache
 
 chown -R futurebit $APOLLO_DIR
 
@@ -88,10 +118,10 @@ echo -e "${YELLOW} ---> Updating System binaries${NC}"
 
 arch=$(uname -m)
 
-cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
-cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
-cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v3 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v3
-cp $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
+copy_or_fail $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner $APOLLO_DIR/backend/apollo-miner/futurebit-miner
+copy_or_fail $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v2 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v2
+copy_or_fail $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-miner-v3 $APOLLO_DIR/backend/apollo-miner/futurebit-miner-v3
+copy_or_fail $APOLLO_DIR/backend/apollo-miner/bin/$arch/apollo-helper $APOLLO_DIR/backend/apollo-miner/
 
 ### Bitcoind ###
 #########################
@@ -102,10 +132,10 @@ NODE_SOFTWARE="core-28.1"
 
 
 # Copy the correct bitcoind binary based on node_software
-cp $APOLLO_DIR/backend/node/bin/$NODE_SOFTWARE/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
+copy_or_fail $APOLLO_DIR/backend/node/bin/$NODE_SOFTWARE/$arch/bitcoind $APOLLO_DIR/backend/node/bitcoind
 echo -e "${GREEN} ---> Copied $NODE_SOFTWARE bitcoind binary${NC}"
 
-cp $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
+copy_or_fail $APOLLO_DIR/backend/default-configs/bitcoin.conf $APOLLO_DIR/backend/node/
 
 #Create new api/user config files
 touch $APOLLO_DIR/backend/node/api.conf
@@ -114,29 +144,27 @@ touch $APOLLO_DIR/backend/node/user.conf
 
 ### ckpool ###
 #########################
-cp $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/
-cp $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
+copy_or_fail $APOLLO_DIR/backend/ckpool/bin/$arch/ckpool $APOLLO_DIR/backend/ckpool/
+copy_or_fail $APOLLO_DIR/backend/default-configs/ckpool.conf $APOLLO_DIR/backend/ckpool/
 
 ### SYSTEMD ###
 echo -e "${YELLOW} ---> Updating systemd files${NC}"
 
-cp $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
-cp $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/apollo-api.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/apollo-ui-v2.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/apollo-miner.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/node.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/ckpool.service /etc/systemd/system/
 
 
 #RC LOCAL
-cp $APOLLO_DIR/backend/rc.local /etc/
+copy_or_fail $APOLLO_DIR/backend/rc.local /etc/
 chmod +x /etc/rc.local
-cp $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
+copy_or_fail $APOLLO_DIR/backend/systemd/rc-local.service /etc/systemd/system/
 
-# Persistent journald on the eMMC, so an abrupt hang leaves evidence (see
-# backend/systemd/journald-apollo.conf). Non-fatal: logging is a diagnostic aid,
-# never a reason to abort an update. This is a factory-capture flow that leaves
-# services stopped, so no restart — the config applies at the next boot.
-bash "${APOLLO_DIR}/backend/utils/install-journald.sh" "${APOLLO_DIR}" || \
+# Persistent journald (see backend/systemd/journald-apollo.conf). Non-fatal, and
+# no restart needed here: the config applies at the next boot.
+APOLLO_DIR="${APOLLO_DIR}" bash "${APOLLO_DIR}/backend/utils/install-journald.sh" || \
     echo "[journald] WARNING: could not install the journald policy; continuing" >&2
 
 echo -e "${YELLOW} ---> Reloading systemd${NC}"
@@ -151,3 +179,6 @@ systemctl enable node.service
 systemctl enable ckpool.service
 
 echo -e "${GREEN} --->  Image update complete${NC}"
+echo -e "${GREEN}       branch:  ${API_BRANCH}${NC}"
+echo -e "${GREEN}       API:     $(git -C $APOLLO_DIR rev-parse --short HEAD)${NC}"
+echo -e "${GREEN}       UI:      $(git -C $APOLLO_DIR/apolloui-v2 rev-parse --short HEAD)${NC}"
