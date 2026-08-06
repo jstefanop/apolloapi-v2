@@ -39,6 +39,19 @@ describe('PoolProfilesService', () => {
     expect(profiles[0].url).toBe('stratum+tcp://corrected:3333');
   });
 
+  // Read-then-write left a window where both callers saw the name free and both
+  // inserted, and the loser reached the user as raw UNIQUE-constraint text.
+  it('survives two saves of the same name at once', async () => {
+    await Promise.all([
+      svc.save(profile),
+      svc.save({ ...profile, url: 'stratum+tcp://second:3333' }),
+    ]);
+
+    const { profiles } = await svc.list();
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].name).toBe(profile.name);
+  });
+
   it('keeps profiles that differ only by name', async () => {
     await svc.save(profile);
     await svc.save({ ...profile, name: 'Ocean office' });

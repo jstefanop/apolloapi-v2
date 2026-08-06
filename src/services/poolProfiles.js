@@ -36,10 +36,6 @@ class PoolProfilesService {
     }
 
     try {
-      const existing = await this.knex('pool_profiles')
-        .where({ name: trimmedName })
-        .first();
-
       const row = {
         name: trimmedName,
         url: trimmedUrl,
@@ -47,15 +43,14 @@ class PoolProfilesService {
         password: password ?? null,
       };
 
-      if (existing) {
-        // Scoped by id, never a bare update: this table is small and a missing
-        // WHERE here would rewrite every profile the user has.
-        await this.knex('pool_profiles')
-          .where({ id: existing.id })
-          .update({ ...row, updated_at: this.knex.fn.now() });
-      } else {
-        await this.knex('pool_profiles').insert(row);
-      }
+      // One statement rather than read-then-write: two saves of the same name at
+      // once both used to find the name free and both insert, and the loser came
+      // back to the user as raw UNIQUE-constraint text. The merge is scoped by
+      // the conflicting row, so it can never rewrite another profile.
+      await this.knex('pool_profiles')
+        .insert(row)
+        .onConflict('name')
+        .merge({ ...row, updated_at: this.knex.fn.now() });
 
       const profile = await this.knex('pool_profiles')
         .select('id', 'name', 'url', 'username', 'password')
