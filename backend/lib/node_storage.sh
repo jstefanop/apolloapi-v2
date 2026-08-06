@@ -45,15 +45,20 @@ node_storage_state() {
         return
     fi
 
-    if ! findmnt -rn --target "$NODE_MOUNTPOINT" >/dev/null 2>&1; then
+    # --mountpoint, never --target: --target answers for the ENCLOSING mount, so
+    # with nothing mounted here it reports / on the SD card and succeeds. This
+    # branch would then be unreachable and a formatted-but-unmounted disk would
+    # read as "foreign" — telling the user to format a drive holding their chain.
+    if ! findmnt -rn --mountpoint "$NODE_MOUNTPOINT" >/dev/null 2>&1; then
         echo "not-mounted"
         return
     fi
 
-    # Mounted from where? With nothing plugged in, the mountpoint resolves to the
-    # root filesystem on the SD card, and writing a blockchain there fills it.
+    # Something IS mounted here — from where? Anything but the node partition
+    # (a second disk, a stale fstab entry) is a blockchain written where it does
+    # not belong, so it is refused rather than used.
     local mnt_src dev_real src_real
-    mnt_src="$(findmnt -rn -o SOURCE --target "$NODE_MOUNTPOINT" 2>/dev/null || true)"
+    mnt_src="$(findmnt -rn -o SOURCE --mountpoint "$NODE_MOUNTPOINT" 2>/dev/null || true)"
     dev_real="$(readlink -f "$NODE_PARTITION" 2>/dev/null || echo "$NODE_PARTITION")"
     src_real="$(readlink -f "$mnt_src" 2>/dev/null || echo "$mnt_src")"
 

@@ -40,8 +40,21 @@ state_with() {
         node_storage_is_block() {
             case " $blocks " in *" $1 "*) return 0 ;; *) return 1 ;; esac
         }
+        # Faithful to the real tool, because the difference is the whole bug:
+        # --target answers for the ENCLOSING mount and therefore succeeds even
+        # when nothing is mounted at the mountpoint, while --mountpoint answers
+        # only for the mountpoint itself. A stub that fails both when nothing is
+        # mounted hides a probe that can never report "not-mounted".
         findmnt() {
-            [ -n "$mnt" ] || return 1
+            case " $* " in
+                *" --mountpoint "*)
+                    [ -n "$mnt" ] || return 1
+                    ;;
+                *)
+                    # --target: falls back to whatever /media/fake sits inside.
+                    [ -n "$mnt" ] || { case " $* " in *" SOURCE "*) echo "/dev/mmcblk1p1" ;; esac; return 0; }
+                    ;;
+            esac
             # Only -o SOURCE is asked for; the bare form is the existence probe.
             case " $* " in *" SOURCE "*) echo "$mnt" ;; esac
             return 0
@@ -56,12 +69,16 @@ echo "node_storage_state"
 
 check "no disk at all"                 "no-drive"    "$(state_with "" "")"
 check "disk present, no partition"     "unformatted" "$(state_with "/dev/fake0" "")"
+# A drive that is formatted but did not mount — the state the user can fix by
+# rebooting. It is only reachable with a probe that asks about the mountpoint
+# itself: --target would answer for the enclosing filesystem and call this
+# "foreign", which reads as "format the disk" to someone holding a synced chain.
 check "partition present, not mounted" "not-mounted" "$(state_with "/dev/fake0 /dev/fake0p1" "")"
 check "mounted from the node drive"    "ready"       "$(state_with "/dev/fake0 /dev/fake0p1" "/dev/fake0p1")"
 
-# The one that costs real damage: with nothing plugged in, /media/nvme resolves to
-# the SD card, and a blockchain written there fills the system disk.
-check "mountpoint falls through to root" "foreign" \
+# The one that costs real damage: something else is mounted where the blockchain
+# goes, and writing it there fills a disk that is not the one meant for it.
+check "mounted from the system disk"   "foreign" \
     "$(state_with "/dev/fake0 /dev/fake0p1" "/dev/mmcblk1p1")"
 
 # A partition that exists but was never the one mounted — a second drive, or a
