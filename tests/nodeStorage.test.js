@@ -105,6 +105,25 @@ describe('NodeService.getStorage', () => {
     }
   });
 
+  // Everything else on this service is faked in development, and a laptop has no
+  // NVMe: probing for real answers no-drive and takes the node, solo and format
+  // screens off the build they are being developed on.
+  it('answers without probing hardware in development', async () => {
+    const orig = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    let devSvc;
+    try {
+      jest.isolateModules(() => {
+        devSvc = require('../src/services/node')({}, {});
+      });
+    } finally {
+      process.env.NODE_ENV = orig;
+    }
+
+    await expect(devSvc.getStorage()).resolves.toMatchObject({ state: 'ready' });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('does not cache across service instances', async () => {
     const p = svc.getStorage();
     answer('{"state":"ready"}');

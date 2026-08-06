@@ -173,6 +173,19 @@ class NodeService {
   // Cached briefly: every stats push would otherwise spawn a shell for something
   // that changes when hardware is added, not between polls.
   async getStorage() {
+    // A laptop has no NVMe, and every other Node call here is faked. Probing for
+    // real would answer no-drive and take the node, solo and format screens off
+    // the very build they are being developed on.
+    if (devNodeService) {
+      return {
+        state: 'ready',
+        disk: '/dev/nvme0n1',
+        partition: '/dev/nvme0n1p1',
+        mountpoint: '/media/nvme',
+        size: 1000204886016,
+      };
+    }
+
     // Held for a while once the drive is ready — that is the steady state, and
     // it changes when hardware is added, not between polls. Anything else is a
     // state the user is actively working on: a format finishing, a disk being
