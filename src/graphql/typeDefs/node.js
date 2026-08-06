@@ -33,6 +33,10 @@ module.exports = gql`
         reason: "format is a Mutation (Mutation.Node.format); this query alias only serves pre-2.1.4 UI bundles"
       )
     formatProgress: NodeFormatProgressOutput! @auth
+    # Whether this device has anywhere to put a blockchain. A property of the
+    # machine, not an error: some Apollo III ship without an SSD, and the panel
+    # used to report that as a refused connection.
+    storage: NodeStorageOutput! @auth
     online: NodeOnlineOutput!
     recentBlocks(count: Int): NodeRecentBlocksOutput!
   }
@@ -115,6 +119,26 @@ module.exports = gql`
 
   type NodeConfResult {
     bitcoinConf: String!
+  }
+
+  type NodeStorageOutput {
+    result: NodeStorage
+    error: Error
+  }
+
+  type NodeStorage {
+    # no-drive | unformatted | not-mounted | foreign | ready | unknown
+    # unknown means the check itself could not run — never treated as "no
+    # drive", which would tell a working device to go buy hardware.
+    state: String!
+    # True only for ready. The one flag the UI branches on for enabling the
+    # node, solo mining and the format action.
+    available: Boolean!
+    # Present when a disk was found: lets the panel name what it saw on a drive
+    # that is there but unusable.
+    size: String
+    disk: String
+    mountpoint: String
   }
 
   type NodeFormatProgressOutput {

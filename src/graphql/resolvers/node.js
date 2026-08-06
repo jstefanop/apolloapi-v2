@@ -92,6 +92,25 @@ module.exports = {
       }
     },
 
+    storage: async (_, __, { services }) => {
+      try {
+        const s = await services.node.getStorage();
+        return {
+          result: {
+            state: s.state,
+            available: s.state === 'ready',
+            // A string: sizes are past 2^53 in bits and Int would truncate.
+            size: s.size != null ? String(s.size) : null,
+            disk: s.disk || null,
+            mountpoint: s.mountpoint || null,
+          },
+          error: null,
+        };
+      } catch (error) {
+        return { result: null, error: { message: error.message } };
+      }
+    },
+
     formatProgress: async (_, __, { services }) => {
       try {
         const result = await services.node.getFormatProgress();

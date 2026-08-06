@@ -164,6 +164,48 @@ class NodeService {
     }
   }
 
+  // Where the node would live, and whether it can. Read from the same script the
+  // launcher uses, so "the node will not start" and "here is why" can never
+  // disagree — the UI used to infer the reason from a refused RPC connection,
+  // which said the node was not running without ever saying that some devices
+  // ship with no drive to run it on.
+  //
+  // Cached briefly: every stats push would otherwise spawn a shell for something
+  // that changes when hardware is added, not between polls.
+  async getStorage() {
+    const now = Date.now();
+    if (this._storageCache && now - this._storageCache.at < 15000) {
+      return this._storageCache.value;
+    }
+
+    const script = path.join(__dirname, '../../backend/lib/node_storage.sh');
+    const value = await new Promise((resolve) => {
+      const child = spawn('bash', [script, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+      child.stdout.on('data', (d) => {
+        out += d;
+      });
+      child.on('error', () => {
+        clearTimeout(timer);
+        // Unknown is not "no drive": claiming a device has no disk because a
+        // script would not run is how a working node gets told to buy hardware.
+        resolve({ state: 'unknown' });
+      });
+      child.on('close', () => {
+        clearTimeout(timer);
+        try {
+          resolve(JSON.parse(out.trim()));
+        } catch {
+          resolve({ state: 'unknown' });
+        }
+      });
+    });
+
+    this._storageCache = { at: now, value };
+    return value;
+  }
+
   // Format the Bitcoin node disk
   async format() {
     try {
