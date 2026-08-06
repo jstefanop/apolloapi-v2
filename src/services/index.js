@@ -5,6 +5,7 @@ const utils = require('../utils');
 const authService = require('./auth')(knex, utils);
 const minerService = require('./miner')(knex, utils);
 const poolsService = require('./pools')(knex, utils);
+const poolProfilesService = require('./poolProfiles')(knex);
 const nodeService = require('./node')(knex, utils);
 const settingsService = require('./settings')(knex, utils);
 const mcuService = require('./mcu')(knex, utils);
@@ -27,6 +28,7 @@ module.exports = {
   auth: authService,
   miner: minerService,
   pools: poolsService,
+  poolProfiles: poolProfilesService,
   node: nodeService,
   settings: settingsService,
   mcu: mcuService,

@@ -212,6 +212,19 @@ beforeAll(async () => {
     }
   });
 
+  await knex.schema.hasTable('pool_profiles').then(exists => {
+    if (!exists) {
+      return knex.schema.createTable('pool_profiles', table => {
+        table.increments('id');
+        table.timestamps(false, true);
+        table.text('name').notNullable().unique();
+        table.text('url').notNullable();
+        table.text('username');
+        table.text('password');
+      });
+    }
+  });
+
   await knex.schema.hasTable('time_series_data').then(exists => {
     if (!exists) {
       return knex.schema.createTable('time_series_data', table => {
