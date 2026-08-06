@@ -7,9 +7,34 @@ module.exports = gql`
 
   type McuActions {
     stats: McuStatsOutput! @auth
-    wifiScan: McuWifiScanOutput! @auth
-    wifiConnect(input: McuWifiConnectInput!): McuWifiConnectOutput! @auth
-    wifiDisconnect: McuWifiDisconnectOutput! @auth
+
+    # --- WiFi (reads) ---
+    # Every wifi radio on the device, labelled built-in or usb. A picker is only
+    # worth showing when there is more than one, which is the exception.
+    wifiInterfaces: McuWifiInterfacesOutput! @auth
+    # What the chosen radio is attached to right now. Omitting ifname asks about
+    # the one carrying the default route.
+    wifiStatus(ifname: String): McuWifiStatusOutput! @auth
+    # Scanning is per radio: two adapters report different signals for the same
+    # network, so a merged list could not say which one can reach it.
+    wifiNetworks(ifname: String!): McuWifiNetworksOutput! @auth
+    wifiSaved: McuWifiSavedOutput! @auth
+
+    wifiScan: McuWifiScanOutput!
+      @auth
+      @deprecated(
+        reason: "replaced by wifiNetworks(ifname), which reports the radio, the band, hidden and open networks; this shape only serves pre-2.1.4 UI bundles"
+      )
+    wifiConnect(input: McuWifiConnectInput!): McuWifiConnectOutput!
+      @auth
+      @deprecated(
+        reason: "wifiConnect is a Mutation (Mutation.Mcu.wifiConnect); a query re-executes on re-render, and this one carries a passphrase"
+      )
+    wifiDisconnect: McuWifiDisconnectOutput!
+      @auth
+      @deprecated(
+        reason: "wifiDisconnect is a Mutation (Mutation.Mcu.wifiDisconnect), and it now only disconnects — use Mutation.Mcu.wifiForget to delete a saved network"
+      )
     # reboot/shutdown/update: deprecated aliases for pre-mutation UI bundles —
     # see the NodeActions aliases for the rationale.
     reboot: EmptyOutput!
@@ -42,6 +67,16 @@ module.exports = gql`
     reboot: EmptyOutput! @auth
     shutdown: EmptyOutput! @auth
     update: EmptyOutput! @auth
+
+    # Joining a network is not idempotent and carries a secret: a query would be
+    # re-executed on re-render, re-sending the passphrase.
+    wifiConnect(input: McuWifiConnectInput!): McuWifiConnectOutput! @auth
+    # Drops the radio and KEEPS the saved profile, so reconnecting does not mean
+    # typing the passphrase again.
+    wifiDisconnect(ifname: String!): EmptyOutput! @auth
+    # Deletes ONE saved network, addressed by uuid. The operation this splits
+    # away from wifiDisconnect used to delete every profile it could match.
+    wifiForget(uuid: String!): EmptyOutput! @auth
   }
 
   type McuStatsOutput {
@@ -115,9 +150,107 @@ module.exports = gql`
     inuse: Boolean
   }
 
+  type McuWifiInterfacesOutput {
+    result: McuWifiInterfacesResult
+    error: Error
+  }
+
+  type McuWifiInterfacesResult {
+    interfaces: [McuWifiInterface]
+    # Which one the UI should preselect: the radio with the default route, not
+    # simply the built-in — on an Apollo II the built-in may serve something
+    # else entirely while a USB dongle carries the LAN.
+    preferred: String
+  }
+
+  type McuWifiInterface {
+    device: String!
+    kind: String!          # builtin | usb | unknown
+    state: String
+    connected: Boolean!
+    connection: String     # the network it is on, if any
+    carriesDefaultRoute: Boolean!
+  }
+
+  type McuWifiStatusOutput {
+    result: McuWifiStatus
+    error: Error
+  }
+
+  type McuWifiStatus {
+    connected: Boolean!
+    ssid: String
+    interface: String
+    kind: String
+    carriesDefaultRoute: Boolean
+    ipAddress: String
+    # Which band the link is actually on. Read without rescanning, because a
+    # rescan while associated lags and reports the previous channel.
+    channel: Int
+    frequency: Int
+    band: String
+  }
+
+  type McuWifiNetworksOutput {
+    result: McuWifiNetworksResult
+    error: Error
+  }
+
+  type McuWifiNetworksResult {
+    networks: [McuWifiNetwork]
+  }
+
+  type McuWifiNetwork {
+    # Null when the network hides its name; hidden says so explicitly rather
+    # than leaving a blank row in the list.
+    ssid: String
+    hidden: Boolean!
+    bssid: String
+    mode: String
+    channel: Int
+    frequency: Int
+    band: String           # 2.4 | 5 | 6
+    bands: [String]        # every band this name was seen on
+    signal: Int!
+    # A LIST — nmcli reports "WPA2 WPA3". Empty means open, and open says it
+    # outright so the UI does not ask for a passphrase that does not exist.
+    security: [String]
+    open: Boolean!
+    active: Boolean!
+  }
+
+  type McuWifiSavedOutput {
+    result: McuWifiSavedResult
+    error: Error
+  }
+
+  type McuWifiSavedResult {
+    networks: [McuWifiSavedNetwork]
+  }
+
+  type McuWifiSavedNetwork {
+    # The profile's id, which is NOT the network: netplan calls the profile for
+    # the network Home "netplan-wlan0-Home". Show ssid, match on ssid.
+    name: String!
+    ssid: String
+    uuid: String!
+    device: String
+    active: Boolean!
+  }
+
   input McuWifiConnectInput {
     ssid: String!
     passphrase: String
+    # Which radio to join with. Optional so the deprecated query alias, which
+    # never had it, keeps working: it falls back to the preferred interface.
+    ifname: String
+    hidden: Boolean
+    # Pin the radio band: "bg" = 2.4 GHz, "a" = 5 GHz, "" = clear a pin and let
+    # NetworkManager choose. It chooses 5 GHz when both are on offer, which the
+    # built-in radio of an Apollo II cannot hold — so this is the users call,
+    # not a detail. null (or absent) says nothing about the band and leaves a
+    # saved profile's own setting alone.
+    band: String
   }
 
   type McuWifiConnectOutput {
@@ -126,7 +259,16 @@ module.exports = gql`
   }
 
   type McuWifiConnectResult {
+    # The address the join produced. Kept non-null and first because a
+    # pre-2.1.4 bundle asks for exactly this and nothing else.
     address: String!
+    # The rest of the resulting status, so a caller does not have to follow up
+    # with wifiStatus to learn what it just joined.
+    connected: Boolean
+    ssid: String
+    interface: String
+    kind: String
+    ipAddress: String
   }
 
   type McuWifiDisconnectOutput {

@@ -2,6 +2,19 @@
 const { knex } = require('../src/db');
 const mcuResolver = require('../src/graphql/resolvers/mcu');
 
+
+// The wifi resolvers moved from services.mcu to services.wifi, which discovers
+// the radio instead of assuming wlan0. These still cover the DEPRECATED query
+// aliases — the ones that keep a pre-2.1.4 UI bundle working — so they assert
+// the old response shape on top of the new implementation.
+const wifiMock = (over = {}) => ({
+  listInterfaces: jest.fn().mockResolvedValue([
+    { device: 'wlan0', kind: 'builtin', connected: true, carriesDefaultRoute: true },
+  ]),
+  preferredInterface: (list) => list[0],
+  ...over,
+});
+
 describe('MCU API', () => {
   describe('Mcu.stats resolver', () => {
     it('should return MCU statistics', async () => {
@@ -64,24 +77,20 @@ describe('MCU API', () => {
     });
   });
 
-  describe('Mcu.wifiScan resolver', () => {
+  describe('Mcu.wifiScan resolver (deprecated alias)', () => {
     it('should scan WiFi networks', async () => {
-      // Mock MCU service
-      const mockMcuService = {
-        scanWifi: jest.fn().mockResolvedValue({
-          wifiScan: [
-            { ssid: 'MyNetwork', mode: 'Infra', channel: 1, rate: 130, signal: 70, security: 'WPA2', inuse: true },
-            { ssid: 'Neighbor', mode: 'Infra', channel: 6, rate: 65, signal: 50, security: 'WPA2', inuse: false },
-            { ssid: 'OpenWifi', mode: 'Infra', channel: 11, rate: 54, signal: 40, security: 'Open', inuse: false }
-          ]
-        })
-      };
+      const wifi = wifiMock({
+        scan: jest.fn().mockResolvedValue([
+          { ssid: 'MyNetwork', mode: 'Infra', channel: 1, signal: 70, security: ['WPA2'], active: true },
+          { ssid: 'Neighbor', mode: 'Infra', channel: 6, signal: 50, security: ['WPA2'], active: false },
+          { ssid: 'OpenWifi', mode: 'Infra', channel: 11, signal: 40, security: [], active: false },
+        ]),
+      });
 
-      // Test resolver directly
       const result = await mcuResolver.McuActions.wifiScan(
         null,
         {},
-        { services: { mcu: mockMcuService }, isAuthenticated: true }
+        { services: { wifi }, isAuthenticated: true }
       );
 
       expect(result.result.wifiScan).toBeTruthy();
@@ -90,73 +99,70 @@ describe('MCU API', () => {
       expect(result.result.wifiScan[0].inuse).toBe(true);
       expect(result.result.wifiScan[1].ssid).toBe('Neighbor');
       expect(result.result.wifiScan[2].ssid).toBe('OpenWifi');
-      expect(result.result.wifiScan[2].security).toBe('Open');
+      // security is a list now; the alias flattens it, and empty means open.
+      expect(result.result.wifiScan[2].security).toBe('');
 
       expect(result.error).toBeNull();
     });
   });
 
-  describe('Mcu.wifiConnect resolver', () => {
+  describe('Mcu.wifiConnect resolver (deprecated alias)', () => {
     it('should connect to a WiFi network', async () => {
-      // Mock MCU service
-      const mockMcuService = {
-        connectWifi: jest.fn().mockResolvedValue({
-          address: '192.168.1.101'
-        })
-      };
+      const wifi = wifiMock({
+        connect: jest.fn().mockResolvedValue({ connected: true, ssid: 'MyNetwork', ipAddress: '192.168.1.100' }),
+      });
 
-      // Test resolver directly
       const result = await mcuResolver.McuActions.wifiConnect(
         null,
-        { input: { ssid: 'MyNetwork', passphrase: 'password123' } },
-        { services: { mcu: mockMcuService }, isAuthenticated: true }
+        { input: { ssid: 'MyNetwork', passphrase: 'secret' } },
+        { services: { wifi }, isAuthenticated: true }
       );
 
-      expect(result.result.address).toBe('192.168.1.101');
+      // The alias still answers with `address`, which is what an old bundle reads.
+      expect(result.result.address).toBe('192.168.1.100');
       expect(result.error).toBeNull();
-      expect(mockMcuService.connectWifi).toHaveBeenCalledWith({
-        ssid: 'MyNetwork',
-        passphrase: 'password123'
+      expect(wifi.connect).toHaveBeenCalledWith('wlan0', 'MyNetwork', 'secret', {
+        hidden: false,
+        band: null,
       });
     });
 
     it('should handle connection errors', async () => {
-      // Mock MCU service with error
-      const mockMcuService = {
-        connectWifi: jest.fn().mockRejectedValue(
-          new Error('Connection activation failed (5) Connection timed out')
-        )
-      };
+      const wifi = wifiMock({
+        connect: jest.fn().mockRejectedValue(
+          Object.assign(new Error('nmcli said something long'), { reason: 'bad-passphrase' })
+        ),
+      });
 
-      // Test resolver directly
       const result = await mcuResolver.McuActions.wifiConnect(
         null,
-        { input: { ssid: 'NonExistentNetwork', passphrase: 'wrongpassword' } },
-        { services: { mcu: mockMcuService }, isAuthenticated: true }
+        { input: { ssid: 'MyNetwork', passphrase: 'wrong' } },
+        { services: { wifi }, isAuthenticated: true }
       );
 
+      // A classified cause, not nmcli's raw text.
       expect(result.result).toBeNull();
-      expect(result.error).toBeTruthy();
-      expect(result.error.message).toContain('Connection activation failed');
+      expect(result.error.message).toBe('bad-passphrase');
     });
   });
 
-  describe('Mcu.wifiDisconnect resolver', () => {
-    it('should disconnect from WiFi', async () => {
-      // Mock MCU service
-      const mockMcuService = {
-        disconnectWifi: jest.fn().mockResolvedValue(undefined)
-      };
+  describe('Mcu.wifiDisconnect resolver (deprecated alias)', () => {
+    it('should disconnect from WiFi without deleting anything', async () => {
+      const wifi = wifiMock({
+        disconnect: jest.fn().mockResolvedValue({ disconnected: true }),
+        forget: jest.fn(),
+      });
 
-      // Test resolver directly
       const result = await mcuResolver.McuActions.wifiDisconnect(
         null,
         {},
-        { services: { mcu: mockMcuService }, isAuthenticated: true }
+        { services: { wifi }, isAuthenticated: true }
       );
 
       expect(result.error).toBeNull();
-      expect(mockMcuService.disconnectWifi).toHaveBeenCalled();
+      expect(wifi.disconnect).toHaveBeenCalledWith('wlan0');
+      // The bug this replaces: one button deleted every saved profile it matched.
+      expect(wifi.forget).not.toHaveBeenCalled();
     });
   });
 
