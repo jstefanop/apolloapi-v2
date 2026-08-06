@@ -105,6 +105,60 @@ check "says which state refused it" "no usable node drive (no-drive); not starti
     "$(NODE_DISK=/dev/definitely-not-here NODE_PARTITION=/dev/definitely-not-here1 \
         bash "$LIB" --check 2>&1 >/dev/null)"
 
+# A late mount is waited for, but missing hardware is not: this also runs on every
+# start the user asks for from the UI, and a device with no disk would sit there.
+start=$(date +%s)
+NODE_STORAGE_WAIT=30 NODE_DISK=/dev/definitely-not-here NODE_PARTITION=/dev/definitely-not-here1 \
+    bash "$LIB" --check >/dev/null 2>&1
+elapsed=$(( $(date +%s) - start ))
+check "does not wait when there is no drive" "quick" \
+    "$([ "$elapsed" -lt 3 ] && echo quick || echo "waited ${elapsed}s")"
+
+echo
+echo "node_storage_settled_state (the boot race)"
+
+# $1 blocks, $2 findmnt source, $3 wait budget. Prints "<state> waited|quick" —
+# the classification, not the seconds, so a slow machine cannot fail it.
+settled_with() {
+    local blocks="$1" mnt="$2" budget="$3"
+    (
+        NODE_DISK=/dev/fake0
+        NODE_PARTITION=/dev/fake0p1
+        NODE_MOUNTPOINT=/media/fake
+        NODE_STORAGE_WAIT="$budget"
+        # shellcheck disable=SC1090
+        . "$LIB"
+
+        node_storage_is_block() {
+            case " $blocks " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+        }
+        findmnt() {
+            case " $* " in *" --mountpoint "*) [ -n "$mnt" ] || return 1 ;; esac
+            case " $* " in *" SOURCE "*) echo "$mnt" ;; esac
+            return 0
+        }
+        readlink() { echo "$2"; }
+
+        t0=$(date +%s)
+        s="$(node_storage_settled_state)"
+        if [ $(( $(date +%s) - t0 )) -ge "$budget" ]; then echo "$s waited"; else echo "$s quick"; fi
+    )
+}
+
+# The mount is done by rc.local, not fstab, so it can land after the unit was
+# evaluated. Answering "no" then is not one lost boot: systemd SKIPS the unit,
+# and a unit that never went active is never restarted.
+check "waits out a mount that has not landed yet" "not-mounted waited" \
+    "$(settled_with "/dev/fake0 /dev/fake0p1" "" 3)"
+
+# Nothing about these changes by waiting, and this runs before every start the
+# user asks for — stalling one on a device where the answer is already final.
+check "does not wait on a foreign mount"  "foreign quick" \
+    "$(settled_with "/dev/fake0 /dev/fake0p1" "/dev/mmcblk1p1" 30)"
+check "does not wait when the drive is gone" "no-drive quick" "$(settled_with "" "" 30)"
+check "does not wait when it is already ready" "ready quick" \
+    "$(settled_with "/dev/fake0 /dev/fake0p1" "/dev/fake0p1" 30)"
+
 echo
 echo "--- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -79,13 +79,43 @@ node_storage_size() {
     lsblk -bdno SIZE "$target" 2>/dev/null | tr -d ' '
 }
 
+# The state, once it has stopped being one a boot race can still resolve. The
+# mount comes from rc.local, not fstab, so it can land after the unit is
+# evaluated, and on a fresh unit first_run partitions and formats the disk first.
+#
+# Only those two states are waited for. This also runs before every start the
+# user asks for, and the others resolve nothing by waiting: no hardware appears
+# on its own, and a mountpoint holding some other filesystem will still be
+# holding it a minute later.
+node_storage_settled_state() {
+    local state deadline
+    state="$(node_storage_state)"
+    case "$state" in
+        not-mounted|unformatted) ;;
+        *) echo "$state"; return ;;
+    esac
+
+    deadline=$(( $(date +%s) + ${NODE_STORAGE_WAIT:-60} ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        sleep 2
+        state="$(node_storage_state)"
+        case "$state" in not-mounted|unformatted) ;; *) break ;; esac
+    done
+    echo "$state"
+}
+
 # ExecCondition= in node.service. Exiting 1 makes systemd SKIP the unit rather
 # than fail it, and a unit that never went active is never restarted — which is
 # the only way out of the loop: Restart=always fires on a clean exit too, and
 # RestartPreventExitStatus= is matched against the main process, not the control
 # process a Type=forking launcher runs as.
+#
+# That same property is why a drive which is merely LATE must not be refused
+# (hence the settled state, not the instantaneous one): refusing would cost more
+# than one boot, since skipped means never restarted and the node would stay down
+# until someone rebooted or pressed Start.
 if [ "${1:-}" = "--check" ]; then
-    state="$(node_storage_state)"
+    state="$(node_storage_settled_state)"
     [ "$state" = "ready" ] && exit 0
     echo "no usable node drive ($state); not starting bitcoind" >&2
     exit 1
