@@ -182,7 +182,15 @@ class NodeService {
     const value = await new Promise((resolve) => {
       const child = spawn('bash', [script, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
       let out = '';
-      const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+      // The disk this asks about is also the one that hangs lsblk in
+      // uninterruptible I/O when it is failing, and SIGKILL does not reap a
+      // process stuck there. So the answer is given on the timeout, not on the
+      // death: waiting for a close that never comes left the query — and every
+      // 60s poll behind it — hanging, with nothing cached to throttle them.
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve({ state: 'unknown' });
+      }, 10000);
       child.stdout.on('data', (d) => {
         out += d;
       });

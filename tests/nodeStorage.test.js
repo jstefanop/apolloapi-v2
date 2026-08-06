@@ -64,6 +64,23 @@ describe('NodeService.getStorage', () => {
     await expect(p).resolves.toEqual({ state: 'unknown' });
   });
 
+  // The disk this asks about is the one that hangs lsblk when it is failing, and
+  // SIGKILL does not reap a process stuck in uninterruptible I/O. Waiting for a
+  // close that never comes left the GraphQL request hanging and, with nothing
+  // cached, every poll behind it spawned another shell that hung too.
+  it('answers on the watchdog rather than waiting for a death that may not come', async () => {
+    jest.useFakeTimers();
+    try {
+      const p = svc.getStorage();
+      spawnedChild(); // spawned, never emits 'close'
+      jest.advanceTimersByTime(10000);
+      await expect(p).resolves.toEqual({ state: 'unknown' });
+      expect(spawnedChild().kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('does not cache across service instances', async () => {
     const p = svc.getStorage();
     answer('{"state":"ready"}');
