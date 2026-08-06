@@ -104,6 +104,31 @@ describe('format() service-status bookkeeping', () => {
     spawnedChild().emit('close', 0);
     await expect(p).resolves.toBeUndefined();
   });
+
+  // Formatting is the one operation that changes the answer getStorage() caches.
+  // Left in place, the UI is told the disk is still unformatted for as long as
+  // the cache holds — long enough after a successful format to look like it
+  // failed. True of a format that gave up halfway too: it may have wiped the
+  // partition the cached answer describes.
+  it.each([
+    ['a launched format', 0],
+    ['a refused one', 1],
+  ])('drops the cached storage answer on %s', async (_name, exitCode) => {
+    const { knex } = makeKnex();
+    const svc = createNodeService(knex, {});
+
+    const probe = svc.getStorage();
+    spawnedChild().stdout.emit('data', Buffer.from('{"state":"unformatted"}'));
+    spawnedChild().emit('close', 0);
+    await probe;
+    expect(svc._storageCache).not.toBeNull();
+
+    const p = svc.format();
+    spawnedChild().emit('close', exitCode);
+    await p.catch(() => {});
+
+    expect(svc._storageCache).toBeNull();
+  });
 });
 
 describe('format schema reachability', () => {

@@ -173,8 +173,14 @@ class NodeService {
   // Cached briefly: every stats push would otherwise spawn a shell for something
   // that changes when hardware is added, not between polls.
   async getStorage() {
+    // Held for a while once the drive is ready — that is the steady state, and
+    // it changes when hardware is added, not between polls. Anything else is a
+    // state the user is actively working on: a format finishing, a disk being
+    // seated. Holding those is how a drive that came good a second ago keeps
+    // reporting 'unformatted' long enough to look like the format failed.
     const now = Date.now();
-    if (this._storageCache && now - this._storageCache.at < 15000) {
+    const ttl = this._storageCache?.value?.state === 'ready' ? 15000 : 2000;
+    if (this._storageCache && now - this._storageCache.at < ttl) {
       return this._storageCache.value;
     }
 
@@ -219,8 +225,17 @@ class NodeService {
     try {
       await this._formatDisk();
     } catch (error) {
+      // Dropped on the failure path too: a format that gave up halfway may well
+      // have unmounted or wiped the partition the cached answer describes.
+      this._storageCache = null;
       throw new GraphQLError(`Failed to format disk: ${error.message}`);
     }
+
+    // The one operation that changes the answer getStorage() caches. Left in
+    // place it reports 'unformatted' for another 15s after the disk was
+    // partitioned and mounted, and the UI keeps that stale reply for its whole
+    // poll interval on top — long enough to look like the format failed.
+    this._storageCache = null;
 
     // The worker stops the node itself, outside the monitor's knowledge: without
     // this record that stop reads as unrequested — logged as a manual stop, and

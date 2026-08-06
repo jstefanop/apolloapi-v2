@@ -81,6 +81,30 @@ describe('NodeService.getStorage', () => {
     }
   });
 
+  // 'ready' is the steady state and is held; anything else is what the user is
+  // working on — a format finishing, a disk being seated — and holding it is how
+  // a drive that came good keeps reading 'unformatted' long after it did.
+  it('holds a ready answer but re-checks an unusable one', async () => {
+    jest.useFakeTimers();
+    try {
+      const p = svc.getStorage();
+      answer('{"state":"unformatted"}');
+      await p;
+
+      jest.advanceTimersByTime(3000);
+      const q = svc.getStorage();
+      answer('{"state":"ready"}');
+      await expect(q).resolves.toMatchObject({ state: 'ready' });
+      expect(spawn).toHaveBeenCalledTimes(2);
+
+      jest.advanceTimersByTime(3000);
+      await expect(svc.getStorage()).resolves.toMatchObject({ state: 'ready' });
+      expect(spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('does not cache across service instances', async () => {
     const p = svc.getStorage();
     answer('{"state":"ready"}');
