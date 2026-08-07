@@ -78,32 +78,28 @@ set_conf_by_ram_for_ibd() {
 }
 
 # --- Node drive / mount validation ---
-# We only want to start if:
-#   1) NVMe block device exists
-#   2) /media/nvme is mounted
-#   3) /media/nvme is mounted FROM that NVMe device (not the SD card)
-if [ ! -b "$DEVICE" ]; then
-    log "WARN: node drive device not found at $DEVICE; bitcoind not started"
-    exit 0
+# The same check the API reports to the UI, so a node that will not start and a
+# panel explaining why can never disagree. Some Apollo III ship with no SSD at
+# all; the states below are what the user is told, and what they can act on.
+NODE_PARTITION="$DEVICE"
+NODE_MOUNTPOINT="$MOUNTPOINT"
+. /opt/apolloapi/backend/lib/node_storage.sh
+
+storage_state="$(node_storage_state)"
+if [ "$storage_state" != "ready" ]; then
+    case "$storage_state" in
+        no-drive)    log "WARN: no node drive detected; bitcoind not started" ;;
+        unformatted) log "WARN: node drive present but not formatted; bitcoind not started" ;;
+        not-mounted) log "WARN: $MOUNTPOINT is not mounted; bitcoind not started" ;;
+        foreign)     log "WARN: $MOUNTPOINT is mounted from something other than the node drive; bitcoind not started" ;;
+    esac
+    # Under systemd this is unreachable — ExecCondition= already refused the
+    # start. It stays for anyone running the launcher by hand, and 69 is
+    # EX_UNAVAILABLE rather than 0 so a shell script calling it can tell.
+    exit 69
 fi
 
-# Is the mountpoint actually mounted?
-if ! findmnt -rn --target "$MOUNTPOINT" >/dev/null 2>&1; then
-    log "WARN: $MOUNTPOINT is not mounted; bitcoind not started"
-    exit 0
-fi
-
-# Is it mounted from the expected device?
-mnt_src="$(findmnt -rn -o SOURCE --target "$MOUNTPOINT" 2>/dev/null || true)"
-dev_real="$(readlink -f "$DEVICE" 2>/dev/null || echo "$DEVICE")"
-src_real="$(readlink -f "$mnt_src" 2>/dev/null || echo "$mnt_src")"
-
-if [ -z "$mnt_src" ] || [ "$src_real" != "$dev_real" ]; then
-    log "WARN: $MOUNTPOINT mounted from '$mnt_src' (expected '$DEVICE'); bitcoind not started"
-    exit 0
-fi
-
-log "Node storage OK: $MOUNTPOINT mounted from $mnt_src"
+log "Node storage OK: $MOUNTPOINT mounted from $NODE_PARTITION"
 # --- end validation ---
 
 # Determine sync state (default unsynced)

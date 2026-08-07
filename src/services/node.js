@@ -164,13 +164,91 @@ class NodeService {
     }
   }
 
+  // Where the node would live, and whether it can. Read from the same script the
+  // launcher uses, so "the node will not start" and "here is why" can never
+  // disagree — the UI used to infer the reason from a refused RPC connection,
+  // which said the node was not running without ever saying that some devices
+  // ship with no drive to run it on.
+  //
+  // Cached briefly: every stats push would otherwise spawn a shell for something
+  // that changes when hardware is added, not between polls.
+  async getStorage() {
+    // A laptop has no NVMe, and every other Node call here is faked. Probing for
+    // real would answer no-drive and take the node, solo and format screens off
+    // the very build they are being developed on.
+    if (devNodeService) {
+      return {
+        state: 'ready',
+        disk: '/dev/nvme0n1',
+        partition: '/dev/nvme0n1p1',
+        mountpoint: '/media/nvme',
+        size: 1000204886016,
+      };
+    }
+
+    // Held for a while once the drive is ready — that is the steady state, and
+    // it changes when hardware is added, not between polls. Anything else is a
+    // state the user is actively working on: a format finishing, a disk being
+    // seated. Holding those is how a drive that came good a second ago keeps
+    // reporting 'unformatted' long enough to look like the format failed.
+    const now = Date.now();
+    const ttl = this._storageCache?.value?.state === 'ready' ? 15000 : 2000;
+    if (this._storageCache && now - this._storageCache.at < ttl) {
+      return this._storageCache.value;
+    }
+
+    const script = path.join(__dirname, '../../backend/lib/node_storage.sh');
+    const value = await new Promise((resolve) => {
+      const child = spawn('bash', [script, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      // The disk this asks about is also the one that hangs lsblk in
+      // uninterruptible I/O when it is failing, and SIGKILL does not reap a
+      // process stuck there. So the answer is given on the timeout, not on the
+      // death: waiting for a close that never comes left the query — and every
+      // 60s poll behind it — hanging, with nothing cached to throttle them.
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve({ state: 'unknown' });
+      }, 10000);
+      child.stdout.on('data', (d) => {
+        out += d;
+      });
+      child.on('error', () => {
+        clearTimeout(timer);
+        // Unknown is not "no drive": claiming a device has no disk because a
+        // script would not run is how a working node gets told to buy hardware.
+        resolve({ state: 'unknown' });
+      });
+      child.on('close', () => {
+        clearTimeout(timer);
+        try {
+          resolve(JSON.parse(out.trim()));
+        } catch {
+          resolve({ state: 'unknown' });
+        }
+      });
+    });
+
+    this._storageCache = { at: now, value };
+    return value;
+  }
+
   // Format the Bitcoin node disk
   async format() {
     try {
       await this._formatDisk();
     } catch (error) {
+      // Dropped on the failure path too: a format that gave up halfway may well
+      // have unmounted or wiped the partition the cached answer describes.
+      this._storageCache = null;
       throw new GraphQLError(`Failed to format disk: ${error.message}`);
     }
+
+    // The one operation that changes the answer getStorage() caches. Left in
+    // place it reports 'unformatted' for another 15s after the disk was
+    // partitioned and mounted, and the UI keeps that stale reply for its whole
+    // poll interval on top — long enough to look like the format failed.
+    this._storageCache = null;
 
     // The worker stops the node itself, outside the monitor's knowledge: without
     // this record that stop reads as unrequested — logged as a manual stop, and

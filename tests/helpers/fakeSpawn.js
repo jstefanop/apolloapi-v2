@@ -19,6 +19,10 @@ const makeChild = () => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
+  // Watchdogs call it, and a real one may not be answered: killing does not
+  // reap a process stuck in uninterruptible I/O, so nothing here emits 'close'
+  // on its own. A service that only settles on the death would hang forever.
+  child.kill = jest.fn();
   return child;
 };
 
