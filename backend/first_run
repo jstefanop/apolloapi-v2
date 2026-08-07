@@ -23,7 +23,14 @@ else
 fi
 
 chown -R futurebit /media/nvme/Bitcoin/
-ln -s /media/nvme/Bitcoin/ ~/.bitcoin/
+
+BITCOIN_LINK=/home/futurebit/.bitcoin
+if [ -e "$BITCOIN_LINK" ] && [ ! -L "$BITCOIN_LINK" ]; then
+	echo "$BITCOIN_LINK exists and is not a symlink; leaving it unchanged" >&2
+else
+	ln -sfnT /media/nvme/Bitcoin "$BITCOIN_LINK"
+	chown -h futurebit:futurebit "$BITCOIN_LINK"
+fi
 
 
 
