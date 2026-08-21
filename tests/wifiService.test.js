@@ -1060,3 +1060,82 @@ describe('the route lookup cannot hang the panel', () => {
     }
   });
 });
+
+describe('status reports how strong the link is', () => {
+  // The panel had strength only in the scan list, so the network you were
+  // actually on was the one network whose signal you could not see.
+  const radio = ({ state = 'connected', iw = 'signal: -55 dBm\n', iwFails = false } = {}) => {
+    const calls = [];
+    spawn.mockImplementation((cmd, argv) => {
+      calls.push([cmd, argv.join(' ')]);
+      const c = new EventEmitter();
+      c.stdout = new EventEmitter();
+      c.stderr = new EventEmitter();
+      c.kill = jest.fn();
+      setTimeout(() => {
+        if (cmd === 'iw') {
+          if (iwFails) {
+            const err = new Error('spawn iw ENOENT');
+            err.code = 'ENOENT';
+            c.emit('error', err);
+            return;
+          }
+          c.stdout.emit('data', Buffer.from(iw));
+        } else if (argv.includes('dev') && argv.includes('show')) {
+          c.stdout.emit('data', Buffer.from('IP4.ADDRESS[1]:192.168.1.9/24'));
+        } else if (argv.includes('dev')) {
+          c.stdout.emit('data', Buffer.from(`wlan0:wifi:${state}:HomeNet`));
+        }
+        c.emit('close', 0, null);
+      }, 0);
+      return c;
+    });
+    return calls;
+  };
+
+  it('reads the live signal from the interface', async () => {
+    const calls = radio();
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({
+      connected: true,
+      signalDbm: -55,
+      signal: 90,
+    });
+    // Straight to the radio, and without sudo: iw reads this as any user.
+    expect(calls).toContainEqual(['iw', 'dev wlan0 link']);
+  });
+
+  it('does not probe a radio that is not associated', async () => {
+    const calls = radio({ state: 'disconnected' });
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({
+      connected: false,
+      signal: null,
+      signalDbm: null,
+    });
+    expect(calls.some(([cmd]) => cmd === 'iw')).toBe(false);
+  });
+
+  // iw is present across the fleet, but the status query is what draws the whole
+  // panel: a board without it must still get its SSID and its Disconnect button.
+  it('keeps the rest of the status when iw is missing', async () => {
+    radio({ iwFails: true });
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({
+      connected: true,
+      ssid: 'HomeNet',
+      signal: null,
+      signalDbm: null,
+    });
+  });
+
+  it('leaves the signal unknown when iw answers without one', async () => {
+    radio({ iw: 'Not connected.\n' });
+    const svc = require('../src/services/wifi')();
+    await expect(svc.status('wlan0')).resolves.toMatchObject({
+      connected: true,
+      signal: null,
+      signalDbm: null,
+    });
+  });
+});
