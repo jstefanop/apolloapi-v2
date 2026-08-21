@@ -72,7 +72,15 @@ if [ $TEMP_COUNT -gt 0 ]; then
   TEMP=$((TEMP_SUM / TEMP_COUNT))
 fi
 
-ACTIVE_WIFI=$(nmcli -t -f name c show --active | sed -z 's/\n/,/g;s/,$/\n/')
+# The wifi connection only. This used to be every active connection joined by
+# commas, so on a device with ethernet up as well the first entry -- the one the
+# System page showed -- was "Wired connection 1". nmcli escapes ':' inside the
+# name as '\:', which is undone before the value is quoted for JSON.
+ACTIVE_WIFI=$(nmcli -t -f type,name c show --active 2>/dev/null \
+  | sed -n 's/^802-11-wireless://p' \
+  | head -1 \
+  | sed 's/\\:/:/g' \
+  | sed 's/\\/\\\\/g; s/"/\\"/g')
 
 MINER_TEMP="0"
 
