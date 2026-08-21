@@ -5,6 +5,8 @@ const {
   parseScanLine,
   parseScan,
   dedupeBySsid,
+  parseIwSignal,
+  signalQuality,
 } = require('../src/services/wifi/nmcli');
 
 // Fixtures captured from real devices on 2026-08-02, not invented:
@@ -328,5 +330,49 @@ describe('classifyError — say why, not "exit code 4"', () => {
 
   it('falls back to a generic failure rather than inventing a cause', () => {
     expect(classifyError(1, 'something unexpected')).toBe('failed');
+  });
+});
+
+// The signal shown for the network you are ON comes from the associated link,
+// not from the scan list: a scanned value is as old as the scan, and this one
+// moves every second. `iw dev <iface> link` is the only live source.
+describe('parseIwSignal', () => {
+  it('reads the signal out of an associated link', () => {
+    const out = [
+      'Connected to 58:02:05:e1:56:9a (on wlP2p33s0)',
+      '\tSSID: Wiffy',
+      '\tfreq: 5180',
+      '\tsignal: -43 dBm',
+      '\trx bitrate: 300.0 MBit/s',
+    ].join('\n');
+    expect(parseIwSignal(out)).toBe(-43);
+  });
+
+  it('returns null when the radio is not associated', () => {
+    expect(parseIwSignal('Not connected.')).toBeNull();
+    expect(parseIwSignal('')).toBeNull();
+    expect(parseIwSignal(undefined)).toBeNull();
+  });
+});
+
+describe('signalQuality', () => {
+  // The scale the scan list already uses, so a live reading and a scanned one
+  // can be drawn by the same bars.
+  it.each([
+    [-30, 100],
+    [-50, 100],
+    [-60, 80],
+    [-75, 50],
+    [-90, 20],
+    [-100, 0],
+    [-120, 0],
+  ])('%i dBm -> %i', (dbm, expected) => {
+    expect(signalQuality(dbm)).toBe(expected);
+  });
+
+  it('has nothing to say without a reading', () => {
+    expect(signalQuality(null)).toBeNull();
+    expect(signalQuality(undefined)).toBeNull();
+    expect(signalQuality(NaN)).toBeNull();
   });
 });

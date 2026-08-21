@@ -256,7 +256,26 @@ const classifyError = (code, output = '') => {
   return 'failed';
 };
 
+// The associated link's signal, in dBm, from `iw dev <iface> link`. Null when the
+// radio is not associated — `iw` prints "Not connected." and nothing else.
+const parseIwSignal = (stdout) => {
+  const m = String(stdout || '').match(/signal:\s*(-?\d+)\s*dBm/i);
+  if (!m) return null;
+  const dbm = parseInt(m[1], 10);
+  return Number.isFinite(dbm) ? dbm : null;
+};
+
+// dBm to the 0-100 scale nmcli reports and the UI's bars already speak, so a
+// live reading and a scanned one can be drawn by the same component.
+// -50 and better is full, -100 and worse is nothing; linear between.
+const signalQuality = (dbm) => {
+  if (!Number.isFinite(dbm)) return null;
+  return Math.max(0, Math.min(100, Math.round(2 * (dbm + 100))));
+};
+
 module.exports = {
+  parseIwSignal,
+  signalQuality,
   SCAN_FIELDS,
   splitTerse,
   decodeSsid,

@@ -28,11 +28,15 @@ class NmcliError extends Error {
 // Resolves with { stdout, code } on success; rejects with NmcliError otherwise.
 // `sudo` only in production: in development nmcli is either absent or unprivileged
 // and prompting for a password would hang the dev server.
-const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null } = {}) =>
+// `bin` exists for `iw`, the only way to read the CURRENT signal: the scan list
+// nmcli keeps is from the last scan, and a value that moves every second is
+// exactly what a stale cache reports wrongly. Everything else here — argv array,
+// timeout, kill escalation — is worth keeping for it too.
+const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null, bin = 'nmcli' } = {}) =>
   new Promise((resolve, reject) => {
     const useSudo = sudo === null ? process.env.NODE_ENV === 'production' : sudo;
-    const cmd = useSudo ? 'sudo' : 'nmcli';
-    const argv = useSudo ? ['nmcli', ...args] : args;
+    const cmd = useSudo ? 'sudo' : bin;
+    const argv = useSudo ? [bin, ...args] : args;
 
     const child = spawn(cmd, argv, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -66,7 +70,10 @@ const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null } = {}) =>
       settle(() => {
         // No nmcli on the machine: outside production that is a development
         // laptop, and the wifi pages are worth being able to open there.
-        const fixture = err.code === 'ENOENT' ? fixtureFor(args) : null;
+        // Fixtures describe nmcli output only. A missing `iw` is not worth
+        // faking: the signal is optional and the caller drops it.
+        const fixture =
+          err.code === 'ENOENT' && bin === 'nmcli' ? fixtureFor(args) : null;
         if (fixture !== null) {
           resolve({ stdout: fixture, code: 0 });
           return;
@@ -82,7 +89,7 @@ const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null } = {}) =>
         // as a plain failure would hide the fact that it never finished.
         if (signal === 'SIGTERM' || signal === 'SIGKILL') {
           reject(
-            new NmcliError(`nmcli timed out after ${timeoutMs}ms`, {
+            new NmcliError(`${bin} timed out after ${timeoutMs}ms`, {
               code,
               output,
               timedOut: true,
@@ -92,7 +99,7 @@ const run = (args, { timeoutMs = DEFAULT_TIMEOUT_MS, sudo = null } = {}) =>
         }
         if (code !== 0) {
           reject(
-            new NmcliError(output || `nmcli exited with code ${code}`, { code, output })
+            new NmcliError(output || `${bin} exited with code ${code}`, { code, output })
           );
           return;
         }

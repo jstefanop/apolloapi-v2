@@ -184,6 +184,11 @@ module.exports = gql`
     kind: String
     carriesDefaultRoute: Boolean
     ipAddress: String
+    # How strong the link is RIGHT NOW, read from the associated link rather than
+    # from the last scan: a scanned value is as old as the scan, and this one
+    # moves every second. 0-100, the same scale the scan list reports.
+    signal: Int
+    signalDbm: Int
     # Which band the link is actually on. Read without rescanning, because a
     # rescan while associated lags and reports the previous channel.
     channel: Int

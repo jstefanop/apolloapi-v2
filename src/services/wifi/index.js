@@ -12,6 +12,8 @@ const {
   classifyError,
   splitTerse,
   bandOf,
+  parseIwSignal,
+  signalQuality,
 } = require('./nmcli');
 
 // The wifi domain. Three rules hold the whole thing together:
@@ -291,8 +293,27 @@ const wifiService = ({
       }
     }
 
+    // The CURRENT signal, not whatever the last scan happened to catch. `iw`
+    // reads the associated link directly. If it is missing the rest of the
+    // status is still worth returning, which is why nothing here throws.
+    let signalDbm = null;
+    if (iface.connected) {
+      try {
+        const { stdout } = await run(['dev', iface.device, 'link'], {
+          bin: 'iw',
+          sudo: false,
+          timeoutMs: 5000,
+        });
+        signalDbm = parseIwSignal(stdout);
+      } catch {
+        signalDbm = null;
+      }
+    }
+
     return {
       connected: iface.connected,
+      signal: signalQuality(signalDbm),
+      signalDbm,
       ssid: iface.connection ? (await profileSsid(iface.connection)) || iface.connection : null,
       interface: iface.device,
       kind: iface.kind,
