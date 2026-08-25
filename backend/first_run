@@ -39,5 +39,9 @@ fallocate -l 3G /media/nvme/swapfile
 chmod 600 /media/nvme/swapfile
 mkswap /media/nvme/swapfile
 
+# Hand the mount over to rc.local for every later boot. It has to be guarded:
+# rc.local is `#!/bin/sh -e`, and a device with no drive is a supported state
+# since the node reports it for itself — an unguarded mount left rc-local.service
+# failed at every boot, and would silently skip anything added after this line.
 sed -i '$ d' /etc/rc.local
-sed -i "\$i mount \/dev\/nvme0n1p1 \/media\/nvme" /etc/rc.local
+sed -i "\$i [ -b \/dev\/nvme0n1p1 ] \&\& mount \/dev\/nvme0n1p1 \/media\/nvme || true" /etc/rc.local
