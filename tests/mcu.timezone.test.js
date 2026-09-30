@@ -177,3 +177,22 @@ describe('Mcu.setTimezone — picking the zone it is already on', () => {
     expect(wrote).toHaveLength(0);
   });
 });
+
+describe('Mcu.getTimezone — timedatectl answers with nothing', () => {
+  it('does not pass an empty read off as UTC', async () => {
+    mockSpawn((command, args) => {
+      if (args.includes('list-timezones')) return { stdout: ZONES };
+      if (args.includes('--value')) return { stdout: '\n' }; // exit 0, no value
+      return { stdout: '' };
+    });
+
+    const result = await mcu.getTimezone();
+
+    // The platform's own zone, not the 'UTC' default — asserted against Intl so
+    // this holds on a CI box that really is on UTC. Reporting UTC here would be
+    // a lie the user could not correct: picking UTC to confirm it would match
+    // the current value and write nothing.
+    expect(result.timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(result.available).toContain(result.timezone);
+  });
+});

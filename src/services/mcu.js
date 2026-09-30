@@ -60,8 +60,12 @@ class McuService {
     try {
       timezone = (await this._spawnCommand('timedatectl', ['show', '-p', 'Timezone', '--value'])).trim();
     } catch (e) {
-      timezone = detectedZone();
+      timezone = '';
     }
+    // An empty read is a failed read. Left as '' it would surface as "the device
+    // is on UTC", and picking UTC to confirm that would hit the no-op guard in
+    // setTimezone below — a device stuck on a zone the UI cannot correct.
+    if (!timezone) timezone = detectedZone();
 
     let available;
     try {
