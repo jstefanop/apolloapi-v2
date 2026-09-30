@@ -39,6 +39,9 @@ jest.mock('fs', () => {
     },
     promises: {
       access: jest.fn().mockImplementation(() => Promise.resolve()),
+      // Epoch by default: nothing was changed after boot, so no code under test
+      // finds itself asking for a reboot it never meant to ask for.
+      lstat: jest.fn().mockResolvedValue({ mtimeMs: 0 }),
       readdir: jest.fn().mockImplementation((path) => {
         if (path.includes('apollo-miner')) {
           return Promise.resolve(['apollo-miner-v2.123456']);

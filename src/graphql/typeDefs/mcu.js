@@ -96,6 +96,8 @@ module.exports = gql`
     timezone: String!
     "Every IANA zone this device accepts."
     available: [String!]!
+    "True while the zone was changed after boot: services still log the old one."
+    rebootPending: Boolean!
   }
 
   input McuSetTimezoneInput {

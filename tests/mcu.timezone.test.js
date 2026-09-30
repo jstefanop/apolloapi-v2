@@ -1,5 +1,7 @@
 const { knex } = require('../src/db');
 const childProcess = require('child_process');
+const fsPromises = require('fs').promises;
+const os = require('os');
 
 const mcu = require('../src/services/mcu')(knex, {});
 
@@ -128,5 +130,50 @@ describe('Mcu.setTimezone', () => {
 
     // A bogus zone is still rejected.
     await expect(mcu.setTimezone({ timezone: 'Mars/Olympus' })).rejects.toThrow(/Unknown timezone/);
+  });
+});
+
+// The warning the UI shows has to survive a reload and a different browser, so
+// it is derived from the device: /etc/localtime rewritten after boot means the
+// running services still carry the old zone.
+describe('Mcu.getTimezone — reboot still owed', () => {
+  const bootedAgo = (seconds) => jest.spyOn(os, 'uptime').mockReturnValue(seconds);
+  const localtimeChangedAt = (ms) => fsPromises.lstat.mockResolvedValue({ mtimeMs: ms });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fsPromises.lstat.mockResolvedValue({ mtimeMs: 0 });
+  });
+
+  it('asks for a reboot when the zone changed after boot', async () => {
+    bootedAgo(3600); // booted an hour ago
+    localtimeChangedAt(Date.now() - 60 * 1000); // zone changed a minute ago
+
+    expect((await mcu.getTimezone()).rebootPending).toBe(true);
+  });
+
+  it('stays quiet when the zone predates the boot', async () => {
+    bootedAgo(600); // booted ten minutes ago
+    localtimeChangedAt(Date.now() - 86400 * 1000); // zone set yesterday
+
+    expect((await mcu.getTimezone()).rebootPending).toBe(false);
+  });
+
+  it('stays quiet where there is no /etc/localtime at all (dev on macOS)', async () => {
+    fsPromises.lstat.mockRejectedValue(new Error('ENOENT'));
+
+    expect((await mcu.getTimezone()).rebootPending).toBe(false);
+  });
+});
+
+describe('Mcu.setTimezone — picking the zone it is already on', () => {
+  it('does not rewrite /etc/localtime, so no reboot is demanded', async () => {
+    process.env.NODE_ENV = 'production';
+
+    // The mocked timedatectl reports America/New_York as the current zone.
+    await mcu.setTimezone({ timezone: 'America/New_York' });
+
+    const wrote = childProcess.spawn.mock.calls.filter((c) => c[1].includes('set-timezone'));
+    expect(wrote).toHaveLength(0);
   });
 });

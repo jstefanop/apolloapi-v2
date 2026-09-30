@@ -4,6 +4,7 @@ const axios = require('axios');
 const fs = require('fs').promises;
 const { GraphQLError } = require('graphql');
 const util = require('util');
+const os = require('os');
 
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
@@ -72,17 +73,45 @@ class McuService {
     if (!available.length) available = zoneList();
     if (timezone && !available.includes(timezone)) available = [timezone, ...available];
 
-    return { timezone: timezone || 'UTC', available };
+    return {
+      timezone: timezone || 'UTC',
+      available,
+      rebootPending: await this._timezoneRebootPending(),
+    };
+  }
+
+  /**
+   * True when the zone was changed after this boot.
+   *
+   * Changing it does not reach the processes already running: each one read the
+   * zone at startup, so ckpool and rsyslog keep writing the old local time into
+   * the very logs the UI shows. `timedatectl set-timezone` rewrites the
+   * /etc/localtime symlink, so its mtime against the boot time says whether a
+   * reboot is still owed — durable state on the device, not a flag in someone's
+   * browser, so the warning survives a reload and comes back on another machine.
+   */
+  async _timezoneRebootPending() {
+    try {
+      const { mtimeMs } = await fs.lstat('/etc/localtime');
+      return mtimeMs > Date.now() - os.uptime() * 1000;
+    } catch (e) {
+      // No /etc/localtime (macOS dev, a container): nothing to warn about.
+      return false;
+    }
   }
 
   async setTimezone({ timezone }) {
     try {
       // Validate against what the system actually knows, and pass the value as an
       // argv element — never interpolated into a shell string.
-      const { available } = await this.getTimezone();
-      if (!available.includes(timezone)) {
+      const current = await this.getTimezone();
+      if (!current.available.includes(timezone)) {
         throw new Error(`Unknown timezone: ${timezone}`);
       }
+
+      // Re-picking the zone it is already on must not rewrite /etc/localtime:
+      // that would ask for a reboot nobody needs.
+      if (timezone === current.timezone) return current;
 
       if (process.env.NODE_ENV === 'production') {
         await this._spawnCommand('sudo', ['timedatectl', 'set-timezone', timezone]);
