@@ -50,6 +50,14 @@ const mockSpawnENOENT = () => {
 
 const ZONES = 'Europe/Rome\nAmerica/New_York\nUTC\n';
 
+// NODE_ENV decides whether setTimezone really spawns. Restoring it at the end of
+// a test body is not enough: a failed assertion aborts before that line and the
+// leak turns one failure into a cascade.
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+afterEach(() => {
+  process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+});
+
 beforeEach(() => {
   mockSpawn((command, args) => {
     if (args.includes('list-timezones')) return { stdout: ZONES };
@@ -97,7 +105,6 @@ describe('Mcu.setTimezone', () => {
     expect(call[0]).toBe('sudo');
     expect(call[1]).toEqual(['timedatectl', 'set-timezone', 'Europe/Rome']);
 
-    process.env.NODE_ENV = 'test';
   });
 
   it('refuses a zone the system does not know — including a shell injection attempt', async () => {
@@ -111,7 +118,6 @@ describe('Mcu.setTimezone', () => {
     const executed = childProcess.spawn.mock.calls.filter((c) => c[1].includes('set-timezone'));
     expect(executed).toHaveLength(0);
 
-    process.env.NODE_ENV = 'test';
   });
 
   it('does not touch the system clock outside production', async () => {
