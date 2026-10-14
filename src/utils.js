@@ -4,6 +4,7 @@ const { exec, spawn } = require('child_process');
 const generator = require('generate-password');
 const config = require('config');
 const { knex } = require('./db');
+const { assertPasswordSafe } = require('./passwordPolicy');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const os = require('os');
@@ -82,12 +83,17 @@ module.exports.auth = {
 
   // Change the system user password (stdin only — never interpolate password into a shell string)
   async changeSystemPassword(password) {
+    // Defence in depth: the auth service already refuses these, but this is the
+    // function that writes to chpasswd, so it must not trust its callers.
+    assertPasswordSafe(password);
     if (!isProduction()) {
       console.log(`[DEV] Would change system password for user 'futurebit'`);
       return;
     }
     await new Promise((resolve, reject) => {
-      // chpasswd reads "user:password" lines from stdin; no shell, so quotes/newlines cannot inject commands
+      // chpasswd reads one "user:password" entry per LINE from stdin. No shell, so quotes cannot inject
+      // commands, but a line break WOULD inject a second entry (e.g. "root:..."): assertPasswordSafe above
+      // refuses \n, \r and NUL before we get here.
       const child = spawn('sudo', ['chpasswd'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });

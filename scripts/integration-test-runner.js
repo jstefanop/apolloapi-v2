@@ -13,10 +13,14 @@ process.env.NODE_CONFIG = process.env.NODE_CONFIG || JSON.stringify({ db: { url:
 
 const failures = [];
 
-function getFuturebitShadow() {
+function getShadow(user) {
   const shadow = fs.readFileSync('/etc/shadow', 'utf8');
-  const m = shadow.match(/^futurebit:([^:]*)/m);
+  const m = shadow.match(new RegExp(`^${user}:([^:]*)`, 'm'));
   return m ? m[1] : null;
+}
+
+function getFuturebitShadow() {
+  return getShadow('futurebit');
 }
 
 async function testChpasswd() {
@@ -36,6 +40,30 @@ async function testChpasswd() {
     return;
   }
   console.log('  OK: password updated via spawn + stdin (no shell)');
+
+  // Colons are literal: chpasswd splits on the FIRST colon only.
+  const hashPlain = getFuturebitShadow();
+  await utils.auth.changeSystemPassword('co:lon:s and spaces');
+  if (getFuturebitShadow() === hashPlain) {
+    failures.push('chpasswd: a password containing colons/spaces was not applied');
+    return;
+  }
+  console.log('  OK: colons and spaces are taken literally');
+
+  // A line break would add a second entry (here: root's). It must be refused
+  // before chpasswd runs, leaving both hashes untouched.
+  const rootBefore = getShadow('root');
+  const fbBefore = getFuturebitShadow();
+  let refused = false;
+  try {
+    await utils.auth.changeSystemPassword('x\nroot:pwn');
+  } catch (e) {
+    refused = true;
+  }
+  if (!refused) failures.push('chpasswd: a password with a line break was not refused');
+  if (getShadow('root') !== rootBefore) failures.push('chpasswd: root hash CHANGED by an injected line');
+  if (getFuturebitShadow() !== fbBefore) failures.push('chpasswd: futurebit hash changed by a refused password');
+  if (refused) console.log('  OK: line-break password refused, root and futurebit untouched');
 }
 
 async function testNmcliArgv() {

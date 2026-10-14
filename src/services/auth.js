@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('config');
 const { GraphQLError } = require('graphql');
+const { assertPasswordSafe } = require('../passwordPolicy');
 
 // Helper function to check if we're in production environment
 const isProduction = () => process.env.NODE_ENV === 'production';
@@ -50,6 +51,9 @@ class AuthService {
 
   // Change password
   async changePassword({ password }) {
+    // Before anything is stored: the app and system passwords must not diverge.
+    assertPasswordSafe(password);
+
     // Check if setup exists
     const [setup] = await this.knex('setup').select('*').limit(1);
 
@@ -74,6 +78,9 @@ class AuthService {
   // Initial setup
   async setup({ password }) {
     try {
+      // Before anything is stored: the app and system passwords must not diverge.
+      assertPasswordSafe(password);
+
       // Check if setup already exists
       const [setup] = await this.knex('setup').select('*').limit(1);
 
