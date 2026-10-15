@@ -61,3 +61,86 @@ describe('first start without a .env', () => {
     expect(out.stdout).toBe('undefined');
   });
 });
+
+describe('an .env that already exists', () => {
+  const envFile = (dir) => path.join(dir, 'app', '.env');
+
+  // `before` runs inside the child, ahead of ensureEnvFile, for the cases that
+  // need a failing fs call.
+  const probeWith = (dir, before = '') => `
+    const fs = require('fs');
+    ${before}
+    const { ensureEnvFile } = require(${JSON.stringify(path.join(ROOT, 'src', 'env.js'))});
+    ensureEnvFile(${JSON.stringify(envFile(dir))});
+    const config = require(${JSON.stringify(path.join(ROOT, 'node_modules', 'config'))});
+    process.stdout.write(config.get('server.secret'));
+  `;
+
+  it.each([
+    ['empty', ''],
+    ['without APP_SECRET, no trailing newline', 'DATABASE_URL=/x/y.sqlite'],
+    ['with an empty APP_SECRET=', 'DATABASE_URL=/x/y.sqlite\nAPP_SECRET=\n'],
+  ])('gets a generated secret when it is %s', (_label, initial) => {
+    let dir;
+    const { out } = run((d) => {
+      dir = d;
+      fs.writeFileSync(envFile(d), initial);
+      return probeWith(d);
+    });
+    expect(out.stderr).toBe('');
+    expect(out.stdout).toMatch(/^[0-9a-f]{128}$/);
+    const written = fs.readFileSync(envFile(dir), 'utf8');
+    // Persisted, once, and the rest of the file is left alone.
+    expect(written.match(/^APP_SECRET=.+$/gm)).toEqual([`APP_SECRET=${out.stdout}`]);
+    if (initial.includes('DATABASE_URL')) expect(written).toContain('DATABASE_URL=/x/y.sqlite\n');
+  });
+
+  it('boots when the mode cannot be changed (EPERM), with a warning', () => {
+    const { out } = run((d) => {
+      fs.writeFileSync(envFile(d), 'APP_SECRET=mine\n');
+      return probeWith(
+        d,
+        `fs.chmodSync = () => { const e = new Error('nope'); e.code = 'EPERM'; throw e; };`
+      );
+    });
+    expect(out.stdout).toBe('mine');
+    expect(out.stderr).toMatch(/Could not restrict permissions/);
+  });
+
+  it('reads the file that another process created first (EEXIST)', () => {
+    const { out } = run((d) =>
+      probeWith(
+        d,
+        `
+        const realWrite = fs.writeFileSync;
+        fs.writeFileSync = (file, data, opts) => {
+          if (opts && opts.flag === 'wx') {
+            realWrite(file, 'APP_SECRET=theirs\\n');
+            const e = new Error('exists'); e.code = 'EEXIST'; throw e;
+          }
+          return realWrite(file, data, opts);
+        };
+        `
+      )
+    );
+    expect(out.stdout).toBe('theirs');
+  });
+
+  it('carries on with an in-memory secret when the file cannot be written', () => {
+    const { out } = run((d) => {
+      fs.writeFileSync(envFile(d), '');
+      return probeWith(
+        d,
+        `
+        fs.writeFileSync = (file, data, opts) => {
+          const e = new Error('read-only');
+          e.code = opts && opts.flag === 'wx' ? 'EEXIST' : 'EROFS';
+          throw e;
+        };
+        `
+      );
+    });
+    expect(out.stdout).toMatch(/^[0-9a-f]{128}$/);
+    expect(out.stderr).toMatch(/Could not write APP_SECRET/);
+  });
+});
