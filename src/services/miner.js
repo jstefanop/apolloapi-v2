@@ -4,6 +4,7 @@ const { exec } = require('child_process');
 const _ = require('lodash');
 const moment = require('moment');
 const { GraphQLError } = require('graphql');
+const transition = require('./transition');
 
 // Import the dev miner service for development mode
 const devMinerService =
@@ -25,23 +26,26 @@ class MinerService {
     } catch (_) {}
   }
 
-  async start() {
+  // Put the request back as it was when the command was refused, and publish that.
+  async _revertTransition(ticket) {
+    if (!ticket) return;
     try {
-      // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'miner' })
-        .update({
-          status: 'pending',
-          requested_status: 'online',
-          requested_at: Date.now(),
-        });
-
-      // Notify subscribers immediately so the UI shows "pending" without waiting
-      // for the next periodic push (up to 10s later).
+      await transition.revert(this.knex, ticket);
       this._notifyServicesStatus();
+    } catch (error) {
+      console.error('Failed to restore the service status:', error.message);
+    }
+  }
+
+  async start() {
+    let ticket = null;
+    try {
+      // Written now, published once the command is accepted (see transition.js).
+      ticket = await transition.begin(this.knex, 'miner', 'online');
 
       // Start the miner based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Starting dev miner...');
         await devMinerService.startDevMiner();
         
@@ -63,28 +67,25 @@ class MinerService {
         // don't hold the API call open for them. The service monitor reports the
         // miner coming online.
         await this._execCommand('sudo systemctl start --no-block apollo-miner');
+        // Accepted: now it is a transition worth announcing.
+        this._notifyServicesStatus();
       }
     } catch (error) {
+      await this._revertTransition(ticket);
       throw new GraphQLError(`Failed to start miner: ${error.message}`);
     }
   }
 
   // Stop the miner
   async stop() {
+    let ticket = null;
     try {
-      // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'miner' })
-        .update({
-          status: 'pending',
-          requested_status: 'offline',
-          requested_at: Date.now(),
-        });
-
-      this._notifyServicesStatus();
+      // Written now, published once the command is accepted (see transition.js).
+      ticket = await transition.begin(this.knex, 'miner', 'offline');
 
       // Stop the miner based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Stopping dev miner...');
         await devMinerService.stopDevMiner();
         
@@ -100,28 +101,25 @@ class MinerService {
         console.log('Dev miner stopped - status updated to offline');
       } else {
         await this._execCommand('sudo systemctl stop apollo-miner');
+        // Accepted: now it is a transition worth announcing.
+        this._notifyServicesStatus();
       }
     } catch (error) {
+      await this._revertTransition(ticket);
       throw new GraphQLError(`Failed to stop miner: ${error.message}`);
     }
   }
 
   // Restart the miner
   async restart() {
+    let ticket = null;
     try {
-      // Update service status in the database
-      await this.knex('service_status')
-        .where({ service_name: 'miner' })
-        .update({
-          status: 'pending',
-          requested_status: 'online',
-          requested_at: Date.now(),
-        });
-
-      this._notifyServicesStatus();
+      // Written now, published once the command is accepted (see transition.js).
+      ticket = await transition.begin(this.knex, 'miner', 'online');
 
       // Restart the miner based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Restarting dev miner...');
         await devMinerService.restartDevMiner();
         
@@ -140,8 +138,11 @@ class MinerService {
         // --no-block: see start(). The 35s device-side wait is unchanged; the
         // API returns at once and the service monitor tracks the miner online.
         await this._execCommand('sudo systemctl restart --no-block apollo-miner');
+        // Accepted: now it is a transition worth announcing.
+        this._notifyServicesStatus();
       }
     } catch (error) {
+      await this._revertTransition(ticket);
       throw new GraphQLError(`Failed to restart miner: ${error.message}`);
     }
   }

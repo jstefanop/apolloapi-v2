@@ -4,6 +4,7 @@ const { spawn, exec } = require('child_process');
 const axios = require('axios');
 const config = require('config');
 const { GraphQLError } = require('graphql');
+const transition = require('./transition');
 const util = require('util');
 
 // Convert exec to use promises
@@ -26,38 +27,40 @@ class NodeService {
     } catch (_) {}
   }
 
+  // Put the request back as it was when the command was refused, and publish that.
+  async _revertTransition(ticket) {
+    if (!ticket) return;
+    try {
+      await transition.revert(this.knex, ticket);
+      this._notifyServicesStatus();
+    } catch (error) {
+      console.error('Failed to restore the service status:', error.message);
+    }
+  }
+
   // Start the Bitcoin node
   async start() {
+    let ticket = null;
     try {
-      await this.knex('service_status')
-        .where({ service_name: 'node' })
-        .update({
-          status: 'pending',
-          requested_status: 'online',
-          requested_at: Date.now()
-        });
-
-      this._notifyServicesStatus();
+      // Written now, published once the command is accepted (see transition.js).
+      ticket = await transition.begin(this.knex, 'node', 'online');
       await this._execCommand('sudo systemctl start node');
+      this._notifyServicesStatus();
     } catch (error) {
+      await this._revertTransition(ticket);
       throw new GraphQLError(`Failed to start node: ${error.message}`);
     }
   }
 
   // Stop the Bitcoin node
   async stop() {
+    let ticket = null;
     try {
-      await this.knex('service_status')
-        .where({ service_name: 'node' })
-        .update({
-          status: 'pending',
-          requested_status: 'offline',
-          requested_at: Date.now()
-        });
-
-      this._notifyServicesStatus();
+      ticket = await transition.begin(this.knex, 'node', 'offline');
       await this._execCommand('sudo systemctl stop node');
+      this._notifyServicesStatus();
     } catch (error) {
+      await this._revertTransition(ticket);
       throw new GraphQLError(`Failed to stop node: ${error.message}`);
     }
   }

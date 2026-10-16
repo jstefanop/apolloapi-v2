@@ -4,6 +4,7 @@ const { exec } = require('child_process');
 // rather than one it just found.
 const RESTORE_WINDOW_SECONDS = 60;
 const { GraphQLError } = require('graphql');
+const transition = require('./transition');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -116,27 +117,42 @@ class SoloService {
     } catch (_) {}
   }
 
+  // A command that systemd refused: put the request back as it was. Marking the
+  // pool offline (what the rest of the catch does) would be wrong here, since a
+  // restart that never ran leaves the pool running.
+  async _revertRefused(ticket) {
+    if (!ticket) return;
+    try {
+      await transition.revert(this.knex, ticket);
+      this._notifyServicesStatus();
+    } catch (error) {
+      console.error('Failed to restore the service status:', error.message);
+    }
+  }
+
   // Start the solo pool (ckpool)
   async start() {
+    let ticket = null;
     try {
-      // Update service status in the database
-      if (this.knex) {
-        await this.knex('service_status')
-          .where({ service_name: 'solo' })
-          .update({
-            status: 'pending',
-            requested_status: 'online',
-            requested_at: Date.now(),
-          });
-        this._notifyServicesStatus();
-      }
+      // Written now, published once the command is accepted (see transition.js).
+      if (this.knex) ticket = await transition.begin(this.knex, 'solo', 'online');
 
       // Start the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Starting dev solo pool...');
         await devSoloService.startDevSolo();
       } else {
-        await this._execCommand('sudo systemctl start ckpool');
+        try {
+          await this._execCommand('sudo systemctl start ckpool');
+        } catch (commandError) {
+          // Refused outright: nothing started, so nothing is left pending (and the
+          // service keeps whatever state it had).
+          await this._revertRefused(ticket);
+          commandError.reverted = true;
+          throw commandError;
+        }
+        this._notifyServicesStatus();
         // Wait for service to be actually active before marking online (avoids monitor overwriting to offline)
         const becameActive = await this._waitForActive();
         if (!becameActive) {
@@ -148,33 +164,36 @@ class SoloService {
       // Update status to online after successful start
       await this._updateServiceStatus('online');
     } catch (error) {
-      // Update status to offline if start failed
-      await this._updateServiceStatus('offline');
+      // Update status to offline if start failed — unless the command was refused
+      // outright and the request already put back (the pool kept its state).
+      if (!error.reverted) await this._updateServiceStatus('offline');
       throw new GraphQLError(`Failed to start solo pool: ${error.message}`);
     }
   }
 
   // Stop the solo pool (ckpool)
   async stop() {
+    let ticket = null;
     try {
-      // Update service status in the database
-      if (this.knex) {
-        await this.knex('service_status')
-          .where({ service_name: 'solo' })
-          .update({
-            status: 'pending',
-            requested_status: 'offline',
-            requested_at: Date.now(),
-          });
-        this._notifyServicesStatus();
-      }
+      // Written now, published once the command is accepted (see transition.js).
+      if (this.knex) ticket = await transition.begin(this.knex, 'solo', 'offline');
 
       // Stop the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Stopping dev solo pool...');
         await devSoloService.stopDevSolo();
       } else {
-        await this._execCommand('sudo systemctl stop ckpool');
+        try {
+          await this._execCommand('sudo systemctl stop ckpool');
+        } catch (commandError) {
+          // Refused outright: nothing started, so nothing is left pending (and the
+          // service keeps whatever state it had).
+          await this._revertRefused(ticket);
+          commandError.reverted = true;
+          throw commandError;
+        }
+        this._notifyServicesStatus();
       }
 
       // Update status to offline after successful stop
@@ -187,25 +206,27 @@ class SoloService {
 
   // Restart the solo pool (ckpool)
   async restart() {
+    let ticket = null;
     try {
-      // Update service status in the database
-      if (this.knex) {
-        await this.knex('service_status')
-          .where({ service_name: 'solo' })
-          .update({
-            status: 'pending',
-            requested_status: 'online',
-            requested_at: Date.now(),
-          });
-        this._notifyServicesStatus();
-      }
+      // Written now, published once the command is accepted (see transition.js).
+      if (this.knex) ticket = await transition.begin(this.knex, 'solo', 'online');
 
       // Restart the solo pool based on environment
       if (process.env.NODE_ENV === 'development') {
+        this._notifyServicesStatus();
         console.log('Restarting dev solo pool...');
         await devSoloService.restartDevSolo();
       } else {
-        await this._execCommand('sudo systemctl restart ckpool');
+        try {
+          await this._execCommand('sudo systemctl restart ckpool');
+        } catch (commandError) {
+          // Refused outright: nothing started, so nothing is left pending (and the
+          // service keeps whatever state it had).
+          await this._revertRefused(ticket);
+          commandError.reverted = true;
+          throw commandError;
+        }
+        this._notifyServicesStatus();
         // Wait for service to be actually active before marking online (avoids "stoppato ma non riavviato" / connection issue in UI)
         const becameActive = await this._waitForActive();
         if (!becameActive) {
@@ -217,8 +238,9 @@ class SoloService {
       // Update status to online after successful restart
       await this._updateServiceStatus('online');
     } catch (error) {
-      // Update status to offline if restart failed
-      await this._updateServiceStatus('offline');
+      // Update status to offline if restart failed — unless the command was refused
+      // outright and the request already put back (the pool kept its state).
+      if (!error.reverted) await this._updateServiceStatus('offline');
       throw new GraphQLError(`Failed to restart solo pool: ${error.message}`);
     }
   }
