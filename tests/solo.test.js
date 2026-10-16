@@ -335,14 +335,54 @@ describe('Solo API', () => {
         }
       });
 
-      await expect(SoloService.restart()).rejects.toThrow(
-        'Solo pool restart timed out: service did not become active'
-      );
+      await expect(SoloService.restart()).rejects.toMatchObject({
+        message: 'Could not restart the solo pool',
+        extensions: { code: 'SERVICE_COMMAND_FAILED', service: 'solo', action: 'restart' },
+      });
 
       const row = await knex('service_status').where({ service_name: 'solo' }).first();
       expect(row).toBeDefined();
       expect(row.status).toBe('offline');
     });
+
+    // The unit failed and systemd is in the 30 s auto-restart delay: ckpool is
+    // about to come up, so the call must neither fail nor mark the pool offline.
+    const timeoutWith = (show) => {
+      exec.mockImplementation((command, callback) => {
+        if (command.includes('show')) callback(null, show, '');
+        else if (command.includes('is-active')) callback(null, 'activating', '');
+        else callback(null, '', '');
+      });
+    };
+    const rowStatus = async () =>
+      (await knex('service_status').where({ service_name: 'solo' }).first()).status;
+
+    it.each(['restart', 'start'])(
+      '%s() leaves the row pending and does not throw when systemd is still activating',
+      async (action) => {
+        process.env.NODE_ENV = 'production';
+        timeoutWith('ActiveState=activating\nSubState=auto-restart\n');
+        const spy = jest.spyOn(SoloService, '_waitForActive').mockResolvedValue(false);
+        await expect(SoloService[action]()).resolves.toBeUndefined();
+        spy.mockRestore();
+        expect(await rowStatus()).toBe('pending');
+      }
+    );
+
+    it.each(['restart', 'start'])(
+      '%s() reports a localisable refusal and goes offline when the unit is down at timeout',
+      async (action) => {
+        process.env.NODE_ENV = 'production';
+        timeoutWith('ActiveState=inactive\nSubState=dead\n');
+        const spy = jest.spyOn(SoloService, '_waitForActive').mockResolvedValue(false);
+        await expect(SoloService[action]()).rejects.toMatchObject({
+          message: `Could not ${action} the solo pool`,
+          extensions: { code: 'SERVICE_COMMAND_FAILED', service: 'solo', action },
+        });
+        spy.mockRestore();
+        expect(await rowStatus()).toBe('offline');
+      }
+    );
 
     it('start() should set online only after service becomes active', async () => {
       process.env.NODE_ENV = 'production';

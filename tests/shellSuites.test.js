@@ -7,7 +7,7 @@ const path = require('path');
 // not running them: the launcher logic they cover (node storage states, the
 // datadir after a full disk) is exactly what no jest test can reach. Running
 // them here puts them on the same footing as everything else.
-const suites = ['node_storage.test.sh', 'node_datadir.test.sh'];
+const suites = ['node_storage.test.sh', 'node_datadir.test.sh', 'ckpool_scripts.test.sh'];
 
 describe.each(suites)('%s', (suite) => {
   it('passes', () => {

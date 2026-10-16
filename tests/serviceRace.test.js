@@ -157,7 +157,12 @@ describe('S3: the command only has to be accepted', () => {
     jest.spyOn(solo, '_execCommand').mockResolvedValue({ stdout: '', stderr: '' });
     jest.spyOn(solo, '_waitForActive').mockResolvedValue(false);
 
-    await expect(solo.restart()).rejects.toThrow('Solo pool restart timed out: service did not become active');
+    // The unit is down for good (the show call mocked above answers empty): a
+    // clean, localisable error, and the row goes offline.
+    await expect(solo.restart()).rejects.toMatchObject({
+      message: 'Could not restart the solo pool',
+      extensions: { code: 'SERVICE_COMMAND_FAILED', service: 'solo', action: 'restart' },
+    });
     expect((await row('solo')).status).toBe('offline');
   });
 });
