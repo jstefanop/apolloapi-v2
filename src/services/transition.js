@@ -1,5 +1,5 @@
 // Asking for a service transition (start / stop / restart) without announcing one
-// that never began.
+// that never began, and without two requests undoing each other.
 //
 // The request is written to service_status BEFORE the command runs, on purpose:
 // the service monitor must find `pending` + the requested state when the unit
@@ -8,9 +8,19 @@
 // "pending" reached every open browser ahead of a failure, which then announced
 // "Starting miner" over a restart that systemctl had refused.
 //
-// On a refusal the row goes back to what it was, but only if it is still the
-// request this call wrote (same requested_at): by then the monitor may have
-// moved it on, and putting an old value over a newer one would be the bug again.
+// On a refusal the row goes back to what it was. Two requests for the same
+// service therefore take turns (a chain per service): with both in flight, each
+// would remember the other's pending request as "what it was", and the second
+// refusal would put back a request that had itself been refused — which the
+// monitor then obeys.
+//
+// The command must only be one that returns once systemd has ACCEPTED the job
+// (`systemctl ... --no-block`), so that failing means "refused" and nothing
+// else; whether the job then succeeds is the monitor's to decide.
+
+const { GraphQLError } = require('graphql');
+
+const chains = new Map();
 
 const begin = async (knex, serviceName, requestedStatus) => {
   const previous = await knex('service_status')
@@ -27,6 +37,9 @@ const begin = async (knex, serviceName, requestedStatus) => {
   return { serviceName, requestedAt, previous };
 };
 
+// Only if the row is still the request this call wrote (same requested_at): by
+// then the monitor may have moved it on, and an old value over a newer one would
+// be the bug again.
 const revert = async (knex, ticket) => {
   const { serviceName, requestedAt, previous } = ticket;
   if (!previous) return;
@@ -39,4 +52,48 @@ const revert = async (knex, ticket) => {
     });
 };
 
-module.exports = { begin, revert };
+const execute = async (knex, serviceName, requestedStatus, command, notify) => {
+  const ticket = await begin(knex, serviceName, requestedStatus);
+  try {
+    const result = await command();
+    // Accepted: now it is a transition worth announcing.
+    notify?.();
+    return result;
+  } catch (error) {
+    try {
+      await revert(knex, ticket);
+    } catch (revertError) {
+      console.error('Failed to restore the service status:', revertError.message);
+    }
+    notify?.();
+    throw error;
+  }
+};
+
+/**
+ * Ask for `requestedStatus` on `serviceName` by running `command`.
+ * Resolves with the command's result once it was accepted; rejects with its
+ * error after putting the request back. One at a time per service.
+ */
+const run = (knex, serviceName, requestedStatus, command, { notify } = {}) => {
+  const previous = chains.get(serviceName) || Promise.resolve();
+  const job = previous.then(() => execute(knex, serviceName, requestedStatus, command, notify));
+  chains.set(
+    serviceName,
+    job.catch(() => {})
+  );
+  return job;
+};
+
+// What the caller sees when the command was refused. The raw error holds the
+// command line and sudo's own words ("Command failed: sudo systemctl ... a
+// terminal is required"): useful in the log, noise on a screen. The client picks
+// its localised text from the code, service and action.
+const refused = (service, action, error) => {
+  console.error(`${service} ${action} refused: ${error.message}`);
+  return new GraphQLError(`Could not ${action} the ${service}`, {
+    extensions: { code: 'SERVICE_COMMAND_FAILED', service, action },
+  });
+};
+
+module.exports = { run, refused };

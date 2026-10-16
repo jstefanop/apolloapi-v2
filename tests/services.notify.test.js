@@ -159,6 +159,7 @@ describe('SoloService._notifyServicesStatus', () => {
     // Stub out the actual systemctl command and _waitForActive to avoid hangs
     jest.spyOn(instance, '_execCommand').mockResolvedValue({ stdout: '', stderr: '' });
     jest.spyOn(instance, '_waitForActive').mockResolvedValue(true);
+    jest.spyOn(instance, '_waitForInactive').mockResolvedValue(true);
     // Stub _updateServiceStatus to avoid extra DB writes that could interfere
     jest.spyOn(instance, '_updateServiceStatus').mockResolvedValue(undefined);
   });

@@ -7,7 +7,11 @@ jest.mock('fs', () => ({
     mkdir: jest.fn(),
     readFile: jest.fn(),
     writeFile: jest.fn(),
-    access: jest.fn()
+    access: jest.fn(),
+    stat: jest.fn(),
+    rename: jest.fn(),
+    unlink: jest.fn(),
+    readdir: jest.fn()
   }
 }));
 
@@ -25,7 +29,13 @@ describe('manageBitcoinConf', () => {
     
     // Reset mocks
     fs.mkdir.mockResolvedValue();
-    fs.readFile.mockRejectedValue(new Error('File not found'));
+    // Files that are not there: only ENOENT counts as that.
+    fs.access.mockRejectedValue(Object.assign(new Error('File not found'), { code: 'ENOENT' }));
+    fs.readFile.mockRejectedValue(Object.assign(new Error('File not found'), { code: 'ENOENT' }));
+    fs.stat.mockRejectedValue(Object.assign(new Error('File not found'), { code: 'ENOENT' }));
+    fs.readdir.mockResolvedValue([]);
+    fs.rename.mockResolvedValue();
+    fs.unlink.mockResolvedValue();
     fs.writeFile.mockResolvedValue();
   });
 
@@ -219,11 +229,12 @@ describe('manageBitcoinConf', () => {
       };
 
       // Mock existing file with same content
+      fs.access.mockResolvedValue();
       fs.readFile.mockImplementation((path) => {
         if (path.includes('api.conf')) {
           return Promise.resolve('# API managed Bitcoin configuration\nrpcpassword=test123\n');
         }
-        return Promise.reject(new Error('File not found'));
+        return Promise.reject(Object.assign(new Error('File not found'), { code: 'ENOENT' }));
       });
 
       await utils.auth.manageBitcoinConf(settings);
@@ -243,7 +254,7 @@ describe('manageBitcoinConf', () => {
         if (path.includes('api.conf')) {
           return Promise.resolve('# API managed Bitcoin configuration\nrpcpassword=oldpassword\n');
         }
-        return Promise.reject(new Error('File not found'));
+        return Promise.reject(Object.assign(new Error('File not found'), { code: 'ENOENT' }));
       });
 
       await utils.auth.manageBitcoinConf(settings);

@@ -27,41 +27,37 @@ class NodeService {
     } catch (_) {}
   }
 
-  // Put the request back as it was when the command was refused, and publish that.
-  async _revertTransition(ticket) {
-    if (!ticket) return;
-    try {
-      await transition.revert(this.knex, ticket);
-      this._notifyServicesStatus();
-    } catch (error) {
-      console.error('Failed to restore the service status:', error.message);
-    }
-  }
-
   // Start the Bitcoin node
   async start() {
-    let ticket = null;
     try {
-      // Written now, published once the command is accepted (see transition.js).
-      ticket = await transition.begin(this.knex, 'node', 'online');
-      await this._execCommand('sudo systemctl start node');
-      this._notifyServicesStatus();
+      // --no-block: the call returns once systemd has accepted the job, so a
+      // failure here means "refused" and nothing else. bitcoind can take a long
+      // while to come up or go down (TimeoutStopSec is 600), and the service
+      // monitor, not this call, is what reports how the job ended.
+      await transition.run(
+        this.knex,
+        'node',
+        'online',
+        () => this._execCommand('sudo systemctl start --no-block node'),
+        { notify: () => this._notifyServicesStatus() }
+      );
     } catch (error) {
-      await this._revertTransition(ticket);
-      throw new GraphQLError(`Failed to start node: ${error.message}`);
+      throw transition.refused('node', 'start', error);
     }
   }
 
   // Stop the Bitcoin node
   async stop() {
-    let ticket = null;
     try {
-      ticket = await transition.begin(this.knex, 'node', 'offline');
-      await this._execCommand('sudo systemctl stop node');
-      this._notifyServicesStatus();
+      await transition.run(
+        this.knex,
+        'node',
+        'offline',
+        () => this._execCommand('sudo systemctl stop --no-block node'),
+        { notify: () => this._notifyServicesStatus() }
+      );
     } catch (error) {
-      await this._revertTransition(ticket);
-      throw new GraphQLError(`Failed to stop node: ${error.message}`);
+      throw transition.refused('node', 'stop', error);
     }
   }
 

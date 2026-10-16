@@ -54,7 +54,7 @@ describe('T1 — node start/stop (Node.start / Node.stop)', () => {
     expect(res.data.Node.start.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'node' }).first();
     expect(row.requested_status).toBe('online');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl start node');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl start --no-block node');
   });
 
   it('Node.stop sets requested_status=offline and issues systemctl stop', async () => {
@@ -64,7 +64,7 @@ describe('T1 — node start/stop (Node.start / Node.stop)', () => {
     expect(res.data.Node.stop.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'node' }).first();
     expect(row.requested_status).toBe('offline');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl stop node');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl stop --no-block node');
   });
 });
 
@@ -78,13 +78,13 @@ describe('T1 — miner start/stop/restart (Miner.*)', () => {
     expect(spy).toHaveBeenCalledWith('sudo systemctl start --no-block apollo-miner');
   });
 
-  it('Miner.stop → requested_status=offline + systemctl stop apollo-miner', async () => {
+  it('Miner.stop → requested_status=offline + systemctl stop --no-block apollo-miner', async () => {
     const spy = jest.spyOn(services.miner, '_execCommand').mockResolvedValue('');
     const res = await run(`query { Miner { stop { error { message } } } }`);
     expect(res.data.Miner.stop.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'miner' }).first();
     expect(row.requested_status).toBe('offline');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl stop apollo-miner');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl stop --no-block apollo-miner');
   });
 
   it('Miner.restart → systemctl restart apollo-miner', async () => {
@@ -108,16 +108,16 @@ describe('T1 — solo start/stop (Solo.*)', () => {
     expect(res.data.Solo.start.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'solo' }).first();
     expect(row.requested_status).toBe('online');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl start ckpool');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl start --no-block ckpool');
   });
 
-  it('Solo.stop → requested_status=offline + systemctl stop ckpool', async () => {
+  it('Solo.stop → requested_status=offline + systemctl stop --no-block ckpool', async () => {
     const spy = jest.spyOn(services.solo, '_execCommand').mockResolvedValue({ stdout: 'inactive' });
     const res = await run(`query { Solo { stop { error { message } } } }`);
     expect(res.data.Solo.stop.error).toBeNull();
     const row = await knex('service_status').where({ service_name: 'solo' }).first();
     expect(row.requested_status).toBe('offline');
-    expect(spy).toHaveBeenCalledWith('sudo systemctl stop ckpool');
+    expect(spy).toHaveBeenCalledWith('sudo systemctl stop --no-block ckpool');
   });
 });
 

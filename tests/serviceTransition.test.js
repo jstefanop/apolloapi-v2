@@ -49,7 +49,7 @@ describe.each(SERVICES)('%s transitions', (name, make) => {
     it('refused by systemd: the row is put back and "pending" is never published', async () => {
       jest.spyOn(svc, '_execCommand').mockRejectedValue(new Error('systemctl exited 1'));
 
-      await expect(svc[action]()).rejects.toThrow(/systemctl exited 1/);
+      await expect(svc[action]()).rejects.toThrow(/Could not/);
       await settle(published, 1);
 
       const after = await row(name);
@@ -68,7 +68,10 @@ describe.each(SERVICES)('%s transitions', (name, make) => {
         expect(published).toEqual([]); // ...but nobody has been told yet
         return { stdout: 'active', stderr: '' };
       });
-      if (name === 'solo') jest.spyOn(svc, '_waitForActive').mockResolvedValue(true);
+      if (name === 'solo') {
+        jest.spyOn(svc, '_waitForActive').mockResolvedValue(true);
+        jest.spyOn(svc, '_waitForInactive').mockResolvedValue(true);
+      }
 
       await svc[action]();
       await settle(published, 1);

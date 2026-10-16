@@ -67,7 +67,9 @@ describe('conf files written by changeNodeRpcPassword', () => {
       const temp = written().find((w) => base(w.file).startsWith(API_CONF));
       expect(temp.file).toMatch(/api\.conf\.\d+\.\d+\.tmp$/);
       expect(path.dirname(temp.file)).toBe(path.dirname(fs.promises.rename.mock.calls.find(([, to]) => base(to) === API_CONF)[1]));
-      expect(temp.opts.mode).toBe(0o644); // the original's, not a default
+      // Tightened on every write, not kept from a 0644 original.
+      expect(temp.opts.mode).toBe(0o600);
+      expect(temp.opts.flag).toBe('wx');
       expect(fs.promises.rename).toHaveBeenCalledWith(temp.file, expect.stringMatching(/api\.conf$/));
     });
 
@@ -129,6 +131,11 @@ describe('chpasswd', () => {
 
     const error = await outcome;
     expect(error.message).toMatch(/did not finish within 30s/);
+    expect(error.message).toMatch(/may or may not have changed/);
+    // sudo forwards SIGTERM to chpasswd; SIGKILL only if that is not enough.
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
+    await jest.advanceTimersByTimeAsync(5000);
     expect(child.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
@@ -182,5 +189,84 @@ describe('chpasswd', () => {
     // It must not throw out of the stream as an unhandled 'error' event.
     stdinHandlers.error(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
     await running; // the failure is logged by changeNodeRpcPassword, not thrown
+  });
+});
+
+describe('F1/F2/F4 of the security review (round 4)', () => {
+  const settings = { nodeRpcPassword: 'pw123456', nodeEnableSoloMining: false };
+
+  beforeEach(async () => {
+    for (const method of ['log', 'info', 'warn', 'error']) jest.spyOn(console, method).mockImplementation(() => {});
+    await knex('settings').del();
+    await knex('settings').insert({ node_rpc_password: null });
+    fs.promises.mkdir.mockResolvedValue(undefined);
+    fs.promises.access.mockResolvedValue(undefined);
+    fs.promises.writeFile.mockResolvedValue(undefined);
+    fs.promises.rename.mockResolvedValue(undefined);
+    fs.promises.unlink.mockResolvedValue(undefined);
+    fs.promises.readdir.mockResolvedValue([]);
+    fs.promises.stat.mockResolvedValue({ mode: 0o100644 });
+    fs.promises.readFile.mockImplementation(async (file) =>
+      base(file).startsWith(API_CONF) ? 'rpcpassword=old\n' : '{ "btcd": [{ "pass": "old" }] }'
+    );
+  });
+
+  it('manageCkpoolConf replaces the file atomically and owner-only', async () => {
+    await utils.auth.manageCkpoolConf(settings);
+    const temp = written().find((w) => /ckpool\.conf\.\d+\.\d+\.tmp$/.test(w.file));
+    expect(temp.content).toContain('"pass": "pw123456"');
+    expect(temp.opts).toMatchObject({ mode: 0o600, flag: 'wx' });
+    expect(written().filter((w) => base(w.file) === 'ckpool.conf')).toEqual([]);
+    expect(fs.promises.rename).toHaveBeenCalledWith(temp.file, expect.stringMatching(/ckpool\.conf$/));
+  });
+
+  it('manageBitcoinConf leaves an api.conf it cannot read alone', async () => {
+    fs.promises.readFile.mockImplementation(async (file) => {
+      if (base(file) === API_CONF) throw Object.assign(new Error('I/O error'), { code: 'EIO' });
+      throw Object.assign(new Error('nope'), { code: 'ENOENT' });
+    });
+    fs.promises.access.mockImplementation(async (file) => {
+      if (base(file) !== API_CONF) throw Object.assign(new Error('nope'), { code: 'ENOENT' });
+    });
+    await utils.auth.manageBitcoinConf(settings);
+    expect(written().filter((w) => base(w.file).startsWith(API_CONF))).toEqual([]);
+  });
+
+  it('api.conf is written owner-only even when it was world-readable before', async () => {
+    await utils.auth.manageBitcoinConf(settings);
+    const temp = written().find((w) => /api\.conf\.\d+\.\d+\.tmp$/.test(w.file));
+    expect(temp.opts.mode).toBe(0o600);
+  });
+
+  it('user.conf, which holds no credentials, keeps the mode it has', async () => {
+    fs.promises.stat.mockResolvedValue({ mode: 0o100664 });
+    await utils.auth.manageBitcoinConf({ ...settings, nodeUserConf: 'dbcache=300' });
+    const temp = written().find((w) => /user\.conf\.\d+\.\d+\.tmp$/.test(w.file));
+    expect(temp.opts.mode).toBe(0o664);
+  });
+
+  it('removes a temp file a crashed write left behind, but not one of this process', async () => {
+    const mine = `api.conf.${process.pid}.1.tmp`;
+    fs.promises.readdir.mockResolvedValue(['api.conf.99999.123.tmp', mine, 'api.conf', 'other.tmp']);
+    await utils.auth.changeNodeRpcPassword({});
+    const removed = fs.promises.unlink.mock.calls.map(([f]) => base(f));
+    expect(removed).toContain('api.conf.99999.123.tmp');
+    expect(removed).not.toContain(mine);
+    expect(removed).not.toContain('other.tmp');
+    expect(removed).not.toContain('api.conf');
+  });
+
+  it('F4: the conf files are written before the database, and a failure leaves the database alone', async () => {
+    // Success: both are updated.
+    await utils.auth.changeNodeRpcPassword({});
+    expect((await knex('settings').first()).node_rpc_password).toBeTruthy();
+    expect(fs.promises.rename).toHaveBeenCalled();
+
+    // A file refuses: nothing may reach the database, so it still holds the
+    // password the files still hold.
+    await knex('settings').update({ node_rpc_password: null });
+    fs.promises.writeFile.mockRejectedValue(Object.assign(new Error('no space'), { code: 'ENOSPC' }));
+    await utils.auth.changeNodeRpcPassword({});
+    expect((await knex('settings').first()).node_rpc_password).toBeNull();
   });
 });

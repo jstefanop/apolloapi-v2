@@ -11,6 +11,7 @@ const os = require('os');
 const util = require('util');
 
 const CHPASSWD_TIMEOUT_MS = 30000;
+const CHPASSWD_KILL_GRACE_MS = 5000;
 
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
@@ -106,22 +107,54 @@ const sudoTee = (file, content) =>
     child.stdin.end();
   });
 
+// A crash between writing the temp file and renaming it leaves it behind, with
+// the secret inside. Cleared before each write of that file.
+const clearOrphanTemps = async (file) => {
+  const dir = path.dirname(file);
+  const prefix = `${path.basename(file)}.`;
+  let names = [];
+  try {
+    names = (await fsPromises.readdir(dir)) || [];
+  } catch (_) {
+    return;
+  }
+  for (const name of names) {
+    const match = name.startsWith(prefix) && /^\.(\d+)\.\d+\.tmp$/.exec(name.slice(prefix.length - 1));
+    // Another live write of this process is not an orphan.
+    if (!match || Number(match[1]) === process.pid) continue;
+    try {
+      await fsPromises.unlink(path.join(dir, name));
+    } catch (_) {
+      // Gone already, or not ours to remove.
+    }
+  }
+};
+
 // Replace a conf file whole or not at all: write the new content beside it, then
 // rename over it. A write cut short (disk full, killed process) leaves the old
 // file intact instead of a truncated one that bitcoind or ckpool then reads.
-// `mode` is for a file that does not exist yet; an existing one keeps its own.
-const writeConfFile = async (file, content, { mode = 0o600 } = {}) => {
+//
+// `mode` is applied on EVERY write, so a file that was once world-readable is
+// tightened the next time it changes. The credentials in these files are read by
+// the user the API, bitcoind and ckpool all run as. `keepMode` is for a file
+// without credentials that someone may have set up differently (user.conf).
+const writeConfFile = async (file, content, { mode = 0o600, keepMode = false } = {}) => {
   let fileMode = mode;
-  try {
-    const st = await fsPromises.stat(file);
-    if (typeof st?.mode === 'number') fileMode = st.mode & 0o777;
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+  if (keepMode) {
+    try {
+      const st = await fsPromises.stat(file);
+      if (typeof st?.mode === 'number') fileMode = st.mode & 0o777;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
+
+  await clearOrphanTemps(file);
 
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
-    await fsPromises.writeFile(temp, content, { mode: fileMode });
+    // 'wx': never write through something already sitting at that name.
+    await fsPromises.writeFile(temp, content, { mode: fileMode, flag: 'wx' });
     await fsPromises.rename(temp, file);
   } catch (error) {
     try {
@@ -131,7 +164,7 @@ const writeConfFile = async (file, content, { mode = 0o600 } = {}) => {
     }
     // No room to create files in that directory (it belongs to root): the
     // fallback writes the file in place, which is the one thing sudo can do here
-    // without changing who owns it.
+    // without changing who owns it (and without changing its mode).
     if (!isProduction() || !PERMISSION_ERRORS.includes(error.code)) throw error;
     await sudoTee(file, content);
   }
@@ -186,11 +219,21 @@ module.exports.auth = {
         fn(value);
       };
       // A chpasswd that never exits would hold the auth lock — and with it every
-      // later setup and password change — for ever.
+      // later setup and password change — for ever. SIGTERM goes to sudo, which
+      // forwards it to chpasswd; SIGKILL follows if that is not enough. Whether the
+      // password changed is not known at that point, and the message says so.
+      let killTimer = null;
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        finish(reject, new Error(`chpasswd did not finish within ${CHPASSWD_TIMEOUT_MS / 1000}s`));
+        child.kill('SIGTERM');
+        killTimer = setTimeout(() => child.kill('SIGKILL'), CHPASSWD_KILL_GRACE_MS);
+        finish(
+          reject,
+          new Error(
+            `chpasswd did not finish within ${CHPASSWD_TIMEOUT_MS / 1000}s: the system password may or may not have changed. Repeat the change.`
+          )
+        );
       }, CHPASSWD_TIMEOUT_MS);
+      child.on('exit', () => clearTimeout(killTimer));
       child.stderr.on('data', (chunk) => {
         stderr += chunk;
       });
@@ -220,22 +263,11 @@ module.exports.auth = {
         numbers: true,
       });
 
-      // Update the password only on the latest settings row (append-only table;
-      // updating without WHERE would overwrite every historical row).
-      const latestSettings = await knex('settings')
-        .select('id')
-        .orderBy('created_at', 'desc')
-        .orderBy('id', 'desc')
-        .first();
-
-      if (latestSettings) {
-        await knex('settings')
-          .where('id', latestSettings.id)
-          .update({ node_rpc_password: password });
-      } else {
-        console.warn('changeNodeRpcPassword: no settings row found, skipping DB update');
-      }
-
+      // The conf files first, the database second. bitcoind and ckpool read the
+      // password from the files and the API reads it from the database, so they
+      // must agree; whichever write fails, it should be the one that leaves the
+      // old password everywhere. A file that cannot be written (or read) stops
+      // here with the database untouched.
       try {
         // Create directories if needed
         const bitcoinDir = path.dirname(configBitcoinApiConfPath);
@@ -255,9 +287,7 @@ module.exports.auth = {
             apiConf.replace(/rpcpassword.*/g, () => `rpcpassword=${password}`)
           );
         } else {
-          // Only the user running the API, bitcoind and ckpool (all `futurebit`)
-          // ever read these files, so a file created here is owner-only.
-          await writeConfFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`, { mode: 0o600 });
+          await writeConfFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`);
           console.log('Created api.conf with new password');
         }
 
@@ -270,10 +300,31 @@ module.exports.auth = {
           );
         } else {
           const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
-          await writeConfFile(configCkpoolFilePath, ckpoolConfig, { mode: 0o600 });
+          await writeConfFile(configCkpoolFilePath, ckpoolConfig);
           console.log('Created ckpool.conf');
         }
+      } catch (err) {
+        console.log('Error updating configuration files, password left unchanged:', err.message);
+        return;
+      }
 
+      // Update the password only on the latest settings row (append-only table;
+      // updating without WHERE would overwrite every historical row).
+      const latestSettings = await knex('settings')
+        .select('id')
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .first();
+
+      if (latestSettings) {
+        await knex('settings')
+          .where('id', latestSettings.id)
+          .update({ node_rpc_password: password });
+      } else {
+        console.warn('changeNodeRpcPassword: no settings row found, skipping DB update');
+      }
+
+      try {
         // Restart the node service
         await mockSystemctl('restart', 'node');
 
@@ -284,7 +335,7 @@ module.exports.auth = {
 
         console.log('Password updated successfully in api.conf and ckpool.conf');
       } catch (err) {
-        console.log('Error updating configuration files:', err.message);
+        console.log('Error restarting services:', err.message);
       }
     } catch (err) {
       console.log('Error in changeNodeRpcPassword:', err.message);
@@ -429,10 +480,7 @@ module.exports.auth = {
         await fsPromises.mkdir(dir, { recursive: true });
 
         // Write the configuration file
-        await fsPromises.writeFile(
-          configCkpoolFilePath,
-          JSON.stringify(ckpoolConf, null, 2)
-        );
+        await writeConfFile(configCkpoolFilePath, JSON.stringify(ckpoolConf, null, 2));
         console.log('solo configuration saved successfully');
       } catch (writeErr) {
         console.log('Error writing solo configuration:', writeErr.message);
@@ -599,42 +647,50 @@ module.exports.auth = {
       }
 
       // ===== CHECK AND WRITE api.conf =====
-      let currentApiConf = '';
+      // Only a file that is not there counts as empty: one that exists and cannot
+      // be read is left alone rather than overwritten with what we think it holds.
+      let currentApiConf = null;
+      let apiReadable = true;
       try {
-        currentApiConf = await fsPromises.readFile(configBitcoinApiConfPath, 'utf8');
+        currentApiConf = await readConfFile(configBitcoinApiConfPath);
+        if (currentApiConf === null) console.log('api.conf does not exist, will create a new one');
       } catch (readErr) {
-        console.log('api.conf does not exist, will create a new one');
+        apiReadable = false;
+        console.log('Could not read api.conf, leaving it as it is:', readErr.message);
       }
 
-      if (currentApiConf !== apiConf) {
+      if (apiReadable && currentApiConf !== apiConf) {
         console.log('Writing api.conf');
         try {
-          await fsPromises.writeFile(configBitcoinApiConfPath, apiConf, 'utf8');
+          await writeConfFile(configBitcoinApiConfPath, apiConf);
           console.log('api.conf saved successfully');
         } catch (writeErr) {
           console.log('Error writing api.conf:', writeErr.message);
         }
-      } else {
+      } else if (apiReadable) {
         console.log('No changes to api.conf');
       }
 
       // ===== CHECK AND WRITE user.conf =====
-      let currentUserConf = '';
+      let currentUserConf = null;
+      let userReadable = true;
       try {
-        currentUserConf = await fsPromises.readFile(configBitcoinUserConfPath, 'utf8');
+        currentUserConf = await readConfFile(configBitcoinUserConfPath);
+        if (currentUserConf === null) console.log('user.conf does not exist, will create a new one');
       } catch (readErr) {
-        console.log('user.conf does not exist, will create a new one');
+        userReadable = false;
+        console.log('Could not read user.conf, leaving it as it is:', readErr.message);
       }
 
-      if (currentUserConf !== userConf) {
+      if (userReadable && currentUserConf !== userConf) {
         console.log('Writing user.conf');
         try {
-          await fsPromises.writeFile(configBitcoinUserConfPath, userConf, 'utf8');
+          await writeConfFile(configBitcoinUserConfPath, userConf, { mode: 0o644, keepMode: true });
           console.log('user.conf saved successfully');
         } catch (writeErr) {
           console.log('Error writing user.conf:', writeErr.message);
         }
-      } else {
+      } else if (userReadable) {
         console.log('No changes to user.conf');
       }
 
