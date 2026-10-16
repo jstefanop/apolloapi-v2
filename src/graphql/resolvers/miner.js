@@ -1,3 +1,5 @@
+const { errorPayload } = require('../errorPayload');
+
 module.exports = {
   Query: {
     Miner: () => ({}),
@@ -9,7 +11,7 @@ module.exports = {
         await services.miner.start();
         return { error: null };
       } catch (error) {
-        return { error: { message: error.message } };
+        return { error: errorPayload(error) };
       }
     },
 
@@ -18,7 +20,7 @@ module.exports = {
         await services.miner.stop();
         return { error: null };
       } catch (error) {
-        return { error: { message: error.message } };
+        return { error: errorPayload(error) };
       }
     },
 
@@ -27,7 +29,7 @@ module.exports = {
         await services.miner.restart();
         return { error: null };
       } catch (error) {
-        return { error: { message: error.message } };
+        return { error: errorPayload(error) };
       }
     },
 

@@ -141,7 +141,7 @@ describe('S3: the command only has to be accepted', () => {
 
     const error = await solo.restart().catch((e) => e);
 
-    expect(error.message).toBe('Could not restart the solo');
+    expect(error.message).toBe('Could not restart the solo pool');
     expect(error.message).not.toMatch(/sudo|systemctl|terminal/);
     expect(error.extensions).toMatchObject({ code: 'SERVICE_COMMAND_FAILED', service: 'solo', action: 'restart' });
     const after = await row('solo');

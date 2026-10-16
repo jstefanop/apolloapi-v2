@@ -219,13 +219,22 @@ module.exports.auth = {
         fn(value);
       };
       // A chpasswd that never exits would hold the auth lock — and with it every
-      // later setup and password change — for ever. SIGTERM goes to sudo, which
-      // forwards it to chpasswd; SIGKILL follows if that is not enough. Whether the
-      // password changed is not known at that point, and the message says so.
+      // later setup and password change — for ever. `child` is sudo, which runs as
+      // root: a signal sent from here (we are `futurebit`) would be refused, so the
+      // signal goes through `sudo kill` (sudoers lets the service user do that).
+      // SIGTERM first, SIGKILL if that is not enough. Whether the password changed
+      // is not known at that point, and the message says so.
+      const signal = (name) => {
+        if (!child.pid) return;
+        const killer = spawn('sudo', ['kill', `-${name}`, String(child.pid)], { stdio: 'ignore' });
+        // No sudo, no such process: nothing more can be done about it, and an
+        // unhandled 'error' event would take the whole API down.
+        killer.on('error', (error) => console.error(`Could not send ${name} to chpasswd: ${error.message}`));
+      };
       let killTimer = null;
       const timer = setTimeout(() => {
-        child.kill('SIGTERM');
-        killTimer = setTimeout(() => child.kill('SIGKILL'), CHPASSWD_KILL_GRACE_MS);
+        signal('TERM');
+        killTimer = setTimeout(() => signal('KILL'), CHPASSWD_KILL_GRACE_MS);
         finish(
           reject,
           new Error(
@@ -242,7 +251,10 @@ module.exports.auth = {
       child.stdin.on('error', (error) => finish(reject, error));
       child.on('close', (code) => {
         if (code !== 0) {
-          finish(reject, new Error(stderr.trim() || `chpasswd exited with code ${code}`));
+          // What chpasswd said is for the log, not for the screen (it can quote the
+          // command, the account, PAM's reasons).
+          console.error(`chpasswd failed (exit ${code}): ${stderr.trim()}`);
+          finish(reject, new Error('Could not change the system password'));
         } else {
           finish(resolve);
         }

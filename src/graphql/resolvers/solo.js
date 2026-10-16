@@ -1,3 +1,5 @@
+const { errorPayload } = require('../errorPayload');
+
 module.exports = {
   Query: {
     Solo: () => ({})
@@ -18,7 +20,7 @@ module.exports = {
         await services.solo.start();
         return { success: true, error: null };
       } catch (error) {
-        return { success: false, error: { message: error.message } };
+        return { success: false, error: errorPayload(error) };
       }
     },
 
@@ -27,7 +29,7 @@ module.exports = {
         await services.solo.stop();
         return { success: true, error: null };
       } catch (error) {
-        return { success: false, error: { message: error.message } };
+        return { success: false, error: errorPayload(error) };
       }
     },
 
@@ -36,7 +38,7 @@ module.exports = {
         await services.solo.restart();
         return { success: true, error: null };
       } catch (error) {
-        return { success: false, error: { message: error.message } };
+        return { success: false, error: errorPayload(error) };
       }
     },
 

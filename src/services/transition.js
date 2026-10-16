@@ -52,10 +52,34 @@ const revert = async (knex, ticket) => {
     });
 };
 
-const execute = async (knex, serviceName, requestedStatus, command, notify) => {
+// systemctl or the bus can stall. A request that never answers must not hold a
+// service's queue for ever: after this long it counts as refused, with the state
+// uncertain (the row goes back to what it was, and the monitor settles what is
+// really running).
+const COMMAND_TIMEOUT_MS = 60000;
+
+const withTimeout = (promise, ms, label) => {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} did not answer within ${ms / 1000}s; its state is uncertain`)),
+      ms
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+};
+
+const execute = async (knex, serviceName, requestedStatus, command, notify, timeoutMs) => {
   const ticket = await begin(knex, serviceName, requestedStatus);
   try {
-    const result = await command();
+    // The command is told which request it belongs to, for whatever it does
+    // afterwards (see solo.js): `requestedAt` is how a later write recognises that
+    // a newer request has taken the row over.
+    const result = await withTimeout(
+      Promise.resolve().then(() => command({ requestedAt: ticket.requestedAt })),
+      timeoutMs,
+      `${serviceName} ${requestedStatus} command`
+    );
     // Accepted: now it is a transition worth announcing.
     notify?.();
     return result;
@@ -75,9 +99,9 @@ const execute = async (knex, serviceName, requestedStatus, command, notify) => {
  * Resolves with the command's result once it was accepted; rejects with its
  * error after putting the request back. One at a time per service.
  */
-const run = (knex, serviceName, requestedStatus, command, { notify } = {}) => {
+const run = (knex, serviceName, requestedStatus, command, { notify, timeoutMs = COMMAND_TIMEOUT_MS } = {}) => {
   const previous = chains.get(serviceName) || Promise.resolve();
-  const job = previous.then(() => execute(knex, serviceName, requestedStatus, command, notify));
+  const job = previous.then(() => execute(knex, serviceName, requestedStatus, command, notify, timeoutMs));
   chains.set(
     serviceName,
     job.catch(() => {})
@@ -89,9 +113,11 @@ const run = (knex, serviceName, requestedStatus, command, { notify } = {}) => {
 // command line and sudo's own words ("Command failed: sudo systemctl ... a
 // terminal is required"): useful in the log, noise on a screen. The client picks
 // its localised text from the code, service and action.
+const LABELS = { miner: 'miner', node: 'Bitcoin node', solo: 'solo pool' };
+
 const refused = (service, action, error) => {
   console.error(`${service} ${action} refused: ${error.message}`);
-  return new GraphQLError(`Could not ${action} the ${service}`, {
+  return new GraphQLError(`Could not ${action} the ${LABELS[service] || service}`, {
     extensions: { code: 'SERVICE_COMMAND_FAILED', service, action },
   });
 };

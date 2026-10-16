@@ -1,3 +1,5 @@
+const { errorPayload } = require('../errorPayload');
+
 // One implementation for the mutation AND its deprecated query alias: the alias
 // exists only so pre-mutation UI bundles keep working across an update, and it
 // must not drift from the real thing.
@@ -25,7 +27,16 @@ const start = async (_, __, { services }) => {
     await services.node.start();
     return { error: null };
   } catch (error) {
-    return { error: { message: error.message } };
+    return { error: errorPayload(error) };
+  }
+};
+
+const restart = async (_, __, { services }) => {
+  try {
+    await services.node.restart();
+    return { error: null };
+  } catch (error) {
+    return { error: errorPayload(error) };
   }
 };
 
@@ -34,7 +45,7 @@ const stop = async (_, __, { services }) => {
     await services.node.stop();
     return { error: null };
   } catch (error) {
-    return { error: { message: error.message } };
+    return { error: errorPayload(error) };
   }
 };
 
@@ -65,6 +76,7 @@ module.exports = {
   NodeMutations: {
     start,
     stop,
+    restart,
     format
   },
 

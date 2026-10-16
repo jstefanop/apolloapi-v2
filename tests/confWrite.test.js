@@ -117,6 +117,7 @@ describe('chpasswd', () => {
       stderr: { on: jest.fn() },
       on: jest.fn((e, cb) => (handlers[e] = cb)),
       kill: jest.fn(),
+      pid: 4242,
     };
     return { child, handlers, stdinHandlers };
   };
@@ -132,11 +133,46 @@ describe('chpasswd', () => {
     const error = await outcome;
     expect(error.message).toMatch(/did not finish within 30s/);
     expect(error.message).toMatch(/may or may not have changed/);
-    // sudo forwards SIGTERM to chpasswd; SIGKILL only if that is not enough.
-    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-    expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
+    // The child is sudo, which runs as root: signals go through `sudo kill`, since
+    // a plain kill() from the service user would be refused. TERM first, KILL later.
+    const signals = () =>
+      childProcess.spawn.mock.calls.filter(([cmd, args]) => cmd === 'sudo' && args[0] === 'kill').map(([, args]) => args.join(' '));
+    expect(signals()).toEqual(['kill -TERM 4242']);
+    expect(child.kill).not.toHaveBeenCalled();
     await jest.advanceTimersByTimeAsync(5000);
-    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(signals()).toEqual(['kill -TERM 4242', 'kill -KILL 4242']);
+  });
+
+  it('a failing `sudo kill` does not take the process down', async () => {
+    const { child, handlers } = fakeChild();
+    childProcess.spawn.mockReturnValue(child);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const outcome = utils.auth.changeSystemPassword('longenough1').catch((e) => e);
+    await jest.advanceTimersByTimeAsync(30000);
+    await outcome;
+    // The killer is another child whose 'error' event must have a listener.
+    const errorListeners = child.on.mock.calls.filter(([event]) => event === 'error');
+    expect(errorListeners.length).toBeGreaterThanOrEqual(2);
+    expect(() => handlers.error?.(new Error('spawn sudo ENOENT'))).not.toThrow();
+  });
+
+  it('keeps what chpasswd said off the screen', async () => {
+    const { child, handlers } = fakeChild();
+    let onStderr;
+    child.stderr.on = jest.fn((event, cb) => {
+      onStderr = cb;
+    });
+    childProcess.spawn.mockReturnValue(child);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const outcome = utils.auth.changeSystemPassword('longenough1').catch((e) => e);
+    await jest.advanceTimersByTimeAsync(10);
+    onStderr('chpasswd: (user futurebit) pam_chauthtok() failed, error:\nAuthentication token manipulation error');
+    handlers.close(1);
+
+    const error = await outcome;
+    expect(error.message).toBe('Could not change the system password');
+    expect(console.error.mock.calls.flat().join(' ')).toMatch(/pam_chauthtok/);
   });
 
   it('does not time out a chpasswd that finishes', async () => {

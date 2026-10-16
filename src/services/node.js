@@ -46,6 +46,24 @@ class NodeService {
     }
   }
 
+  // Restart the Bitcoin node: ONE systemd job. Asked for as a stop followed by a
+  // start, a still-queued stop can be replaced by the start (job mode `replace`)
+  // and the node is never restarted — the new configuration is then not applied
+  // while the screen says it was.
+  async restart() {
+    try {
+      await transition.run(
+        this.knex,
+        'node',
+        'online',
+        () => this._execCommand('sudo systemctl restart --no-block node'),
+        { notify: () => this._notifyServicesStatus() }
+      );
+    } catch (error) {
+      throw transition.refused('node', 'restart', error);
+    }
+  }
+
   // Stop the Bitcoin node
   async stop() {
     try {
