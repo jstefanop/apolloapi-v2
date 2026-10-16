@@ -140,7 +140,7 @@ class SoloService {
       if (!becameActive) {
         if (await this._stillComing()) return; // systemd is retrying: the monitor closes it
         await this._updateServiceStatus('offline', at);
-        throw transition.refused('solo', 'start', new Error('service did not become active'));
+        throw transition.timedOut('solo', 'start', 'service did not become active');
       }
       await this._updateServiceStatus('online', at);
     } catch (error) {
@@ -187,7 +187,7 @@ class SoloService {
       if (!becameActive) {
         if (await this._stillComing()) return; // systemd is retrying: the monitor closes it
         await this._updateServiceStatus('offline', at);
-        throw transition.refused('solo', 'restart', new Error('service did not become active'));
+        throw transition.timedOut('solo', 'restart', 'service did not become active');
       }
       await this._updateServiceStatus('online', at);
     } catch (error) {
@@ -244,15 +244,16 @@ class SoloService {
     return new GraphQLError(`Failed to ${action} solo pool: ${error.message}`);
   }
 
-  // After a wait that ran out: is systemd still bringing the unit up (starting,
-  // or in the auto-restart delay after a failed attempt)? Then it is not off:
+  // After a wait that ran out: is systemd still working on the unit (starting,
+  // stopping, or in the auto-restart delay after a failed attempt)? Then it is not off:
   // the row stays `pending` and the service monitor settles it. Only a unit
   // that is really down (failed, inactive) is an error for the caller.
   async _stillComing() {
     try {
       const { stdout } = await this._execCommand('systemctl show -p ActiveState,SubState ckpool');
       const state = /ActiveState=(\S+)/.exec(stdout || '')?.[1];
-      return state === 'activating' || state === 'reloading';
+      // `deactivating`: the stop of a restart is still running.
+      return ['activating', 'deactivating', 'reloading'].includes(state);
     } catch (_) {
       return false;
     }

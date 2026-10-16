@@ -9,6 +9,9 @@ const TOPICS = require('../graphql/topics');
 
 const execAsync = promisify(exec);
 
+// Past this, a unit that keeps restarting without ever staying up is an error.
+const AUTO_RESTART_ERROR_AFTER_MS = 90000;
+
 class ServiceMonitor {
   constructor(knex, services) {
     this.knex = knex;
@@ -199,6 +202,23 @@ class ServiceMonitor {
   // This method now respects manual actions (CLI starts/stops) by detecting
   // discrepancies between actual status and requested_status, and updating
   // requested_status to reflect reality instead of fighting user actions.
+  // When did this unit first show up in `activating (auto-restart)` in an
+  // unbroken run of readings? null when it is not in that state now.
+  async trackAutoRestart(serviceName, status) {
+    this._autoRestartSince = this._autoRestartSince || {};
+    if (status === 'activating') {
+      try {
+        const { stdout } = await execAsync(`systemctl show -p SubState --value ${serviceName}`);
+        if (String(stdout || '').trim() === 'auto-restart') {
+          if (!this._autoRestartSince[serviceName]) this._autoRestartSince[serviceName] = Date.now();
+          return this._autoRestartSince[serviceName];
+        }
+      } catch (_) {}
+    }
+    delete this._autoRestartSince[serviceName];
+    return null;
+  }
+
   async checkServiceStatus(serviceName) {
     try {
       // Get database service name
@@ -417,6 +437,23 @@ class ServiceMonitor {
             isWithinGracePeriod = true;
             mappedStatus = 'pending';
           }
+        }
+      }
+
+      // A ckpool that crashes on start sits in `activating (auto-restart)`
+      // forever under Restart=always and never reaches `failed`, so the user
+      // would see a spinner for good. Past the start grace window that is an
+      // error. Limited to ckpool: miner and node have an application check that
+      // already reports a unit that is up but not working.
+      if (serviceName === 'ckpool') {
+        const loopSince = await this.trackAutoRestart(serviceName, status);
+        if (
+          !isWithinGracePeriod &&
+          loopSince !== null &&
+          Date.now() - loopSince > AUTO_RESTART_ERROR_AFTER_MS
+        ) {
+          console.log(`${serviceName} has been in auto-restart for over ${AUTO_RESTART_ERROR_AFTER_MS / 1000}s: error`);
+          mappedStatus = 'error';
         }
       }
 

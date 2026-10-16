@@ -10,13 +10,17 @@ if [ -f "$CKPOOL_DIR/logs/ckpool.log" ]; then
     mv -f "$CKPOOL_DIR/logs/ckpool.log" "$CKPOOL_DIR/logs/ckpool.log.1"
 fi
 
-# A pid file whose process is gone (or is not ours any more) is left over from a
-# crash; ckpool would trip over it.
+# A pid file left by a ckpool that is gone (or whose pid another process has
+# since reused) would be met by the new instance: remove it unless it names our
+# own ckpool, checked the way ckpool_stop.sh does.
 if [ -f "$CKPOOL_PIDFILE" ]; then
     pid="$(tr -dc '0-9' < "$CKPOOL_PIDFILE" 2>/dev/null)"
-    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
-        rm -f "$CKPOOL_PIDFILE"
+    ours=0
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        args="$(ps -o args= -p "$pid" 2>/dev/null)"
+        case "$args" in "$CKPOOL_DIR/ckpool"|"$CKPOOL_DIR/ckpool "*) ours=1 ;; esac
     fi
+    [ "$ours" = 1 ] || rm -f "$CKPOOL_PIDFILE"
 fi
 
 # CKPOOL_SCREEN lets a test stand in for screen.

@@ -43,10 +43,11 @@ export CKPOOL_BIN="$BIN" CKPOOL_PIDFILE="$tmp/run/main.pid"
 export CKPOOL_STOP_WAIT=3 CKPOOL_STOP_TERM_WAIT=2 CKPOOL_STOP_KILL_WAIT=2
 
 # spawn <ignore-term:0|1>: a ckpool that lives 300 s; prints its pid.
+# An optional second argument is the argv0 to use instead of $BIN.
 spawn() {
-    local trap_cmd=""
+    local trap_cmd="" argv0="${2:-$BIN}"
     [ "$1" = 1 ] && trap_cmd="trap '' TERM;"
-    ( exec -a "$BIN" bash -c "$trap_cmd i=0; while [ \$i -lt 300 ]; do sleep 1; i=\$((i+1)); done" ) >/dev/null 2>&1 &
+    ( exec -a "$argv0" bash -c "$trap_cmd i=0; while [ \$i -lt 300 ]; do sleep 1; i=\$((i+1)); done" ) >/dev/null 2>&1 &
     pids="$pids $!"; echo $!
 }
 now() { date +%s; }
@@ -102,6 +103,27 @@ check "foreign: exits 0"               "0" "$rc"
 check "foreign: unrelated process survives" "1" "$(alive "$other")"
 kill -KILL "$other" 2>/dev/null
 
+# 7. pgrep branch alone: no pid file at all, only the process list finds ckpool.
+rm -f "$CKPOOL_PIDFILE"
+pid="$(spawn 0)"
+SCREEN_ACTION=none bash "$DIR/ckpool_stop.sh" >/dev/null 2>&1; rc=$?
+check "pgrep: exits 0"                       "0" "$rc"
+check "pgrep: found without a pid file, stopped" "0" "$(alive "$pid")"
+
+# 8. Baits owned by the same user that mention the path but are not ckpool: a
+# process whose command line merely CONTAINS the path (not at the start), and
+# one whose path differs only where the real one has a dot (regex escaping).
+bait1="$(spawn 0 "/usr/bin/other $BIN")"
+dotless="$(printf '%s' "$BIN" | sed 's/\./Z/')"
+bait2="$(spawn 0 "$dotless")"
+real="$(spawn 0)"
+SCREEN_ACTION=none bash "$DIR/ckpool_stop.sh" >/dev/null 2>&1; rc=$?
+check "bait: exits 0"                          "0" "$rc"
+check "bait: real ckpool stopped"              "0" "$(alive "$real")"
+check "bait: path only mid-cmdline survives"   "1" "$(alive "$bait1")"
+check "bait: path differing at a dot survives" "1" "$(alive "$bait2")"
+kill -KILL "$bait1" "$bait2" 2>/dev/null
+
 # --- ckpool_start.sh ---
 export CKPOOL_DIR="$tmp/cp" CKPOOL_SCREEN="$tmp/bin/screen"
 mkdir -p "$CKPOOL_DIR/logs"
@@ -127,7 +149,11 @@ check "start: stale pid file removed"       "0" "$( [ -e "$CKPOOL_PIDFILE" ] && 
 ( exec sleep 300 ) >/dev/null 2>&1 & live=$!; pids="$pids $live"
 echo "$live" > "$CKPOOL_PIDFILE"
 bash "$DIR/ckpool_start.sh" >/dev/null 2>&1
-check "start: pid file of a live process kept" "1" "$( [ -e "$CKPOOL_PIDFILE" ] && echo 1 || echo 0 )"
+check "start: pid file naming a live NON-ckpool process removed" "0" "$( [ -e "$CKPOOL_PIDFILE" ] && echo 1 || echo 0 )"
+mine="$(spawn 0 "$CKPOOL_DIR/ckpool")"
+echo "$mine" > "$CKPOOL_PIDFILE"
+bash "$DIR/ckpool_start.sh" >/dev/null 2>&1
+check "start: pid file naming our live ckpool kept" "1" "$( [ -e "$CKPOOL_PIDFILE" ] && echo 1 || echo 0 )"
 
 echo
 echo "$pass passed, $fail failed"

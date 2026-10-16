@@ -357,11 +357,15 @@ describe('Solo API', () => {
     const rowStatus = async () =>
       (await knex('service_status').where({ service_name: 'solo' }).first()).status;
 
-    it.each(['restart', 'start'])(
-      '%s() leaves the row pending and does not throw when systemd is still activating',
-      async (action) => {
+    it.each([
+      ['restart', 'ActiveState=activating\nSubState=auto-restart\n'],
+      ['start', 'ActiveState=activating\nSubState=auto-restart\n'],
+      ['restart', 'ActiveState=deactivating\nSubState=stop-sigterm\n'],
+    ])(
+      '%s() leaves the row pending and does not throw when systemd is still working (%s)',
+      async (action, show) => {
         process.env.NODE_ENV = 'production';
-        timeoutWith('ActiveState=activating\nSubState=auto-restart\n');
+        timeoutWith(show);
         const spy = jest.spyOn(SoloService, '_waitForActive').mockResolvedValue(false);
         await expect(SoloService[action]()).resolves.toBeUndefined();
         spy.mockRestore();
