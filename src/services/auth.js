@@ -4,6 +4,17 @@ const config = require('config');
 const { GraphQLError } = require('graphql');
 const { assertPasswordAcceptable } = require('../passwordPolicy');
 
+// What a failed database write may say to the outside. The driver's message
+// repeats the statement ("insert into `setup` ... - SQLITE_BUSY: database is
+// locked"), and with the values in it where the driver puts them there, that is a
+// bcrypt hash. Only the driver's own part is kept, and any hash that is still in
+// it is blanked.
+const BCRYPT_HASH = /\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}/g;
+const driverReason = (error) => {
+  const text = String(error?.message ?? error).split(' - ').pop();
+  return text.replace(BCRYPT_HASH, '[hash]');
+};
+
 // setup and changePassword both end in a system password change and a stored
 // hash, and neither is atomic. Run concurrently they interleave (two setups would
 // each pass the "already done" check, and the system password could end up
@@ -101,7 +112,7 @@ class AuthService {
     } catch (err) {
       // Message only: a knex error object carries the bindings, which here are
       // the password hash.
-      console.error('Failed to store the new login password:', err.message);
+      console.error('Failed to store the new login password:', driverReason(err));
       throw new Error(
         'The system password was changed, but the new login password could not be saved: ' +
           'the previous login password still works. Repeat the change to bring them back in line.'
@@ -140,20 +151,21 @@ class AuthService {
         await this.utils.auth.changeSystemPassword(password);
       }
 
-      // Insert the setup record
-      await this.knex('setup').insert({
-        password: hashedPassword
-      });
+      // Insert the setup record. This answer goes to a client that is not signed in
+      // yet, so it carries the driver's reason and nothing of the statement.
+      try {
+        await this.knex('setup').insert({
+          password: hashedPassword
+        });
+      } catch (insertError) {
+        console.error('Failed to store the password:', driverReason(insertError));
+        throw new Error(`Could not save the password: ${driverReason(insertError)}`);
+      }
     } catch (err) {
-      // The message is safe to log — db.js sets compileSqlOnError:false, so knex
-      // leaves `?` placeholders in it rather than interpolating the bindings,
-      // which on the insert above are the password hash. The error OBJECT is not:
-      // it still carries `bindings`, so log the message only.
-      //
-      // This block also wraps changeSystemPassword, whose failures are plain
-      // Errors with no `code` — logging that alone left the one flow a user
-      // cannot retry past with nothing to explain it.
-      console.error('Failed to set password:', err.message);
+      // Policy and chpasswd errors are our own words and pass through as they are;
+      // a failed insert was already turned into a clean one above. Log the message
+      // only (the error OBJECT carries the bindings), with any hash blanked.
+      console.error('Failed to set password:', driverReason(err));
       throw err;
     }
   }

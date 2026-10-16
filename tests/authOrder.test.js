@@ -164,3 +164,43 @@ describe('password change order', () => {
     await expect(svc.login({ password: 'stray-row-pass' })).rejects.toThrow('Invalid password');
   });
 });
+
+describe('a failed write does not carry the hash to the client', () => {
+  const HASH = /\$2[aby]\$/;
+
+  it('setup: a real failing insert answers with the driver reason only', async () => {
+    process.env.NODE_ENV = 'test';
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await knex('setup').del();
+    const svc = AuthService(knex, { auth: { changeSystemPassword: jest.fn() } });
+    // A real sqlite failure: a NOT NULL violation, with the hash in the statement.
+    await knex.raw('ALTER TABLE setup RENAME TO setup_real');
+    await knex.raw('CREATE TABLE setup (id INTEGER PRIMARY KEY, password TEXT NOT NULL, other TEXT NOT NULL)');
+    try {
+      const error = await svc.setup({ password: 'longenough1' }).catch((e) => e);
+      expect(error.message).toMatch(/^Could not save the password: /);
+      expect(error.message).toMatch(/NOT NULL|SQLITE/);
+      expect(error.message).not.toMatch(HASH);
+      expect(error.message).not.toMatch(/insert into/i);
+      // ...and the log is as clean.
+      expect(logged.mock.calls.flat().join(' ')).not.toMatch(HASH);
+    } finally {
+      await knex.raw('DROP TABLE setup');
+      await knex.raw('ALTER TABLE setup_real RENAME TO setup');
+    }
+  });
+
+  it('through the resolver: the response message has no hash and no SQL', async () => {
+    const authResolver = require('../src/graphql/resolvers/auth');
+    const failing = {
+      setup: jest.fn().mockRejectedValue(new Error('Could not save the password: SQLITE_BUSY: database is locked')),
+    };
+    const result = await authResolver.AuthActions.setup(null, { input: { password: 'x' } }, { services: { auth: failing } });
+    expect(result.error.message).not.toMatch(HASH);
+  });
+
+  it('policy errors still say what they said', async () => {
+    const svc = AuthService(knex, { auth: { changeSystemPassword: jest.fn() } });
+    await expect(svc.setup({ password: 'short' })).rejects.toThrow('Password must be at least 8 characters');
+  });
+});
