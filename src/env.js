@@ -36,7 +36,16 @@ function ensureEnvFile(envPath = path.join(__dirname, '..', '.env')) {
     console.warn(`Could not restrict permissions on ${envPath}: ${error.code || error.message}`);
   }
 
-  require('dotenv').config({ path: envPath });
+  const loaded = require('dotenv').config({ path: envPath });
+  if (loaded.error) {
+    // An unreadable file (root-owned 0600, say) must stop the boot. Carrying on
+    // would mint a different in-memory secret on every start: every session
+    // invalidated by each restart, with nothing in the log to say why.
+    throw new Error(
+      `Cannot read ${envPath} (${loaded.error.code || loaded.error.message}): ` +
+        'it must be readable by the user running the API. Fix its owner or mode and start again.'
+    );
+  }
 
   // A file that exists but has no usable secret (empty, truncated, a bare
   // `APP_SECRET=`) would leave the app unable to sign or verify anything. Give it
@@ -45,8 +54,9 @@ function ensureEnvFile(envPath = path.join(__dirname, '..', '.env')) {
     const secret = newSecret();
     try {
       const current = fs.readFileSync(envPath, 'utf8');
-      // An empty assignment is dropped, not left in front: dotenv keeps the first
-      // value it sees for a key, so the new line would never win.
+      // An empty assignment is dropped rather than left behind: dotenv takes the
+      // LAST assignment of a key, so a new line after it would win anyway, but an
+      // empty one in the file is a trap for whoever reads it (or edits it) next.
       const kept = current
         .split('\n')
         .filter((line) => !/^\s*(export\s+)?APP_SECRET\s*=\s*(['"]{2})?\s*$/.test(line))

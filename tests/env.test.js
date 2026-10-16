@@ -143,4 +143,32 @@ describe('an .env that already exists', () => {
     expect(out.stdout).toMatch(/^[0-9a-f]{128}$/);
     expect(out.stderr).toMatch(/Could not write APP_SECRET/);
   });
+
+  // Root reads anything, so the case cannot be made there.
+  (process.getuid && process.getuid() === 0 ? it.skip : it)(
+    'stops with a clear error when the file cannot be read (EACCES), and leaves it alone',
+    () => {
+      let dir;
+      const { out } = run((d) => {
+        dir = d;
+        fs.writeFileSync(envFile(d), 'APP_SECRET=theirs\n');
+        fs.chmodSync(envFile(d), 0o000);
+        // A file somebody else owns: the mode cannot be changed back, so it stays
+        // unreadable (here the owner is us, hence the stub).
+        return probeWith(
+          d,
+          `fs.chmodSync = () => { const e = new Error('nope'); e.code = 'EPERM'; throw e; };`
+        );
+      });
+      try {
+        expect(out.status).not.toBe(0);
+        expect(out.stderr).toMatch(/Cannot read .*\.env \(EACCES\)/);
+        expect(out.stdout).toBe(''); // no secret was invented and used
+        fs.chmodSync(envFile(dir), 0o600);
+        expect(fs.readFileSync(envFile(dir), 'utf8')).toBe('APP_SECRET=theirs\n');
+      } finally {
+        fs.chmodSync(envFile(dir), 0o600);
+      }
+    }
+  );
 });

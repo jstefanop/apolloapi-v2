@@ -33,14 +33,19 @@ const configCkpoolFilePath = path.resolve(
   '../backend/ckpool/ckpool.conf'
 );
 
-// Helper function to execute commands with sudo only in production
+// Helper function to execute commands with sudo only in production.
+//
+// Logs the program, never the command line: arguments are where secrets end up
+// (this once printed the node RPC password into the journal), and the error
+// message exec produces repeats the whole command too.
 const execWithSudo = async (command) => {
+  const program = String(command).trim().split(/\s+/)[0];
   try {
     const cmdToRun = isProduction()
       ? `sudo ${command}`
       : command;
 
-    console.log(`Executing command: ${cmdToRun}`);
+    console.log(`Executing command: ${program}`);
     const { stdout, stderr } = await execPromise(cmdToRun);
 
     if (stderr) {
@@ -50,10 +55,44 @@ const execWithSudo = async (command) => {
     return stdout.trim();
   } catch (error) {
     if (!isProduction()) {
-      console.log(`Command would fail in production: ${error.message}`);
+      console.log(`Command would fail in production: ${program}`);
       return "dev-mode-success";
     }
     throw error;
+  }
+};
+
+// Config files that carry a secret are edited through fs, not through a shell
+// `sed` with the secret in its argument list: argv is readable by every user in
+// `ps`. A file the service user cannot touch (root-owned) falls back to
+// `sudo cat` / `sudo tee`, where the content travels on stdin / stdout instead.
+const readConfFile = async (file) => {
+  try {
+    return await fsPromises.readFile(file, 'utf8');
+  } catch (error) {
+    if (!isProduction() || !['EACCES', 'EPERM'].includes(error.code)) throw error;
+    return execWithSudo(`cat ${file}`);
+  }
+};
+
+const writeConfFile = async (file, content) => {
+  try {
+    await fsPromises.writeFile(file, content);
+  } catch (error) {
+    if (!isProduction() || !['EACCES', 'EPERM'].includes(error.code)) throw error;
+    await new Promise((resolve, reject) => {
+      const child = spawn('sudo', ['tee', file], { stdio: ['pipe', 'ignore', 'pipe'] });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.on('close', (code) =>
+        code === 0 ? resolve() : reject(new Error(stderr.trim() || `tee exited with code ${code}`))
+      );
+      child.stdin.write(content);
+      child.stdin.end();
+    });
   }
 };
 
@@ -149,26 +188,41 @@ module.exports.auth = {
         await fsPromises.mkdir(bitcoinDir, { recursive: true });
         await fsPromises.mkdir(ckpoolDir, { recursive: true });
 
-        // Update api.conf with new password (sed will replace existing or we'll rebuild it)
+        // The replacers are functions, so a `$` in a password is never read as a
+        // back-reference.
+        // Update api.conf with new password (replace the existing line, or create it)
+        let apiConf = null;
         try {
           await fsPromises.access(configBitcoinApiConfPath);
-          // File exists, update the password line
-          await execWithSudo(
-            `sed -i 's/rpcpassword.*/rpcpassword=${password}/g' ${configBitcoinApiConfPath}`
-          );
+          apiConf = await readConfFile(configBitcoinApiConfPath);
         } catch (accessErr) {
+          apiConf = null;
+        }
+        if (apiConf !== null) {
+          await writeConfFile(
+            configBitcoinApiConfPath,
+            apiConf.replace(/rpcpassword.*/g, () => `rpcpassword=${password}`)
+          );
+        } else {
           // api.conf doesn't exist, create it with just the password
           await fsPromises.writeFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`);
           console.log('Created api.conf with new password');
         }
 
         // Update ckpool configuration file
+        let ckpoolConf = null;
         try {
           await fsPromises.access(configCkpoolFilePath);
-          await execWithSudo(
-            `sed -i 's#"pass":.*#"pass": "${password}",#g' ${configCkpoolFilePath}`
-          );
+          ckpoolConf = await readConfFile(configCkpoolFilePath);
         } catch (ckpoolErr) {
+          ckpoolConf = null;
+        }
+        if (ckpoolConf !== null) {
+          await writeConfFile(
+            configCkpoolFilePath,
+            ckpoolConf.replace(/"pass":.*/g, () => `"pass": "${password}",`)
+          );
+        } else {
           // ckpool.conf doesn't exist, create basic one
           const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
           await fsPromises.writeFile(configCkpoolFilePath, ckpoolConfig);

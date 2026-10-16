@@ -2,7 +2,19 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('config');
 const { GraphQLError } = require('graphql');
-const { assertPasswordSafe } = require('../passwordPolicy');
+const { assertPasswordAcceptable } = require('../passwordPolicy');
+
+// setup and changePassword both end in a system password change and a stored
+// hash, and neither is atomic. Run concurrently they interleave (two setups would
+// each pass the "already done" check, and the system password could end up
+// belonging to one while the login hash belongs to the other), so they take turns.
+// In-process is enough: there is one API process per device.
+let turn = Promise.resolve();
+const inTurn = (fn) => {
+  const run = turn.then(fn, fn);
+  turn = run.catch(() => {});
+  return run;
+};
 
 // Helper function to check if we're in production environment
 const isProduction = () => process.env.NODE_ENV === 'production';
@@ -16,7 +28,7 @@ class AuthService {
   // Login method
   async login({ password }) {
     // Retrieve the setup record
-    const [setup] = await this.knex('setup').select('*').limit(1);
+    const [setup] = await this.knex('setup').select('*').orderBy('id').limit(1);
 
     if (!setup) {
       throw new GraphQLError('Setup not finished', {
@@ -50,12 +62,17 @@ class AuthService {
   }
 
   // Change password
-  async changePassword({ password }) {
-    // Before anything is stored: the app and system passwords must not diverge.
-    assertPasswordSafe(password);
+  changePassword({ password }) {
+    return inTurn(() => this._changePassword({ password }));
+  }
+
+  async _changePassword({ password }) {
+    // Before anything is stored: the app and system passwords must not diverge,
+    // and the password must be one the wizard would have accepted.
+    assertPasswordAcceptable(password);
 
     // Check if setup exists
-    const [setup] = await this.knex('setup').select('*').limit(1);
+    const [setup] = await this.knex('setup').select('*').orderBy('id').limit(1);
 
     if (!setup) {
       throw new Error('Setup not finished');
@@ -78,7 +95,7 @@ class AuthService {
     // plainly instead of reporting a generic database error. Repeating the change
     // brings them back in line (chpasswd just sets the same password again).
     try {
-      await this.knex('setup').update({
+      await this.knex('setup').where('id', setup.id).update({
         password: hashedPassword
       });
     } catch (err) {
@@ -93,12 +110,18 @@ class AuthService {
   }
 
   // Initial setup
-  async setup({ password }) {
-    try {
-      // Before anything is stored: the app and system passwords must not diverge.
-      assertPasswordSafe(password);
+  setup({ password }) {
+    return inTurn(() => this._setup({ password }));
+  }
 
-      // Check if setup already exists
+  async _setup({ password }) {
+    try {
+      // Before anything is stored: the app and system passwords must not diverge,
+      // and the password must be one the wizard would have accepted.
+      assertPasswordAcceptable(password);
+
+      // Checked inside the turn, so a second setup that queued behind the first
+      // sees its row.
       const [setup] = await this.knex('setup').select('*').limit(1);
 
       if (setup) {

@@ -19,4 +19,25 @@ function assertPasswordSafe(password) {
   }
 }
 
-module.exports = { assertPasswordSafe, PASSWORD_CHARS_ERROR };
+// The same floor as the setup wizard and the change-password form. Enforced here
+// as well because those are only the UI: the GraphQL API is open to any client
+// holding a token, and the password it sets is also the device's system password.
+const MIN_PASSWORD_LENGTH = 8;
+const PASSWORD_LENGTH_ERROR = `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+
+// What the auth service checks before storing anything: usable by chpasswd, and
+// long enough.
+function assertPasswordAcceptable(password) {
+  assertPasswordSafe(password);
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(PASSWORD_LENGTH_ERROR);
+  }
+}
+
+module.exports = {
+  assertPasswordSafe,
+  assertPasswordAcceptable,
+  PASSWORD_CHARS_ERROR,
+  PASSWORD_LENGTH_ERROR,
+  MIN_PASSWORD_LENGTH,
+};
