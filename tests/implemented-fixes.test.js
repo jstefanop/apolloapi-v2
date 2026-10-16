@@ -40,7 +40,7 @@ describe('Implemented fixes (security & reliability)', () => {
     it('calls spawn(sudo, [chpasswd]) and writes password to stdin in production', async () => {
       const childProcess = require('child_process');
       const mockChild = {
-        stdin: { write: jest.fn(), end: jest.fn() },
+        stdin: { write: jest.fn(), end: jest.fn(), on: jest.fn() },
         stdout: { on: jest.fn() },
         stderr: { on: jest.fn() },
         on: jest.fn((event, callback) => { if (event === 'close') callback(0); })

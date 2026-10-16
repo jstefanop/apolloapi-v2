@@ -83,7 +83,9 @@ jest.mock('fs', () => {
           mtimeMs: Date.now() - 5000 // Modified 5 seconds ago
         });
       }),
-      mkdir: jest.fn().mockResolvedValue(undefined)
+      mkdir: jest.fn().mockResolvedValue(undefined),
+      rename: jest.fn().mockResolvedValue(undefined),
+      unlink: jest.fn().mockResolvedValue(undefined)
     }
   };
 });

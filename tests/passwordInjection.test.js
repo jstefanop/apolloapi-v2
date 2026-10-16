@@ -78,7 +78,7 @@ describe('password injection guard', () => {
   describe('utils.auth.changeSystemPassword', () => {
     const mockChild = () => {
       const child = {
-        stdin: { write: jest.fn(), end: jest.fn() },
+        stdin: { write: jest.fn(), end: jest.fn(), on: jest.fn() },
         stdout: { on: jest.fn() },
         stderr: { on: jest.fn() },
         on: jest.fn((event, cb) => { if (event === 'close') cb(0); }),

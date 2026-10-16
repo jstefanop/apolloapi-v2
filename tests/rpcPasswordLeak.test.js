@@ -19,6 +19,9 @@ describe('changeNodeRpcPassword', () => {
     fs.promises.mkdir.mockResolvedValue(undefined);
     fs.promises.access.mockResolvedValue(undefined);
     fs.promises.writeFile.mockResolvedValue(undefined);
+    fs.promises.rename.mockResolvedValue(undefined);
+    fs.promises.unlink.mockResolvedValue(undefined);
+    fs.promises.stat.mockResolvedValue({ mode: 0o100644 });
     fs.promises.readFile.mockImplementation(async (file) =>
       String(file).endsWith('api.conf')
         ? 'rpcuser=futurebit\nrpcpassword=oldsecret\n'
@@ -40,8 +43,12 @@ describe('changeNodeRpcPassword', () => {
     const password = await run();
     expect(password).toBeTruthy();
 
+    // Written beside the file and renamed over it: key by the file it ends up as.
     const writes = Object.fromEntries(
-      fs.promises.writeFile.mock.calls.map(([file, content]) => [require('path').basename(file), content])
+      fs.promises.writeFile.mock.calls.map(([file, content]) => [
+        require('path').basename(file).replace(/\.\d+\.\d+\.tmp$/, ''),
+        content,
+      ])
     );
     expect(writes['api.conf']).toBe(`rpcuser=futurebit\nrpcpassword=${password}\n`);
     expect(writes['ckpool.conf']).toContain(`"pass": "${password}",`);

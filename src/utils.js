@@ -10,6 +10,8 @@ const path = require('path');
 const os = require('os');
 const util = require('util');
 
+const CHPASSWD_TIMEOUT_MS = 30000;
+
 // Convert exec to use promises
 const execPromise = util.promisify(exec);
 
@@ -66,33 +68,72 @@ const execWithSudo = async (command) => {
 // `sed` with the secret in its argument list: argv is readable by every user in
 // `ps`. A file the service user cannot touch (root-owned) falls back to
 // `sudo cat` / `sudo tee`, where the content travels on stdin / stdout instead.
+const PERMISSION_ERRORS = ['EACCES', 'EPERM'];
+
+// null only for a file that is not there. Any other failure — unreadable,
+// I/O error — propagates: reading it as "missing" would have the caller write a
+// fresh minimal file over a configuration it simply could not read.
 const readConfFile = async (file) => {
+  try {
+    await fsPromises.access(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
   try {
     return await fsPromises.readFile(file, 'utf8');
   } catch (error) {
-    if (!isProduction() || !['EACCES', 'EPERM'].includes(error.code)) throw error;
+    if (!isProduction() || !PERMISSION_ERRORS.includes(error.code)) throw error;
     return execWithSudo(`cat ${file}`);
   }
 };
 
-const writeConfFile = async (file, content) => {
-  try {
-    await fsPromises.writeFile(file, content);
-  } catch (error) {
-    if (!isProduction() || !['EACCES', 'EPERM'].includes(error.code)) throw error;
-    await new Promise((resolve, reject) => {
-      const child = spawn('sudo', ['tee', file], { stdio: ['pipe', 'ignore', 'pipe'] });
-      let stderr = '';
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk;
-      });
-      child.on('error', reject);
-      child.on('close', (code) =>
-        code === 0 ? resolve() : reject(new Error(stderr.trim() || `tee exited with code ${code}`))
-      );
-      child.stdin.write(content);
-      child.stdin.end();
+const sudoTee = (file, content) =>
+  new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['tee', file], { stdio: ['pipe', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
     });
+    child.on('error', reject);
+    // An EPIPE here (tee died before reading) would otherwise be an unhandled
+    // 'error' event on the stream and take the process down.
+    child.stdin.on('error', reject);
+    child.on('close', (code) =>
+      code === 0 ? resolve() : reject(new Error(stderr.trim() || `tee exited with code ${code}`))
+    );
+    child.stdin.write(content);
+    child.stdin.end();
+  });
+
+// Replace a conf file whole or not at all: write the new content beside it, then
+// rename over it. A write cut short (disk full, killed process) leaves the old
+// file intact instead of a truncated one that bitcoind or ckpool then reads.
+// `mode` is for a file that does not exist yet; an existing one keeps its own.
+const writeConfFile = async (file, content, { mode = 0o600 } = {}) => {
+  let fileMode = mode;
+  try {
+    const st = await fsPromises.stat(file);
+    if (typeof st?.mode === 'number') fileMode = st.mode & 0o777;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsPromises.writeFile(temp, content, { mode: fileMode });
+    await fsPromises.rename(temp, file);
+  } catch (error) {
+    try {
+      await fsPromises.unlink(temp);
+    } catch (_) {
+      // Nothing to clean up, or nothing that can be.
+    }
+    // No room to create files in that directory (it belongs to root): the
+    // fallback writes the file in place, which is the one thing sudo can do here
+    // without changing who owns it.
+    if (!isProduction() || !PERMISSION_ERRORS.includes(error.code)) throw error;
+    await sudoTee(file, content);
   }
 };
 
@@ -137,15 +178,30 @@ module.exports.auth = {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       let stderr = '';
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+      // A chpasswd that never exits would hold the auth lock — and with it every
+      // later setup and password change — for ever.
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        finish(reject, new Error(`chpasswd did not finish within ${CHPASSWD_TIMEOUT_MS / 1000}s`));
+      }, CHPASSWD_TIMEOUT_MS);
       child.stderr.on('data', (chunk) => {
         stderr += chunk;
       });
-      child.on('error', reject);
+      child.on('error', (error) => finish(reject, error));
+      // EPIPE when chpasswd dies before reading its input.
+      child.stdin.on('error', (error) => finish(reject, error));
       child.on('close', (code) => {
         if (code !== 0) {
-          reject(new Error(stderr.trim() || `chpasswd exited with code ${code}`));
+          finish(reject, new Error(stderr.trim() || `chpasswd exited with code ${code}`));
         } else {
-          resolve();
+          finish(resolve);
         }
       });
       child.stdin.write(`futurebit:${password}\n`);
@@ -190,42 +246,31 @@ module.exports.auth = {
 
         // The replacers are functions, so a `$` in a password is never read as a
         // back-reference.
-        // Update api.conf with new password (replace the existing line, or create it)
-        let apiConf = null;
-        try {
-          await fsPromises.access(configBitcoinApiConfPath);
-          apiConf = await readConfFile(configBitcoinApiConfPath);
-        } catch (accessErr) {
-          apiConf = null;
-        }
+        // api.conf: replace the existing line, or create the file. A file that is
+        // there but cannot be read stops here (see readConfFile).
+        const apiConf = await readConfFile(configBitcoinApiConfPath);
         if (apiConf !== null) {
           await writeConfFile(
             configBitcoinApiConfPath,
             apiConf.replace(/rpcpassword.*/g, () => `rpcpassword=${password}`)
           );
         } else {
-          // api.conf doesn't exist, create it with just the password
-          await fsPromises.writeFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`);
+          // Only the user running the API, bitcoind and ckpool (all `futurebit`)
+          // ever read these files, so a file created here is owner-only.
+          await writeConfFile(configBitcoinApiConfPath, `rpcpassword=${password}\n`, { mode: 0o600 });
           console.log('Created api.conf with new password');
         }
 
-        // Update ckpool configuration file
-        let ckpoolConf = null;
-        try {
-          await fsPromises.access(configCkpoolFilePath);
-          ckpoolConf = await readConfFile(configCkpoolFilePath);
-        } catch (ckpoolErr) {
-          ckpoolConf = null;
-        }
+        // ckpool.conf: same.
+        const ckpoolConf = await readConfFile(configCkpoolFilePath);
         if (ckpoolConf !== null) {
           await writeConfFile(
             configCkpoolFilePath,
             ckpoolConf.replace(/"pass":.*/g, () => `"pass": "${password}",`)
           );
         } else {
-          // ckpool.conf doesn't exist, create basic one
           const ckpoolConfig = `{\n  "btcd": [\n    {\n      "url": "127.0.0.1:8332",\n      "auth": "futurebit",\n      "pass": "${password}",\n      "notify": true\n    }\n  ]\n}`;
-          await fsPromises.writeFile(configCkpoolFilePath, ckpoolConfig);
+          await writeConfFile(configCkpoolFilePath, ckpoolConfig, { mode: 0o600 });
           console.log('Created ckpool.conf');
         }
 
